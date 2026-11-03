@@ -1,10 +1,10 @@
 export const BUILTIN_SOUNDS = [
-  { id: 'builtin:coin', name: 'Moneda', description: 'Ding-ding clásico de donación', emoji: '🪙' },
-  { id: 'builtin:chime', name: 'Campanilla', description: 'Arpegio suave para follows', emoji: '🔔' },
-  { id: 'builtin:pop', name: 'Pop', description: 'Un pop corto y limpio', emoji: '🫧' },
-  { id: 'builtin:sparkle', name: 'Destello', description: 'Chispas brillantes', emoji: '✨' },
-  { id: 'builtin:horn', name: 'Fanfarria', description: 'Para regalos grandes', emoji: '📣' },
-  { id: 'builtin:drum', name: 'Redoble', description: 'Redoble de tambor', emoji: '🥁' }
+  { id: 'builtin:coin', name: 'Moneda', description: 'Ding-ding clásico de donación' },
+  { id: 'builtin:chime', name: 'Campanilla', description: 'Arpegio suave para follows' },
+  { id: 'builtin:pop', name: 'Pop', description: 'Un pop corto y limpio' },
+  { id: 'builtin:sparkle', name: 'Destello', description: 'Chispas brillantes' },
+  { id: 'builtin:horn', name: 'Fanfarria', description: 'Para regalos grandes' },
+  { id: 'builtin:drum', name: 'Redoble', description: 'Redoble de tambor' }
 ];
 
 function wait(ms) {

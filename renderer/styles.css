@@ -5,8 +5,8 @@
   --surface: #fffaf2;
   --surface-2: #f8f1e6;
   --ink: #211b16;
-  --muted: #746a5e;
-  --muted-2: #9b8f80;
+  --muted: #6e6458;
+  --muted-2: #756a5c;
   --line: #e4d9c9;
   --line-strong: #d6c8b4;
   --pink: #e83e5f;
@@ -953,7 +953,7 @@ select {
 
 .activity-sound {
   overflow: hidden;
-  color: var(--teal);
+  color: #087f74;
   font-size: 9px;
   text-align: right;
   text-overflow: ellipsis;
@@ -1528,5 +1528,452 @@ select {
   .footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+/* Tiktato visual identity: compact studio, playful brand, no generic landing hero. */
+@font-face {
+  font-family: "Fredoka";
+  src: url("assets/fonts/fredoka-400.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fredoka";
+  src: url("assets/fonts/fredoka-500.ttf") format("truetype");
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fredoka";
+  src: url("assets/fonts/fredoka-600.ttf") format("truetype");
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fredoka";
+  src: url("assets/fonts/fredoka-700.ttf") format("truetype");
+  font-weight: 700 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nunito";
+  src: url("assets/fonts/nunito-400.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nunito";
+  src: url("assets/fonts/nunito-500.ttf") format("truetype");
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nunito";
+  src: url("assets/fonts/nunito-600.ttf") format("truetype");
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nunito";
+  src: url("assets/fonts/nunito-700.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nunito";
+  src: url("assets/fonts/nunito-800.ttf") format("truetype");
+  font-weight: 800 900;
+  font-display: swap;
+}
+
+body {
+  font-family: "Nunito", "Segoe UI", system-ui, sans-serif;
+  background:
+    radial-gradient(circle at 6% 0%, rgba(217, 166, 91, 0.18), transparent 28%),
+    radial-gradient(circle at 96% 8%, rgba(16, 181, 166, 0.1), transparent 26%),
+    var(--bg);
+}
+
+body::before {
+  display: none;
+}
+
+h1,
+h2,
+h3,
+.brand-name {
+  font-family: "Fredoka", "Nunito", sans-serif;
+}
+
+.brand-name {
+  font-weight: 700;
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+
+.quick-rule-icon svg,
+.activity-icon svg,
+.sound-emoji svg {
+  width: 17px;
+  height: 17px;
+}
+
+button,
+select,
+.sound-card {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 3px solid rgba(16, 181, 166, 0.45);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.studio-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 6px 26px;
+}
+
+.studio-intro h1 {
+  margin: 0;
+  font-size: clamp(36px, 4.4vw, 48px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.studio-intro p:not(.eyebrow) {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.intro-sticker {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 140px;
+  height: 100px;
+  flex: 0 0 140px;
+  border: 2px solid var(--pink);
+  border-radius: 47% 53% 45% 55% / 55% 48% 52% 45%;
+  background: linear-gradient(150deg, #fff8e9, #e9faf7);
+  box-shadow: 6px 8px 0 rgba(16, 181, 166, 0.12);
+  transform: rotate(4deg);
+}
+
+.intro-sticker img {
+  width: 56px;
+  height: 74px;
+  object-fit: contain;
+}
+
+.intro-sticker span {
+  position: absolute;
+  right: -10px;
+  bottom: -6px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: var(--ink);
+  color: #fffaf2;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  transform: rotate(-7deg);
+}
+
+.steps {
+  grid-template-columns: 1.25fr 1fr 0.9fr;
+  align-items: start;
+}
+
+.step-card {
+  --step-accent: var(--tan);
+  position: relative;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 20px;
+  box-shadow: 0 12px 0 rgba(33, 27, 22, 0.03), 0 22px 50px rgba(74, 52, 28, 0.08);
+  overflow: hidden;
+}
+
+.step-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 22px;
+  left: 22px;
+  height: 3px;
+  border-radius: 0 0 4px 4px;
+  background: var(--step-accent);
+  opacity: 0.78;
+}
+
+.step-connect {
+  --step-accent: var(--ink);
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.6fr);
+  align-items: center;
+  gap: 24px;
+}
+
+.step-sounds {
+  --step-accent: #0a9e91;
+}
+
+.step-overlay {
+  --step-accent: #b07a2a;
+}
+
+.step-jar {
+  --step-accent: #d62f52;
+}
+
+.step-connect .step-head,
+.step-connect .connect-row,
+.step-connect .connection-message,
+.step-connect .connect-meta {
+  grid-column: 1;
+}
+
+.step-connect .step-head {
+  margin-bottom: 12px;
+}
+
+.step-connect .stats {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+.step-connect .stats .stat {
+  min-height: 70px;
+  padding: 12px;
+  border: 0;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.step-head h2,
+.section-head h2,
+.dialog-head h2 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.step-index {
+  width: 34px;
+  height: 34px;
+  border: 1.5px solid currentColor;
+  background: transparent;
+  color: var(--step-accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.btn {
+  font-family: "Nunito", sans-serif;
+  font-weight: 800;
+}
+
+.btn-primary {
+  border: 1.5px solid var(--ink);
+  box-shadow: 3px 3px 0 rgba(232, 62, 95, 0.22);
+}
+
+.btn-teal {
+  box-shadow: 3px 3px 0 rgba(16, 181, 166, 0.18);
+}
+
+.btn-ghost {
+  border-color: var(--line-strong);
+  background: #fffdf9;
+}
+
+.quick-rule {
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  background: #fffdf9;
+  transition: border-color 180ms ease, transform 180ms ease;
+}
+
+.quick-rule:hover {
+  border-color: var(--step-accent);
+  transform: translateX(2px);
+}
+
+.quick-rule-icon {
+  background: color-mix(in srgb, var(--step-accent) 10%, transparent);
+  color: var(--step-accent);
+}
+
+.sound-emoji {
+  color: var(--tan);
+}
+
+.activity-icon {
+  color: var(--pink);
+}
+
+.icon-btn .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.quick-rule-copy strong {
+  font-size: 12px;
+}
+
+.overlay-demo {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(232, 62, 95, 0.06), rgba(16, 181, 166, 0.06));
+}
+
+.overlay-demo-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted-2);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.overlay-demo-card {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid rgba(232, 62, 95, 0.22);
+  border-radius: 12px;
+  background: #211c24;
+  color: #fff7fb;
+  box-shadow: 0 8px 18px rgba(33, 27, 22, 0.12);
+}
+
+.overlay-demo-avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: #3a2631;
+}
+
+.overlay-demo-avatar img {
+  width: 19px;
+  height: 25px;
+  object-fit: contain;
+}
+
+.overlay-demo-card strong,
+.overlay-demo-card span {
+  display: block;
+}
+
+.overlay-demo-card strong {
+  font-size: 10px;
+}
+
+.overlay-demo-card span {
+  color: rgba(255, 247, 251, 0.65);
+  font-size: 9px;
+}
+
+.overlay-demo-card b {
+  color: #ffd166;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.overlay-demo-card small {
+  display: block;
+  color: rgba(255, 247, 251, 0.55);
+  font-size: 7px;
+  text-align: right;
+}
+
+@media (max-width: 1100px) {
+  .steps {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .step-connect {
+    grid-template-columns: 1fr;
+  }
+
+  .step-connect .stats {
+    grid-column: 1;
+    grid-row: auto;
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .steps {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-intro {
+    align-items: flex-start;
+  }
+
+  .studio-intro h1 {
+    font-size: 36px;
+  }
+
+  .intro-sticker {
+    display: none;
+  }
+
+  .step-connect .stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .step-card {
+    padding: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }

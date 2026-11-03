@@ -92,7 +92,7 @@ async function present(alert) {
   const showGift = alert.type === 'gift' && config.showGiftImage && Boolean(alert.giftImageUrl);
   card.className = `alert-card type-${alert.type}${showGift ? '' : ' no-gift'}`;
   $('#eventLabel').textContent = LABELS[alert.type] || 'EVENTO';
-  $('#coins').textContent = alert.coins > 0 ? `${Number(alert.coins).toLocaleString('es-ES')} 🪙` : '';
+  $('#coins').textContent = alert.coins > 0 ? `${Number(alert.coins).toLocaleString('es-ES')} monedas` : '';
   $('#username').textContent = alert.displayName || alert.username || 'Alguien';
   $('#detail').innerHTML = detailFor(alert);
   $('#soundName').textContent = alert.sound?.name ? `Sonido: ${alert.sound.name}` : 'Sin sonido asignado';

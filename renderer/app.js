@@ -17,17 +17,39 @@ const EVENT_LABELS = {
 };
 
 const EVENT_ICONS = {
-  gift: '🎁',
-  follow: '💜',
-  share: '🔁',
-  like: '❤️'
+  gift: 'gift',
+  follow: 'follow',
+  share: 'share',
+  like: 'like'
 };
 
 const QUICK_RULES = [
-  { type: 'gift', label: 'Regalos', description: 'Cualquier regalo', icon: '🎁', soundId: 'builtin:coin' },
-  { type: 'follow', label: 'Follows', description: 'Nuevos seguidores', icon: '💜', soundId: 'builtin:chime' },
-  { type: 'share', label: 'Shares', description: 'Comparten tu directo', icon: '🔁', soundId: 'builtin:pop' }
+  { type: 'gift', label: 'Regalos', description: 'Cualquier regalo', icon: 'gift', soundId: 'builtin:coin' },
+  { type: 'follow', label: 'Follows', description: 'Nuevos seguidores', icon: 'follow', soundId: 'builtin:chime' },
+  { type: 'share', label: 'Shares', description: 'Comparten tu directo', icon: 'share', soundId: 'builtin:pop' }
 ];
+
+const ICON_PATHS = {
+  gift:
+    '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7M7.5 8a2.5 2.5 0 0 1 0-5c2 0 3 2 4.5 5M16.5 8a2.5 2.5 0 0 0 0-5c-2 0-3 2-4.5 5"/>',
+  follow:
+    '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m3-3h-6"/>',
+  share:
+    '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>',
+  like:
+    '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6a5.5 5.5 0 0 0 1-8.8Z"/>',
+  music:
+    '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  play: '<path d="m8 5 11 7-11 7z"/>',
+  edit:
+    '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  trash:
+    '<path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/>'
+};
+
+function iconSvg(name) {
+  return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${ICON_PATHS[name] || ICON_PATHS.music}</svg>`;
+}
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -175,8 +197,8 @@ function renderRules() {
           <span class="rule-sound">${escapeHtml(soundName(rule.soundId))}</span>
           <span class="rule-meta">${meta}</span>
           <span class="rule-actions">
-            <button class="icon-btn" data-action="edit" type="button" title="Editar">✎</button>
-            <button class="icon-btn" data-action="delete" type="button" title="Eliminar">✕</button>
+            <button class="icon-btn" data-action="edit" type="button" title="Editar">${iconSvg('edit')}</button>
+            <button class="icon-btn" data-action="delete" type="button" title="Eliminar">${iconSvg('trash')}</button>
           </span>
         </div>
       `;
@@ -188,11 +210,11 @@ function soundOptionsHtml(selectedId) {
   return [
     ...BUILTIN_SOUNDS.map(
       (sound) =>
-        `<option value="${escapeHtml(sound.id)}" ${sound.id === selectedId ? 'selected' : ''}>${sound.emoji} ${escapeHtml(sound.name)}</option>`
+        `<option value="${escapeHtml(sound.id)}" ${sound.id === selectedId ? 'selected' : ''}>${escapeHtml(sound.name)}</option>`
     ),
     ...(state.sounds || []).map(
       (sound) =>
-        `<option value="${escapeHtml(sound.id)}" ${sound.id === selectedId ? 'selected' : ''}>🎵 ${escapeHtml(sound.name)}</option>`
+        `<option value="${escapeHtml(sound.id)}" ${sound.id === selectedId ? 'selected' : ''}>${escapeHtml(sound.name)}</option>`
     )
   ].join('');
 }
@@ -207,7 +229,7 @@ function renderQuickRules() {
     const enabled = rule ? rule.enabled !== false : true;
     return `
       <div class="quick-rule" data-quick-type="${item.type}">
-        <span class="quick-rule-icon">${item.icon}</span>
+        <span class="quick-rule-icon">${iconSvg(item.icon)}</span>
         <div class="quick-rule-copy">
           <strong>${item.label}</strong>
           <span>${rule ? escapeHtml(soundName(soundId)) : item.description}</span>
@@ -246,7 +268,7 @@ function renderSounds() {
   $('#builtinSounds').innerHTML = BUILTIN_SOUNDS.map(
     (sound) => `
       <button class="sound-card" data-builtin="${escapeHtml(sound.id)}" type="button">
-        <span class="sound-emoji">${sound.emoji}</span>
+        <span class="sound-emoji">${iconSvg('music')}</span>
         <span>
           <span class="sound-name">${escapeHtml(sound.name)}</span>
           <span class="sound-desc">${escapeHtml(sound.description)}</span>
@@ -261,11 +283,11 @@ function renderSounds() {
     .map(
       (sound) => `
         <div class="custom-sound" data-sound-id="${escapeHtml(sound.id)}">
-          <span class="sound-emoji">🎵</span>
+          <span class="sound-emoji">${iconSvg('music')}</span>
           <span class="sound-name" title="${escapeHtml(sound.name)}">${escapeHtml(sound.name)}</span>
           <span class="sound-size">${formatBytes(sound.size)}</span>
-          <button class="icon-btn" data-sound-action="play" type="button" title="Reproducir">▶</button>
-          <button class="icon-btn" data-sound-action="delete" type="button" title="Eliminar">✕</button>
+          <button class="icon-btn" data-sound-action="play" type="button" title="Reproducir">${iconSvg('play')}</button>
+          <button class="icon-btn" data-sound-action="delete" type="button" title="Eliminar">${iconSvg('trash')}</button>
         </div>
       `
     )
@@ -289,10 +311,10 @@ function renderActivity() {
               : `envió ${formatNumber(item.repeatCount)} likes`;
       return `
         <div class="activity-row ${item.test ? 'is-test' : ''}">
-          <span class="activity-icon">${EVENT_ICONS[item.type] || '•'}</span>
+          <span class="activity-icon">${iconSvg(EVENT_ICONS[item.type] || 'music')}</span>
           <span class="activity-user">${escapeHtml(item.displayName || item.username)}</span>
           <span class="activity-detail">${detail}${item.test ? ' <em>(prueba)</em>' : ''}</span>
-          <span class="activity-coins">${item.coins > 0 ? `${formatNumber(item.coins)} 🪙` : '—'}</span>
+          <span class="activity-coins">${item.coins > 0 ? `${formatNumber(item.coins)} monedas` : '—'}</span>
           <span class="activity-sound ${item.played ? '' : 'is-muted'}">${item.played ? escapeHtml(item.soundName) : 'sin sonido'}</span>
         </div>
       `;
@@ -305,8 +327,8 @@ function updateRuleSoundOptions() {
   if (!select) return;
   const current = select.value;
   const options = [
-    ...BUILTIN_SOUNDS.map((sound) => `<option value="${escapeHtml(sound.id)}">${sound.emoji} ${escapeHtml(sound.name)}</option>`),
-    ...(state.sounds || []).map((sound) => `<option value="${escapeHtml(sound.id)}">🎵 ${escapeHtml(sound.name)}</option>`)
+    ...BUILTIN_SOUNDS.map((sound) => `<option value="${escapeHtml(sound.id)}">${escapeHtml(sound.name)}</option>`),
+    ...(state.sounds || []).map((sound) => `<option value="${escapeHtml(sound.id)}">${escapeHtml(sound.name)}</option>`)
   ];
   select.innerHTML = options.join('');
   if (current && [...select.options].some((option) => option.value === current)) {

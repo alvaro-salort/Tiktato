@@ -205,9 +205,17 @@ function updateOverlayConfig() {
 function resolveSound(soundId) {
   if (String(soundId || '').startsWith('builtin:')) {
     const key = String(soundId).replace('builtin:', '');
+    const names = {
+      coin: 'Moneda',
+      chime: 'Campanilla',
+      pop: 'Pop',
+      sparkle: 'Destello',
+      horn: 'Fanfarria',
+      drum: 'Redoble'
+    };
     return {
       id: soundId,
-      name: key,
+      name: names[key] || key,
       kind: 'builtin',
       key
     };
@@ -515,7 +523,7 @@ function createWindow() {
           await mainWindow.webContents.executeJavaScript(
             'document.querySelector(\'[data-test="gift"]\')?.click()'
           );
-        }, 450);
+        }, 1200);
       }
       setTimeout(async () => {
         try {
@@ -531,7 +539,7 @@ function createWindow() {
         } finally {
           app.quit();
         }
-      }, 1500);
+      }, 2600);
     });
     mainWindow.webContents.on('did-fail-load', (_event, code, description) => {
       logger.error(`[smoke] falló la carga (${code}): ${description}`);

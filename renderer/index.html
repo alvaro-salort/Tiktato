@@ -25,7 +25,9 @@
             <span class="status-dot"></span>
             <span id="statusLabel">Desconectado</span>
           </div>
-          <button id="btnSettings" class="icon-button" type="button" title="Ajustes" aria-label="Abrir ajustes">⚙</button>
+          <button id="btnSettings" class="icon-button" type="button" title="Ajustes" aria-label="Abrir ajustes">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"></path></svg>
+          </button>
         </div>
       </header>
 
@@ -33,17 +35,15 @@
       <div id="errorBanner" class="error-banner" hidden></div>
 
       <main>
-        <section class="hero">
-          <div class="hero-copy">
+        <section class="studio-intro">
+          <div>
             <p class="eyebrow">Sound alerts para TikTok LIVE</p>
-            <h1>Tu live suena mejor <span>en dos clics.</span></h1>
-            <p class="hero-text">
-              Conecta tu cuenta, deja listos los sonidos y pega el overlay en OBS.
-              Sin cuentas, sin suscripciones y sin configurar nada raro.
-            </p>
+            <h1>Tu live, con sonido.</h1>
+            <p>Conecta una vez. Lo demás ya está listo.</p>
           </div>
-          <div class="hero-logo" aria-hidden="true">
+          <div class="intro-sticker" aria-hidden="true">
             <img src="assets/logo.png" alt="" />
+            <span>SIN PAYWALL</span>
           </div>
         </section>
 
@@ -130,17 +130,21 @@
               <li><span>3</span> Listo: aparece sobre tu directo.</li>
             </ol>
 
+            <div class="overlay-demo" aria-hidden="true">
+              <span class="overlay-demo-label">Así se ve una alerta</span>
+              <div class="overlay-demo-card">
+                <span class="overlay-demo-avatar"><img src="assets/logo.png" alt="" /></span>
+                <div>
+                  <strong>Viewer de prueba</strong>
+                  <span>envió Galaxy</span>
+                </div>
+                <b>100 <small>monedas</small></b>
+              </div>
+            </div>
+
             <div class="step-actions">
               <button id="btnOpenOverlay" class="btn btn-ghost" type="button">Vista previa</button>
               <button id="btnOverlaySettings" class="btn btn-ghost" type="button">Personalizar</button>
-            </div>
-
-            <div class="mini-overlay" aria-hidden="true">
-              <span class="mini-overlay-dot"></span>
-              <div>
-                <strong>Vista previa del overlay</strong>
-                <span>Se ve transparente sobre tu directo.</span>
-              </div>
             </div>
           </article>
 
@@ -209,7 +213,7 @@
 
       <footer class="footer">
         <span>Tiktato no está afiliado a TikTok. Úsalo con contenido y cuentas que tengas derecho a analizar.</span>
-        <span class="footer-version">v0.2.0</span>
+        <span class="footer-version">v0.2.1</span>
       </footer>
     </div>
 
@@ -219,7 +223,7 @@
           <p class="eyebrow">Conexión</p>
           <h2>Ayuda para conectar</h2>
         </div>
-        <button class="icon-button" data-close type="button" aria-label="Cerrar">✕</button>
+        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
       </div>
       <p class="dialog-text">
         La conexión anónima funciona para la mayoría de LIVE públicos. Para el LIVE de prueba de
@@ -271,7 +275,7 @@
         </div>
         <div class="dialog-head-actions">
           <button id="btnAddRule" class="btn btn-secondary" type="button">+ Nueva regla</button>
-          <button class="icon-button" data-close type="button" aria-label="Cerrar">✕</button>
+          <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
         </div>
       </div>
 
@@ -329,7 +333,7 @@
         </div>
         <div class="dialog-head-actions">
           <button id="btnImportSound" class="btn btn-secondary" type="button">Subir audio</button>
-          <button class="icon-button" data-close type="button" aria-label="Cerrar">✕</button>
+          <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
         </div>
       </div>
 
@@ -349,7 +353,7 @@
           <p class="eyebrow">OBS / LIVE Studio</p>
           <h2>Personalizar overlay</h2>
         </div>
-        <button class="icon-button" data-close type="button" aria-label="Cerrar">✕</button>
+        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
       </div>
 
       <div class="settings-grid">
@@ -389,7 +393,7 @@
           <p class="eyebrow">Ajustes</p>
           <h2>Audio y app</h2>
         </div>
-        <button class="icon-button" data-close type="button" aria-label="Cerrar">✕</button>
+        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
       </div>
 
       <label class="field">

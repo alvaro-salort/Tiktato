@@ -7,6 +7,9 @@ const giftsContainer = $('#jarGifts');
 let socket = null;
 let reconnectTimer = null;
 
+const GIFT_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7M7.5 8a2.5 2.5 0 0 1 0-5c2 0 3 2 4.5 5M16.5 8a2.5 2.5 0 0 0 0-5c-2 0-3 2-4.5 5"/></svg>';
+
 function formatNumber(value) {
   return new Intl.NumberFormat('es-ES').format(Number(value) || 0);
 }
@@ -39,7 +42,7 @@ function applyJar(jar) {
     .map((gift) => {
       const image = gift.imageUrl
         ? `<img src="${escapeHtml(gift.imageUrl)}" alt="${escapeHtml(gift.name)}" />`
-        : '🎁';
+        : GIFT_ICON;
       return `<span class="jar-gift" title="${escapeHtml(gift.name)} · ${formatNumber(gift.coins)} monedas">${image}</span>`;
     })
     .join('');
