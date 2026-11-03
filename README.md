@@ -8,8 +8,8 @@ Tiktato es una reimplementación local y acotada de la función principal de Tik
 
 ## Descargar
 
-- [Instalador de Windows v0.1.0](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.0/Tiktato.Setup.0.1.0.exe)
-- [Versión portable v0.1.0](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.0/Tiktato.0.1.0.exe)
+- [Instalador de Windows v0.1.1](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.1/Tiktato.Setup.0.1.1.exe)
+- [Versión portable v0.1.1](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.1/Tiktato.0.1.1.exe)
 
 También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 
@@ -27,15 +27,16 @@ También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 - URL de overlay protegida con token aleatorio.
 - Estadísticas básicas y feed de actividad.
 - Pruebas de eventos sin necesidad de estar en directo.
-- Sesión opcional de TikTok y clave de Euler Stream, guardadas cifradas con el llavero de Windows.
+- Sesión opcional de TikTok (solo para salas +18 o privadas), guardada cifrada con el llavero de Windows.
+- Conexión sin Euler Stream, sin claves de API y sin servidor de firma de pago.
 
 ![Overlay para OBS](docs/overlay.png)
 
 ## Stack
 
 - Electron 45
-- Node.js 22.23.4+, 24.22.1+ o 26.12.1+
-- [`tiktok-live-connector`](https://github.com/zerodytrash/TikTok-Live-Connector) para los eventos del LIVE
+- Node.js 22.19+ (recomendado 24 LTS o 26)
+- [`piratetok-live-js`](https://github.com/PirateTok/live-js) para los eventos del LIVE, con firma local y sin servidor externo
 - `ws` para el canal local entre Electron y el overlay
 - HTML, CSS y JavaScript sin framework en la interfaz
 
@@ -80,14 +81,16 @@ Los artefactos quedan en `dist/`.
 
 ### Si TikTok rechaza la conexión
 
-La librería intenta conectarse de forma anónima. Si TikTok pide una sesión:
+La conexión es anónima y no usa Euler ni claves de API. Si TikTok no encuentra la sala:
 
-1. Inicia sesión en TikTok en el navegador.
-2. Abre las herramientas de desarrollo → Application → Cookies → `https://www.tiktok.com`.
-3. Copia `sessionid` y `tt-target-idc`.
-4. Pégalas en **Sesión opcional** y vuelve a conectar.
-
-También puedes configurar una clave de [Euler Stream](https://www.eulerstream.com/) en el mismo panel si la firma de la conexión falla con frecuencia. Es opcional; Tiktato no vende ni revende acceso.
+1. Comprueba que el LIVE está iniciado y que han pasado 1–2 minutos.
+2. Usa el **uniqueId** exacto de la URL de tu perfil (`tiktok.com/@tu_usuario`), no el nombre visible. Si TikTok responde `user_not_found`, el nombre no coincide.
+3. Si la sala es +18 o privada, añade tu sesión:
+   - Inicia sesión en TikTok en el navegador.
+   - Herramientas de desarrollo → Application → Cookies → `https://www.tiktok.com`.
+   - Copia `sessionid` y `tt-target-idc`.
+   - Pégalas en **Sesión opcional** y vuelve a conectar.
+4. Desactiva VPN/proxy si TikTok bloquea la región.
 
 > Las cookies son credenciales. Tiktato las guarda cifradas con `safeStorage` de Electron y no las envía a ningún servidor propio.
 
@@ -105,7 +108,7 @@ El overlay se sirve solo en `127.0.0.1` y el token impide que otra página local
 
 - Configuración, sonidos y logs: `%APPDATA%\tiktato` en Windows.
 - No hay telemetría ni cuenta propia.
-- La app se conecta a TikTok y, si se configura, al servicio de firma de Euler Stream.
+- La app se conecta únicamente a TikTok; no usa un servicio de firma externo.
 - El servidor del overlay escucha únicamente en localhost.
 
 Puedes abrir la carpeta desde el pie del panel o borrar `%APPDATA%\tiktato` para empezar de cero.
@@ -134,10 +137,10 @@ TikFinity tiene muchas más funciones. Este MVP se centra en lo que pediste:
 - No hay TTS, Spotify, chatbot, puntos, niveles, metas, ruletas ni integraciones con Minecraft/GTA.
 - No hay login propio ni sincronización en la nube.
 - No hay editor visual avanzado de overlays: la personalización actual es título, color, posición, duración e imagen del regalo.
-- No se ha validado una conexión real contra un LIVE activo en este entorno; las pruebas cubren la lógica, el servidor local y el renderizado, pero TikTok puede cambiar su API interna.
+- La conexión real se validó contra un LIVE público. TikTok puede cambiar su API interna; si eso pasa, habrá que actualizar `piratetok-live-js`.
 
 ## Licencia
 
-AGPL-3.0-only. Es la licencia de `tiktok-live-connector`, de la que depende la conexión con TikTok. Si distribuyes una versión modificada, debes cumplir la AGPL y publicar el código correspondiente.
+MIT. La capa de conexión [`piratetok-live-js`](https://github.com/PirateTok/live-js) usa licencia 0BSD.
 
-Créditos a [Zerody / TikTok-Live-Connector](https://github.com/zerodytrash/TikTok-Live-Connector) por la capa de conexión con TikTok LIVE.
+Créditos a [PirateTok](https://github.com/PirateTok/live-js) por la capa de conexión local con TikTok LIVE.

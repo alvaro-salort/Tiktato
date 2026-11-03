@@ -12,22 +12,35 @@ function cleanUsername(input) {
 }
 
 function friendlyError(error) {
-  const code = String(error?.code || error?.name || error?.error?.code || '');
+  const name = String(error?.name || error?.code || '');
   const message = String(
     error?.message ||
       error?.error?.message ||
       error?.reason ||
-      (typeof error === 'object' ? code || 'Error desconocido' : error) ||
+      (typeof error === 'object' ? name || 'Error desconocido' : error) ||
       'Error desconocido'
   );
-  if (/UserOffline/i.test(code) || /offline/i.test(message)) {
-    return 'Ese usuario no está en directo ahora mismo. Inicia el LIVE y vuelve a intentarlo.';
+
+  if (/UserNotFound|user .* does not exist/i.test(`${name} ${message}`)) {
+    return 'TikTok no encuentra ese usuario. Revisa el nombre exacto de la URL de tu perfil.';
   }
-  if (/InitialData|room id|roomId/i.test(message)) {
-    return 'TikTok no devolvió la sala. Comprueba el usuario o espera unos segundos.';
+  if (/HostNotOnline|UserOffline|not currently live|offline/i.test(`${name} ${message}`)) {
+    return 'Ese usuario no está en directo ahora mismo. Inicia el LIVE y espera 1–2 minutos.';
   }
-  if (/sign|euler|429|rate/i.test(message)) {
-    return 'TikTok limitó la conexión temporalmente. Espera un minuto o configura una clave de Euler Stream.';
+  if (/AgeRestricted|18\+/i.test(`${name} ${message}`)) {
+    return 'La sala es +18. Añade tu sesión de TikTok en “Sesión opcional” y vuelve a intentarlo.';
+  }
+  if (/SessionRequired/i.test(`${name} ${message}`)) {
+    return 'TikTok pide una sesión iniciada para esta sala. Añade sessionid y tt-target-idc en “Sesión opcional”.';
+  }
+  if (/DeviceBlocked/i.test(`${name} ${message}`)) {
+    return 'TikTok bloqueó temporalmente este dispositivo. Espera unos minutos o cambia de red.';
+  }
+  if (/TikTokBlocked|429|rate|blocked/i.test(`${name} ${message}`)) {
+    return 'TikTok limitó la conexión temporalmente. Espera un minuto y vuelve a intentarlo.';
+  }
+  if (/TtwidMissing/i.test(`${name} ${message}`)) {
+    return 'No se pudo obtener el identificador anónimo de TikTok. Revisa la conexión y reintenta.';
   }
   if (/fetch|network|ECONN|ENOTFOUND|timeout/i.test(message)) {
     return 'No se pudo conectar con TikTok. Revisa tu conexión a Internet.';
@@ -35,11 +48,16 @@ function friendlyError(error) {
   return message;
 }
 
+function sessionCookie(sessionId, ttTargetIdc) {
+  if (!sessionId || !ttTargetIdc) return '';
+  return `sessionid=${sessionId}; sid_tt=${sessionId}; tt-target-idc=${ttTargetIdc}`;
+}
+
 class TikTokService extends EventEmitter {
   constructor({ logger } = {}) {
     super();
     this.logger = logger || console;
-    this.connection = null;
+    this.client = null;
     this.status = {
       state: 'disconnected',
       username: '',
@@ -59,7 +77,7 @@ class TikTokService extends EventEmitter {
     this.emit('status', this.getStatus());
   }
 
-  async connect({ username, sessionId, ttTargetIdc, signApiKey }) {
+  async connect({ username, sessionId, ttTargetIdc }) {
     const clean = cleanUsername(username);
     if (!clean) throw new Error('Escribe un usuario de TikTok válido.');
 
@@ -74,51 +92,37 @@ class TikTokService extends EventEmitter {
     });
 
     try {
-      const module = await import('tiktok-live-connector');
-      const TikTokLiveConnection = module.TikTokLiveConnection || module.default?.TikTokLiveConnection;
-      if (!TikTokLiveConnection) throw new Error('La librería de TikTok no expone TikTokLiveConnection.');
-
-      const options = {
-        processInitialData: false,
-        fetchRoomInfoOnConnect: true,
-        enableExtendedGiftInfo: true
-      };
-
-      if (sessionId && ttTargetIdc) {
-        options.authenticateWs = true;
-        options.session = {
-          cookie: {
-            type: 'cookie',
-            value: {
-              sessionId,
-              ttTargetIdc
-            }
-          }
-        };
+      const module = await import('piratetok-live-js');
+      const { TikTokLiveClient, EventType } = module;
+      if (!TikTokLiveClient || !EventType) {
+        throw new Error('La librería de TikTok no expone TikTokLiveClient.');
       }
-      if (signApiKey) options.signApiKey = signApiKey;
 
-      const connection = new TikTokLiveConnection(clean, options);
-      this.connection = connection;
+      const client = new TikTokLiveClient(clean);
+      const cookie = sessionCookie(sessionId, ttTargetIdc);
+      if (cookie) client.cookies(cookie);
+      this.client = client;
 
-      connection.on('gift', (data) => this.#emitEvent('gift', data));
-      connection.on('follow', (data) => this.#emitEvent('follow', data));
-      connection.on('share', (data) => this.#emitEvent('share', data));
-      connection.on('like', (data) => this.#emitEvent('like', data));
-      connection.on('roomUser', (data) => {
-        if (typeof data?.viewerCount === 'number') {
-          this.#setStatus({ viewerCount: data.viewerCount });
-        }
+      client.on(EventType.gift, (data) => this.#emitEvent('gift', data));
+      client.on(EventType.follow, (data) => this.#emitEvent('follow', data));
+      client.on(EventType.share, (data) => this.#emitEvent('share', data));
+      client.on(EventType.like, (data) => this.#emitEvent('like', data));
+      client.on(EventType.roomUserSeq, (data) => {
+        const count = Number(data?.viewerCount ?? data?.totalUser ?? 0);
+        if (Number.isFinite(count)) this.#setStatus({ viewerCount: count });
       });
-      connection.on('streamEnd', () => {
+      client.on(EventType.liveEnded, () => {
         this.#setStatus({
           state: 'disconnected',
           message: 'El directo terminó.',
           viewerCount: 0
         });
-        this.connection = null;
+        this.client = null;
       });
-      connection.on('disconnected', () => {
+      client.on(EventType.reconnecting, () => {
+        this.#setStatus({ state: 'connecting', message: 'Reconectando con TikTok…' });
+      });
+      client.on(EventType.disconnected, () => {
         if (!this.intentionalDisconnect) {
           this.#setStatus({
             state: 'disconnected',
@@ -126,9 +130,9 @@ class TikTokService extends EventEmitter {
             viewerCount: 0
           });
         }
-        this.connection = null;
+        this.client = null;
       });
-      connection.on('error', (error) => {
+      client.on('error', (error) => {
         this.logger.error?.('[tiktok] error de conexión', error);
         if (this.status.state === 'connected') {
           this.#setStatus({
@@ -138,19 +142,17 @@ class TikTokService extends EventEmitter {
         }
       });
 
-      const state = await connection.connect();
-      const roomId = String(state?.roomId || connection.roomId || '');
-      const roomTitle = connection.roomInfo?.title || connection.roomInfo?.roomInfo?.title || '';
+      const roomId = String(await client.connect());
       this.#setStatus({
         state: 'connected',
         roomId,
-        message: roomTitle ? `En directo: ${roomTitle}` : `Conectado a @${clean}`,
-        viewerCount: Number(connection.roomInfo?.userCount || 0)
+        message: `Conectado a @${clean}`,
+        viewerCount: 0
       });
       this.logger.info?.(`[tiktok] conectado a @${clean} roomId=${roomId}`);
       return this.getStatus();
     } catch (error) {
-      this.connection = null;
+      this.client = null;
       const message = friendlyError(error);
       this.#setStatus({ state: 'error', message });
       this.logger.error?.('[tiktok] no se pudo conectar', error);
@@ -165,11 +167,11 @@ class TikTokService extends EventEmitter {
 
   async disconnect() {
     this.intentionalDisconnect = true;
-    const connection = this.connection;
-    this.connection = null;
-    if (connection) {
+    const client = this.client;
+    this.client = null;
+    if (client) {
       try {
-        await connection.disconnect();
+        client.disconnect();
       } catch (error) {
         this.logger.warn?.('[tiktok] error al desconectar', error);
       }
@@ -188,5 +190,6 @@ class TikTokService extends EventEmitter {
 module.exports = {
   TikTokService,
   cleanUsername,
-  friendlyError
+  friendlyError,
+  sessionCookie
 };

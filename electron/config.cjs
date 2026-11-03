@@ -62,7 +62,6 @@ function createDefaultConfig() {
     playInDashboard: true,
     sessionIdEncrypted: '',
     ttTargetIdcEncrypted: '',
-    signApiKeyEncrypted: '',
     overlay: {
       port: 3477,
       token: crypto.randomBytes(24).toString('hex'),
@@ -137,7 +136,6 @@ function normalizeConfig(input) {
     playInDashboard: source.playInDashboard !== false,
     sessionIdEncrypted: String(source.sessionIdEncrypted || ''),
     ttTargetIdcEncrypted: String(source.ttTargetIdcEncrypted || ''),
-    signApiKeyEncrypted: String(source.signApiKeyEncrypted || ''),
     overlay: {
       ...defaults.overlay,
       ...overlay,
@@ -254,7 +252,6 @@ function publicConfig(config, { overlayUrl } = {}) {
     masterVolume: config.masterVolume,
     playInDashboard: config.playInDashboard,
     hasSession: Boolean(config.sessionIdEncrypted && config.ttTargetIdcEncrypted),
-    hasSignApiKey: Boolean(config.signApiKeyEncrypted),
     overlay: {
       port: config.overlay.port,
       position: config.overlay.position,

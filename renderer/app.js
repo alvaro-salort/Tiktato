@@ -121,9 +121,7 @@ function render(nextState) {
   $('#volumeValue').textContent = `${Math.round(state.masterVolume * 100)}%`;
   $('#sessionState').textContent = state.hasSession
     ? 'Sesión guardada cifrada'
-    : state.hasSignApiKey
-      ? 'Clave de firma guardada'
-      : 'Sin sesión guardada';
+    : 'Sin sesión guardada';
 
   $('#statGifts').textContent = formatNumber(state.stats.gifts);
   $('#statCoins').textContent = formatNumber(state.stats.coins);
@@ -317,11 +315,9 @@ function wireEvents() {
       const result = await api.connect({
         username,
         sessionId: $('#sessionId').value.trim(),
-        ttTargetIdc: $('#ttTargetIdc').value.trim(),
-        signApiKey: $('#signApiKey').value.trim()
+        ttTargetIdc: $('#ttTargetIdc').value.trim()
       });
       $('#sessionId').value = '';
-      $('#signApiKey').value = '';
       state = await api.bootstrap();
       render(state);
       if (!result.ok) {
@@ -366,8 +362,8 @@ function wireEvents() {
   });
 
   $('#btnClearSession').addEventListener('click', async () => {
-    if (!confirm('¿Borrar las cookies y la clave de firma guardadas?')) return;
-    await updateSettings({ clearSession: true, clearSignApiKey: true }, 'Sesión borrada');
+    if (!confirm('¿Borrar las cookies de TikTok guardadas?')) return;
+    await updateSettings({ clearSession: true }, 'Sesión borrada');
   });
 
   $('#btnCopyOverlay').addEventListener('click', async () => {

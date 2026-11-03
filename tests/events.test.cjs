@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { makeTestEvent, normalizeTikTokEvent } = require('../electron/events.cjs');
-const { cleanUsername, friendlyError } = require('../electron/tiktok-service.cjs');
+const { cleanUsername, friendlyError, sessionCookie } = require('../electron/tiktok-service.cjs');
 
 test('ignora los eventos intermedios de una racha de regalos', () => {
   const message = {
@@ -40,6 +40,48 @@ test('normaliza el final de una racha y calcula monedas', () => {
   assert.equal(event.username, 'ana');
   assert.equal(event.giftImageUrl, 'https://example.com/galaxy.png');
   assert.equal(event.timestamp, 123);
+});
+
+test('normaliza el formato de piratetok-live-js', () => {
+  const message = {
+    user: {
+      id: '42',
+      uniqueId: 'ana',
+      nickname: 'Ana',
+      avatarThumb: { urlList: ['https://example.com/avatar.webp'] }
+    },
+    giftId: 5655,
+    repeatEnd: 1,
+    repeatCount: 2,
+    gift: {
+      type: 1,
+      name: 'Rosa',
+      diamondCount: 5,
+      image: { urlList: ['https://example.com/rose.png'] }
+    }
+  };
+  const event = normalizeTikTokEvent('gift', message);
+  assert.equal(event.giftName, 'Rosa');
+  assert.equal(event.coins, 10);
+  assert.equal(event.avatarUrl, 'https://example.com/avatar.webp');
+  assert.equal(event.giftImageUrl, 'https://example.com/rose.png');
+});
+
+test('normaliza likes del formato nuevo', () => {
+  const event = normalizeTikTokEvent('like', {
+    count: 7,
+    user: { id: '42', uniqueId: 'ana', nickname: 'Ana' }
+  });
+  assert.equal(event.repeatCount, 7);
+  assert.equal(event.username, 'ana');
+});
+
+test('construye la cookie de sesión para la librería', () => {
+  assert.equal(
+    sessionCookie('abc', 'useast1a'),
+    'sessionid=abc; sid_tt=abc; tt-target-idc=useast1a'
+  );
+  assert.equal(sessionCookie('', 'useast1a'), '');
 });
 
 test('convierte URLs y arrobas a un nombre limpio', () => {

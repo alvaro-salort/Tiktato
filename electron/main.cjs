@@ -118,8 +118,7 @@ function decryptSecret(value) {
 function credentials() {
   return {
     sessionId: decryptSecret(config.sessionIdEncrypted),
-    ttTargetIdc: decryptSecret(config.ttTargetIdcEncrypted),
-    signApiKey: decryptSecret(config.signApiKeyEncrypted)
+    ttTargetIdc: decryptSecret(config.ttTargetIdcEncrypted)
   };
 }
 
@@ -308,14 +307,10 @@ function applySettings(patch) {
   if (typeof patch.ttTargetIdc === 'string' && patch.ttTargetIdc.trim()) {
     config.ttTargetIdcEncrypted = encryptSecret(patch.ttTargetIdc.trim());
   }
-  if (typeof patch.signApiKey === 'string' && patch.signApiKey.trim()) {
-    config.signApiKeyEncrypted = encryptSecret(patch.signApiKey.trim());
-  }
   if (patch.clearSession === true) {
     config.sessionIdEncrypted = '';
     config.ttTargetIdcEncrypted = '';
   }
-  if (patch.clearSignApiKey === true) config.signApiKeyEncrypted = '';
 
   config = saveConfig(app.getPath('userData'), config);
 }
@@ -446,8 +441,7 @@ function registerIpc() {
     applySettings({
       username: payload.username,
       sessionId: payload.sessionId,
-      ttTargetIdc: payload.ttTargetIdc,
-      signApiKey: payload.signApiKey
+      ttTargetIdc: payload.ttTargetIdc
     });
     await restartOverlayIfPortChanged(previousPort);
     sendState();
