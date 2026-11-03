@@ -6,6 +6,13 @@ Tiktato es una reimplementación local y acotada de la función principal de Tik
 
 > Proyecto independiente. No está afiliado a TikTok ni a TikFinity. Úsalo solo con directos y cuentas que tengas derecho a analizar.
 
+## Descargar
+
+- [Instalador de Windows v0.1.0](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.0/Tiktato.Setup.0.1.0.exe)
+- [Versión portable v0.1.0](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.0/Tiktato.0.1.0.exe)
+
+También puedes ejecutarlo desde el código con `npm install` y `npm start`.
+
 ![Panel de Tiktato](docs/dashboard.png)
 
 ## Qué incluye
