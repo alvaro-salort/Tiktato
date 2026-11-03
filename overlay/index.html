@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tiktato Overlay</title>
+    <link rel="stylesheet" href="/overlay.css" />
+  </head>
+  <body>
+    <div id="stage" class="stage position-bottom">
+      <div id="status" class="status">Conectando…</div>
+
+      <div id="card" class="alert-card" aria-live="polite">
+        <div class="card-glow"></div>
+        <div class="avatar-wrap">
+          <img id="avatar" class="avatar" alt="" />
+          <span id="avatarFallback" class="avatar-fallback">T</span>
+        </div>
+
+        <div class="card-main">
+          <div class="card-topline">
+            <span id="eventLabel" class="event-label">REGALO</span>
+            <span id="coins" class="coins"></span>
+          </div>
+          <div id="username" class="username">Alguien</div>
+          <div id="detail" class="detail">envió un regalo</div>
+          <div class="sound-line">
+            <span class="sound-icon">♪</span>
+            <span id="soundName" class="sound-name"></span>
+          </div>
+        </div>
+
+        <div id="giftWrap" class="gift-wrap">
+          <img id="giftImage" class="gift-image" alt="" />
+        </div>
+
+        <div class="progress-track"><div id="progress" class="progress"></div></div>
+      </div>
+    </div>
+
+    <script type="module" src="/overlay.js"></script>
+  </body>
+</html>

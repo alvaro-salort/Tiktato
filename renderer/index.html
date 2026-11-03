@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' https: data:; media-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tiktato · Sound alerts para TikTok LIVE</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-a"></div>
+    <div class="ambient ambient-b"></div>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">T</div>
+          <div>
+            <div class="brand-name">TIKTATO</div>
+            <div class="brand-tagline">sonidos y overlays para TikTok LIVE</div>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <div id="statusPill" class="status-pill status-disconnected">
+            <span class="status-dot"></span>
+            <span id="statusLabel">Desconectado</span>
+          </div>
+          <button id="btnDisconnect" class="btn btn-ghost" type="button" disabled>Desconectar</button>
+        </div>
+      </header>
+
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <div id="errorBanner" class="error-banner" hidden></div>
+
+      <main class="dashboard">
+        <div class="left-column">
+          <section class="panel connection-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Conexión</p>
+                <h2>Tu TikTok LIVE</h2>
+              </div>
+              <span class="live-badge" id="liveBadge">OFFLINE</span>
+            </div>
+
+            <form id="connectForm" class="stack">
+              <label class="field">
+                <span>Usuario de TikTok</span>
+                <div class="input-prefix">
+                  <span>@</span>
+                  <input id="username" name="username" autocomplete="off" placeholder="tu_usuario" maxlength="80" />
+                </div>
+              </label>
+
+              <details class="advanced">
+                <summary>Sesión opcional (si TikTok rechaza la conexión)</summary>
+                <div class="details-body">
+                  <p class="hint">
+                    La conexión anónima suele funcionar. Si falla, pega las cookies
+                    <code>sessionid</code> y <code>tt-target-idc</code> de una sesión de TikTok iniciada.
+                    Se guardan cifradas con el llavero de Windows.
+                  </p>
+                  <label class="field">
+                    <span>sessionid</span>
+                    <input id="sessionId" name="sessionId" type="password" autocomplete="off" placeholder="Se guarda cifrada" />
+                  </label>
+                  <label class="field">
+                    <span>tt-target-idc</span>
+                    <input id="ttTargetIdc" name="ttTargetIdc" autocomplete="off" placeholder="ej. useast1a" />
+                  </label>
+                  <label class="field">
+                    <span>Clave de Euler Stream <small>(opcional)</small></span>
+                    <input id="signApiKey" name="signApiKey" type="password" autocomplete="off" placeholder="Mejora la estabilidad de la firma" />
+                  </label>
+                  <div class="inline-actions">
+                    <button id="btnClearSession" class="btn btn-small btn-ghost" type="button">Borrar sesión guardada</button>
+                    <span id="sessionState" class="microcopy">Sin sesión guardada</span>
+                  </div>
+                </div>
+              </details>
+
+              <div class="inline-actions">
+                <button id="btnConnect" class="btn btn-primary" type="submit">Conectar LIVE</button>
+                <label class="checkline">
+                  <input id="autoConnect" type="checkbox" />
+                  <span>Conectar al abrir</span>
+                </label>
+              </div>
+            </form>
+
+            <div class="connection-message" id="connectionMessage">Sin conexión</div>
+
+            <div class="stats-grid">
+              <div class="stat">
+                <span class="stat-label">Regalos</span>
+                <strong id="statGifts">0</strong>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Monedas</span>
+                <strong id="statCoins">0</strong>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Follows</span>
+                <strong id="statFollows">0</strong>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Espectadores</span>
+                <strong id="statViewers">0</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel overlay-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">OBS / LIVE Studio</p>
+                <h2>Overlay</h2>
+              </div>
+              <span class="mini-tag">Browser source</span>
+            </div>
+
+            <label class="field">
+              <span>URL para OBS</span>
+              <div class="url-row">
+                <input id="overlayUrl" readonly />
+                <button id="btnCopyOverlay" class="btn btn-icon" type="button" title="Copiar URL">Copiar</button>
+              </div>
+            </label>
+            <div class="inline-actions">
+              <button id="btnOpenOverlay" class="btn btn-small btn-secondary" type="button">Abrir vista previa</button>
+              <span class="microcopy">Añádela como Browser Source de 800 × 600.</span>
+            </div>
+
+            <details class="advanced">
+              <summary>Personalizar overlay</summary>
+              <div class="details-body settings-grid">
+                <label class="field">
+                  <span>Título</span>
+                  <input id="overlayTitle" maxlength="30" />
+                </label>
+                <label class="field">
+                  <span>Color</span>
+                  <input id="overlayAccent" type="color" />
+                </label>
+                <label class="field">
+                  <span>Posición</span>
+                  <select id="overlayPosition">
+                    <option value="bottom">Abajo</option>
+                    <option value="top">Arriba</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Duración (ms)</span>
+                  <input id="overlayDuration" type="number" min="1500" max="20000" step="250" />
+                </label>
+                <label class="checkline span-2">
+                  <input id="overlayGiftImage" type="checkbox" />
+                  <span>Mostrar imagen del regalo</span>
+                </label>
+              </div>
+            </details>
+          </section>
+
+          <section class="panel settings-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">Audio</p>
+                <h2>Reproducción</h2>
+              </div>
+            </div>
+            <label class="field">
+              <span>Volumen general <strong id="volumeValue">80%</strong></span>
+              <input id="masterVolume" type="range" min="0" max="100" step="1" />
+            </label>
+            <label class="checkline">
+              <input id="playInDashboard" type="checkbox" />
+              <span>Reproducir también en esta ventana</span>
+            </label>
+            <p class="hint">
+              Si usas OBS, deja esta opción desactivada para escuchar el sonido una sola vez.
+            </p>
+          </section>
+        </div>
+
+        <div class="right-column">
+          <section class="panel rules-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Automatización</p>
+                <h2>Reglas de sonido</h2>
+              </div>
+              <button id="btnAddRule" class="btn btn-secondary" type="button">+ Nueva regla</button>
+            </div>
+
+            <div id="ruleFormWrap" class="rule-form-wrap" hidden>
+              <form id="ruleForm" class="rule-form">
+                <input id="ruleId" type="hidden" />
+                <label class="field">
+                  <span>Evento</span>
+                  <select id="ruleEventType">
+                    <option value="gift">Regalo</option>
+                    <option value="follow">Follow</option>
+                    <option value="share">Share</option>
+                    <option value="like">Like</option>
+                  </select>
+                </label>
+                <label class="field gift-only">
+                  <span>Regalo <small>(vacío = cualquiera, * = comodín)</small></span>
+                  <input id="ruleGiftName" placeholder="Rosa, Galaxy, *rosa*…" maxlength="80" />
+                </label>
+                <label class="field gift-only">
+                  <span>Mínimo de monedas</span>
+                  <input id="ruleMinCoins" type="number" min="0" step="1" value="0" />
+                </label>
+                <label class="field">
+                  <span>Sonido</span>
+                  <select id="ruleSound"></select>
+                </label>
+                <label class="field">
+                  <span>Volumen</span>
+                  <input id="ruleVolume" type="range" min="0" max="150" step="5" value="100" />
+                </label>
+                <label class="field">
+                  <span>Cooldown (segundos)</span>
+                  <input id="ruleCooldown" type="number" min="0" max="86400" step="1" value="0" />
+                </label>
+                <div class="rule-form-actions">
+                  <button id="btnSaveRule" class="btn btn-primary" type="submit">Guardar regla</button>
+                  <button id="btnCancelRule" class="btn btn-ghost" type="button">Cancelar</button>
+                </div>
+              </form>
+            </div>
+
+            <div id="rulesList" class="rules-list"></div>
+            <div id="rulesEmpty" class="empty-state" hidden>
+              <strong>No hay reglas todavía.</strong>
+              <span>Añade una para que un regalo active un sonido.</span>
+            </div>
+          </section>
+
+          <section class="panel sounds-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Biblioteca</p>
+                <h2>Sonidos</h2>
+              </div>
+              <button id="btnImportSound" class="btn btn-secondary" type="button">Subir audio</button>
+            </div>
+
+            <p class="section-label">Incluidos</p>
+            <div id="builtinSounds" class="sound-grid"></div>
+
+            <p class="section-label">Tus archivos</p>
+            <div id="customSounds" class="custom-sounds"></div>
+            <div id="soundsEmpty" class="empty-state small" hidden>
+              <span>Sube MP3, WAV, OGG, M4A, AAC, FLAC o WEBM. Máximo 30 MB.</span>
+            </div>
+          </section>
+
+          <section class="panel activity-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">En vivo</p>
+                <h2>Actividad</h2>
+              </div>
+              <div class="test-actions">
+                <span class="microcopy">Probar:</span>
+                <button class="btn btn-tiny" data-test="gift" type="button">Regalo</button>
+                <button class="btn btn-tiny" data-test="follow" type="button">Follow</button>
+                <button class="btn btn-tiny" data-test="share" type="button">Share</button>
+                <button class="btn btn-tiny" data-test="like" type="button">Like</button>
+              </div>
+            </div>
+            <div id="activityList" class="activity-list"></div>
+            <div id="activityEmpty" class="empty-state" hidden>
+              <strong>Esperando eventos.</strong>
+              <span>Conecta tu LIVE o usa los botones de prueba.</span>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <span>Tiktato no está afiliado a TikTok. Usa la app con contenido y cuentas que tengas derecho a analizar.</span>
+        <button id="btnOpenData" class="link-button" type="button">Abrir carpeta de datos</button>
+      </footer>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
