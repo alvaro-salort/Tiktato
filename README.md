@@ -8,8 +8,8 @@ Tiktato es una reimplementación local y acotada de la función principal de Tik
 
 ## Descargar
 
-- [Instalador de Windows v0.1.1](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.1/Tiktato.Setup.0.1.1.exe)
-- [Versión portable v0.1.1](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.1/Tiktato.0.1.1.exe)
+- [Instalador de Windows v0.1.2](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.2/Tiktato.Setup.0.1.2.exe)
+- [Versión portable v0.1.2](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.2/Tiktato.0.1.2.exe)
 
 También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 
@@ -27,7 +27,9 @@ También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 - URL de overlay protegida con token aleatorio.
 - Estadísticas básicas y feed de actividad.
 - Pruebas de eventos sin necesidad de estar en directo.
-- Sesión opcional de TikTok (solo para salas +18 o privadas), guardada cifrada con el llavero de Windows.
+- Inicio de sesión por **código QR** dentro de la app, para salas privadas, +18 o LIVE de prueba.
+- Sesión de TikTok guardada cifrada con el llavero de Windows.
+- Campo de **roomId manual** para conectar una sala que TikTok no publica en su API.
 - Conexión sin Euler Stream, sin claves de API y sin servidor de firma de pago.
 
 ![Overlay para OBS](docs/overlay.png)
@@ -85,12 +87,14 @@ La conexión es anónima y no usa Euler ni claves de API. Si TikTok no encuentra
 
 1. Comprueba que el LIVE está iniciado y que han pasado 1–2 minutos.
 2. Usa el **uniqueId** exacto de la URL de tu perfil (`tiktok.com/@tu_usuario`), no el nombre visible. Si TikTok responde `user_not_found`, el nombre no coincide.
-3. Si la sala es +18 o privada, añade tu sesión:
-   - Inicia sesión en TikTok en el navegador.
-   - Herramientas de desarrollo → Application → Cookies → `https://www.tiktok.com`.
-   - Copia `sessionid` y `tt-target-idc`.
-   - Pégalas en **Sesión opcional** y vuelve a conectar.
-4. Desactiva VPN/proxy si TikTok bloquea la región.
+3. Si es el **LIVE de prueba de Live Studio**, pulsa **Iniciar sesión con TikTok (QR)** en **Sesión opcional**, escanea el código con tu móvil y vuelve a conectar. TikTok no publica esas salas en la API anónima.
+4. Si ya tienes el `roomId` de la sala de prueba, pégalo en **Room ID manual** y conecta.
+5. Como alternativa manual, copia `sessionid` y `tt-target-idc` de las cookies de una sesión iniciada en el navegador y pégalas en **Sesión opcional**.
+6. Desactiva VPN/proxy si TikTok bloquea la región.
+
+> TikTok puede pedir captcha o verificación adicional durante el login QR. Tiktato no recibe ni guarda tu contraseña; solo conserva las cookies de sesión cifradas.
+
+![Login QR de TikTok dentro de Tiktato](docs/tiktok-login.png)
 
 > Las cookies son credenciales. Tiktato las guarda cifradas con `safeStorage` de Electron y no las envía a ningún servidor propio.
 

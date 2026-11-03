@@ -1,6 +1,6 @@
 {
   "name": "tiktato",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Alertas de sonido y overlays para donaciones y eventos de TikTok LIVE, sin suscripciones.",
   "main": "electron/main.cjs",
   "author": "Alvaro Salort",
@@ -9,6 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "postinstall": "patch-package",
     "test": "node --test tests/*.test.cjs",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win nsis portable"
@@ -19,7 +20,8 @@
   },
   "devDependencies": {
     "electron": "^45.2.1",
-    "electron-builder": "^26.18.0"
+    "electron-builder": "^26.18.0",
+    "patch-package": "^8.0.1"
   },
   "build": {
     "appId": "com.tiktato.app",

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -19,11 +19,15 @@ const isDev = process.argv.includes('--dev');
 const MAX_ACTIVITY = 40;
 
 let mainWindow = null;
+let loginWindow = null;
 let config = null;
 let overlayServer = null;
 let tiktok = null;
 let logFile = '';
 let quitting = false;
+const TIKTOK_LOGIN_PARTITION = 'persist:tiktok-login';
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 const cooldowns = new Map();
 const recentActivity = [];
@@ -327,6 +331,100 @@ async function restartOverlayIfPortChanged(previousPort) {
   }
 }
 
+async function loginTikTok() {
+  if (loginWindow && !loginWindow.isDestroyed()) {
+    loginWindow.focus();
+    return { ok: false, error: 'Ya hay una ventana de inicio de sesión abierta.' };
+  }
+
+  const loginSession = session.fromPartition(TIKTOK_LOGIN_PARTITION);
+  loginSession.setUserAgent(BROWSER_UA);
+  const win = new BrowserWindow({
+    width: 480,
+    height: 760,
+    minWidth: 380,
+    minHeight: 560,
+    parent: mainWindow || undefined,
+    modal: false,
+    show: false,
+    autoHideMenuBar: true,
+    title: 'Iniciar sesión en TikTok',
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
+    webPreferences: {
+      partition: TIKTOK_LOGIN_PARTITION,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  loginWindow = win;
+  win.webContents.setUserAgent(BROWSER_UA);
+  win.once('ready-to-show', () => win.show());
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\/([a-z0-9-]+\.)?tiktok\.com\//i.test(url)) {
+      win.loadURL(url);
+    } else if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+  win.loadURL('https://www.tiktok.com/login?lang=es');
+
+  return new Promise((resolve) => {
+    let finished = false;
+    let timer = null;
+    let timeout = null;
+
+    const finish = (result) => {
+      if (finished) return;
+      finished = true;
+      clearInterval(timer);
+      clearTimeout(timeout);
+      loginWindow = null;
+      if (!win.isDestroyed()) win.close();
+      resolve(result);
+    };
+
+    const checkCookies = async () => {
+      try {
+        const cookies = await loginSession.cookies.get({ url: 'https://www.tiktok.com' });
+        const sessionId = cookies.find((cookie) => cookie.name === 'sessionid')?.value || '';
+        const ttTargetIdc = cookies.find((cookie) => cookie.name === 'tt-target-idc')?.value || '';
+        if (sessionId) {
+          applySettings({ sessionId, ttTargetIdc });
+          sendState();
+          logger.info('[tiktok] sesión capturada con login QR');
+          finish({ ok: true, hasSession: true });
+        }
+      } catch (error) {
+        logger.warn('[tiktok] no se pudieron leer las cookies del login', error);
+      }
+    };
+
+    timer = setInterval(checkCookies, 1000);
+    checkCookies();
+    timeout = setTimeout(
+      () => finish({ ok: false, error: 'Tiempo de espera agotado. Cierra la ventana e inténtalo de nuevo.' }),
+      5 * 60 * 1000
+    );
+    win.on('closed', () => {
+      if (!finished) {
+        finished = true;
+        clearInterval(timer);
+        clearTimeout(timeout);
+        loginWindow = null;
+        resolve({ canceled: true });
+      }
+    });
+  });
+}
+
+async function logoutTikTok() {
+  const loginSession = session.fromPartition(TIKTOK_LOGIN_PARTITION);
+  await loginSession.clearStorageData({ storages: ['cookies'] });
+  return { ok: true };
+}
+
 function createWindow() {
   const smokeScreenshot = process.env.TIKTATO_SMOKE_SCREENSHOT || '';
   mainWindow = new BrowserWindow({
@@ -448,6 +546,7 @@ function registerIpc() {
     try {
       const status = await tiktok.connect({
         username: config.username,
+        roomId: payload.roomId,
         ...credentials()
       });
       sendState();
@@ -463,6 +562,9 @@ function registerIpc() {
     sendState();
     return publicState();
   });
+
+  ipcMain.handle('tiktok:login', () => loginTikTok());
+  ipcMain.handle('tiktok:logout', () => logoutTikTok());
 
   ipcMain.handle('event:test', (_event, input) => {
     const alert = processEvent(makeTestEvent(input));

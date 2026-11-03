@@ -315,7 +315,8 @@ function wireEvents() {
       const result = await api.connect({
         username,
         sessionId: $('#sessionId').value.trim(),
-        ttTargetIdc: $('#ttTargetIdc').value.trim()
+        ttTargetIdc: $('#ttTargetIdc').value.trim(),
+        roomId: $('#roomId').value.trim()
       });
       $('#sessionId').value = '';
       state = await api.bootstrap();
@@ -361,8 +362,25 @@ function wireEvents() {
     updateSettings({ masterVolume: Number(event.target.value) / 100 });
   });
 
+  $('#btnTikTokLogin').addEventListener('click', async () => {
+    try {
+      const result = await api.loginTikTok();
+      if (result.canceled) return;
+      if (!result.ok) {
+        showToast(result.error || 'No se pudo iniciar sesión en TikTok', 'error');
+        return;
+      }
+      state = await api.bootstrap();
+      render(state);
+      showToast('Sesión de TikTok guardada');
+    } catch (error) {
+      showToast(error.message || 'No se pudo iniciar sesión en TikTok', 'error');
+    }
+  });
+
   $('#btnClearSession').addEventListener('click', async () => {
     if (!confirm('¿Borrar las cookies de TikTok guardadas?')) return;
+    await api.logoutTikTok();
     await updateSettings({ clearSession: true }, 'Sesión borrada');
   });
 

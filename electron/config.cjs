@@ -251,7 +251,7 @@ function publicConfig(config, { overlayUrl } = {}) {
     autoConnect: config.autoConnect,
     masterVolume: config.masterVolume,
     playInDashboard: config.playInDashboard,
-    hasSession: Boolean(config.sessionIdEncrypted && config.ttTargetIdcEncrypted),
+    hasSession: Boolean(config.sessionIdEncrypted),
     overlay: {
       port: config.overlay.port,
       position: config.overlay.position,

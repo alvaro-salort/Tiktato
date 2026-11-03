@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('tiktato', {
   deleteSound: (soundId) => ipcRenderer.invoke('sound:delete', soundId),
   connect: (payload) => ipcRenderer.invoke('tiktok:connect', payload),
   disconnect: () => ipcRenderer.invoke('tiktok:disconnect'),
+  loginTikTok: () => ipcRenderer.invoke('tiktok:login'),
+  logoutTikTok: () => ipcRenderer.invoke('tiktok:logout'),
   testEvent: (input) => ipcRenderer.invoke('event:test', input),
   copyOverlayUrl: () => ipcRenderer.invoke('overlay:copy'),
   openOverlay: () => ipcRenderer.invoke('overlay:open'),

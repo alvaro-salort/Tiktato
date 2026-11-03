@@ -22,7 +22,7 @@ function friendlyError(error) {
   );
 
   if (/UserNotFound|user .* does not exist/i.test(`${name} ${message}`)) {
-    return 'TikTok no encuentra ese usuario. Revisa el nombre exacto de la URL de tu perfil.';
+    return 'TikTok no encuentra ese usuario. Revisa el uniqueId de la URL de tu perfil. Para un LIVE de prueba, inicia sesión con QR o usa un room ID manual.';
   }
   if (/HostNotOnline|UserOffline|not currently live|offline/i.test(`${name} ${message}`)) {
     return 'Ese usuario no está en directo ahora mismo. Inicia el LIVE y espera 1–2 minutos.';
@@ -49,8 +49,52 @@ function friendlyError(error) {
 }
 
 function sessionCookie(sessionId, ttTargetIdc) {
-  if (!sessionId || !ttTargetIdc) return '';
-  return `sessionid=${sessionId}; sid_tt=${sessionId}; tt-target-idc=${ttTargetIdc}`;
+  if (!sessionId) return '';
+  const parts = [`sessionid=${sessionId}`, `sid_tt=${sessionId}`];
+  if (ttTargetIdc) parts.push(`tt-target-idc=${ttTargetIdc}`);
+  return parts.join('; ');
+}
+
+async function resolveRoomId(username, cookie = '') {
+  const params = new URLSearchParams({
+    aid: '1988',
+    app_name: 'tiktok_web',
+    device_platform: 'web_pc',
+    app_language: 'es',
+    browser_language: 'es',
+    region: 'ES',
+    user_is_login: cookie ? 'true' : 'false',
+    sourceType: '54',
+    staleTime: '600000',
+    uniqueId: username
+  });
+  const headers = {
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    Referer: 'https://www.tiktok.com/'
+  };
+  if (cookie) headers.Cookie = cookie;
+  const response = await fetch(`https://www.tiktok.com/api-live/user/room/?${params}`, {
+    headers,
+    signal: AbortSignal.timeout(12_000)
+  });
+  if (!response.ok) throw new Error(`TikTok respondió HTTP ${response.status}`);
+  const body = await response.json();
+  if (body.statusCode === 19881007) {
+    const error = new Error(`user "${username}" does not exist`);
+    error.name = 'UserNotFoundError';
+    throw error;
+  }
+  if (body.statusCode !== 0) throw new Error(`TikTok API statusCode=${body.statusCode}`);
+  const roomId = String(body.data?.user?.roomId || '');
+  const userStatus = Number(body.data?.user?.status || 0);
+  const liveStatus = Number(body.data?.liveRoom?.status || 0);
+  if (!roomId || roomId === '0' || (![2, 4].includes(userStatus) && ![2, 4].includes(liveStatus))) {
+    const error = new Error(`user "${username}" is not currently live`);
+    error.name = 'HostNotOnlineError';
+    throw error;
+  }
+  return roomId;
 }
 
 class TikTokService extends EventEmitter {
@@ -77,17 +121,18 @@ class TikTokService extends EventEmitter {
     this.emit('status', this.getStatus());
   }
 
-  async connect({ username, sessionId, ttTargetIdc }) {
+  async connect({ username, sessionId, ttTargetIdc, roomId }) {
     const clean = cleanUsername(username);
-    if (!clean) throw new Error('Escribe un usuario de TikTok válido.');
+    const manualRoom = String(roomId || '').trim();
+    if (!clean && !manualRoom) throw new Error('Escribe un usuario de TikTok válido.');
 
     await this.disconnect();
     this.intentionalDisconnect = false;
     this.#setStatus({
       state: 'connecting',
       username: clean,
-      roomId: '',
-      message: `Conectando con @${clean}…`,
+      roomId: manualRoom,
+      message: manualRoom ? `Conectando a la sala ${manualRoom}…` : `Conectando con @${clean}…`,
       viewerCount: 0
     });
 
@@ -98,7 +143,7 @@ class TikTokService extends EventEmitter {
         throw new Error('La librería de TikTok no expone TikTokLiveClient.');
       }
 
-      const client = new TikTokLiveClient(clean);
+      const client = new TikTokLiveClient(clean || 'manual');
       const cookie = sessionCookie(sessionId, ttTargetIdc);
       if (cookie) client.cookies(cookie);
       this.client = client;
@@ -142,14 +187,24 @@ class TikTokService extends EventEmitter {
         }
       });
 
-      const roomId = String(await client.connect());
+      let resolvedRoom = manualRoom;
+      if (!resolvedRoom && cookie) {
+        try {
+          resolvedRoom = await resolveRoomId(clean, cookie);
+          this.logger.info?.(`[tiktok] sala resuelta con sesión: ${resolvedRoom}`);
+        } catch (error) {
+          this.logger.warn?.('[tiktok] no se pudo resolver la sala con la sesión', error);
+        }
+      }
+
+      const connectedRoomId = String(await client.connect(resolvedRoom || undefined));
       this.#setStatus({
         state: 'connected',
-        roomId,
-        message: `Conectado a @${clean}`,
+        roomId: connectedRoomId,
+        message: clean ? `Conectado a @${clean}` : `Conectado a la sala ${connectedRoomId}`,
         viewerCount: 0
       });
-      this.logger.info?.(`[tiktok] conectado a @${clean} roomId=${roomId}`);
+      this.logger.info?.(`[tiktok] conectado a ${clean ? `@${clean}` : 'sala manual'} roomId=${connectedRoomId}`);
       return this.getStatus();
     } catch (error) {
       this.client = null;
@@ -191,5 +246,6 @@ module.exports = {
   TikTokService,
   cleanUsername,
   friendlyError,
+  resolveRoomId,
   sessionCookie
 };

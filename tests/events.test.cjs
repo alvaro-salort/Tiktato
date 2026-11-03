@@ -2,7 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { makeTestEvent, normalizeTikTokEvent } = require('../electron/events.cjs');
-const { cleanUsername, friendlyError, sessionCookie } = require('../electron/tiktok-service.cjs');
+const {
+  cleanUsername,
+  friendlyError,
+  resolveRoomId,
+  sessionCookie
+} = require('../electron/tiktok-service.cjs');
 
 test('ignora los eventos intermedios de una racha de regalos', () => {
   const message = {
@@ -82,6 +87,41 @@ test('construye la cookie de sesión para la librería', () => {
     'sessionid=abc; sid_tt=abc; tt-target-idc=useast1a'
   );
   assert.equal(sessionCookie('', 'useast1a'), '');
+});
+
+test('resuelve una sala de prueba por API con estado 4', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      statusCode: 0,
+      data: {
+        user: { roomId: '7703967199593630471', status: 4 },
+        liveRoom: { status: 4 }
+      }
+    })
+  });
+  try {
+    assert.equal(
+      await resolveRoomId('dopillo5', 'sessionid=abc'),
+      '7703967199593630471'
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('distingue usuario inexistente al resolver la sala', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ statusCode: 19881007, data: null })
+  });
+  try {
+    await assert.rejects(() => resolveRoomId('nadie', ''), /does not exist/);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test('convierte URLs y arrobas a un nombre limpio', () => {

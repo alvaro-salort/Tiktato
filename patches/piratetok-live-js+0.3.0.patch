@@ -1,0 +1,31 @@
+diff --git a/node_modules/piratetok-live-js/dist/client.d.ts b/node_modules/piratetok-live-js/dist/client.d.ts
+index 01d2f3b..4e65b9e 100644
+--- a/node_modules/piratetok-live-js/dist/client.d.ts
++++ b/node_modules/piratetok-live-js/dist/client.d.ts
+@@ -61,7 +61,7 @@ export declare class TikTokLiveClient extends EventEmitter {
+      * the retry budget is spent (then `disconnected` fires). Rejects if the
+      * user is not live, or if the loop gives up before any handshake succeeded.
+      */
+-    connect(): Promise<string>;
++    connect(roomIdOverride?: string): Promise<string>;
+     /** Event + promise wiring around the reconnect loop; `connect()` passes the live transport. */
+     private runSessions;
+     /** `error` is only emitted when someone listens — an unheard `error` would crash the loop. */
+diff --git a/node_modules/piratetok-live-js/dist/client.js b/node_modules/piratetok-live-js/dist/client.js
+index dd2e2fc..0c5ec9a 100644
+--- a/node_modules/piratetok-live-js/dist/client.js
++++ b/node_modules/piratetok-live-js/dist/client.js
+@@ -108,11 +108,11 @@ export class TikTokLiveClient extends EventEmitter {
+      * the retry budget is spent (then `disconnected` fires). Rejects if the
+      * user is not live, or if the loop gives up before any handshake succeeded.
+      */
+-    async connect() {
++    async connect(roomIdOverride) {
+         const lang = this._language ?? systemLanguage();
+         const reg = this._region ?? systemRegion();
+         const acceptLang = `${lang}-${reg},${lang};q=0.9`;
+-        const { roomId } = await checkOnline(this.username, this.timeoutMs, lang, reg, this._proxy);
++        const roomId = roomIdOverride || (await checkOnline(this.username, this.timeoutMs, lang, reg, this._proxy)).roomId;
+         return this.runSessions(roomId, (signal) => ({
+             newSession: async () => {
+                 const userAgent = this._userAgent ?? randomUa();
