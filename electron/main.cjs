@@ -368,6 +368,11 @@ async function loginTikTok() {
     }
     return { action: 'deny' };
   });
+  const allowOnlyHttp = (event, url) => {
+    if (!/^https?:\/\//i.test(url)) event.preventDefault();
+  };
+  win.webContents.on('will-navigate', allowOnlyHttp);
+  win.webContents.on('will-redirect', allowOnlyHttp);
   win.loadURL('https://www.tiktok.com/login?lang=es');
 
   return new Promise((resolve) => {
@@ -395,6 +400,15 @@ async function loginTikTok() {
           sendState();
           logger.info('[tiktok] sesión capturada con login QR');
           finish({ ok: true, hasSession: true });
+          setTimeout(async () => {
+            if (!config.username || tiktok.getStatus().state === 'connected') return;
+            try {
+              await tiktok.connect({ username: config.username, ...credentials() });
+            } catch (error) {
+              logger.warn('[tiktok] auto-conexión tras login QR falló', error);
+            }
+            sendState();
+          }, 700);
         }
       } catch (error) {
         logger.warn('[tiktok] no se pudieron leer las cookies del login', error);

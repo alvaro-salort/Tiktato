@@ -8,8 +8,8 @@ Tiktato es una reimplementación local y acotada de la función principal de Tik
 
 ## Descargar
 
-- [Instalador de Windows v0.1.2](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.2/Tiktato.Setup.0.1.2.exe)
-- [Versión portable v0.1.2](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.2/Tiktato.0.1.2.exe)
+- [Instalador de Windows v0.1.3](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.3/Tiktato.Setup.0.1.3.exe)
+- [Versión portable v0.1.3](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.3/Tiktato.0.1.3.exe)
 
 También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 
