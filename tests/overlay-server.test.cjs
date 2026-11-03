@@ -65,6 +65,38 @@ test('sirve health, overlay y config protegida', async () => {
   }
 });
 
+test('sirve el frasco y su estado protegido', async () => {
+  const { server, sounds } = makeServer();
+  try {
+    await server.start();
+    server.setJar({
+      title: 'Frasco de donaciones',
+      goalCoins: 1000,
+      currentCoins: 250,
+      currentGifts: 4,
+      accent: '#e83e5f',
+      showRecentGifts: true,
+      recentGifts: [],
+      percent: 25,
+      completed: false
+    });
+
+    const page = await fetch(`http://127.0.0.1:${server.port}/jar`);
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /Frasco de donaciones/);
+
+    const denied = await fetch(`http://127.0.0.1:${server.port}/api/jar`);
+    assert.equal(denied.status, 401);
+
+    const jar = await fetch(`http://127.0.0.1:${server.port}/api/jar?token=${token}`);
+    assert.equal(jar.status, 200);
+    assert.equal((await jar.json()).percent, 25);
+  } finally {
+    await server.stop();
+    fs.rmSync(sounds, { recursive: true, force: true });
+  }
+});
+
 test('entrega el estado inicial por WebSocket y difunde alertas', async () => {
   const { server, sounds } = makeServer();
   try {

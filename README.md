@@ -8,8 +8,8 @@ Tiktato es una reimplementación local y acotada de la función principal de Tik
 
 ## Descargar
 
-- [Instalador de Windows v0.1.3](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.3/Tiktato.Setup.0.1.3.exe)
-- [Versión portable v0.1.3](https://github.com/alvaro-salort/Tiktato/releases/download/v0.1.3/Tiktato.0.1.3.exe)
+- [Instalador de Windows v0.2.0](https://github.com/alvaro-salort/Tiktato/releases/download/v0.2.0/Tiktato.Setup.0.2.0.exe)
+- [Versión portable v0.2.0](https://github.com/alvaro-salort/Tiktato/releases/download/v0.2.0/Tiktato.0.2.0.exe)
 
 También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 
@@ -24,7 +24,8 @@ También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 - Sonidos incluidos sintetizados (moneda, campanilla, pop, destello, fanfarria, redoble).
 - Subida de sonidos propios (MP3, WAV, OGG, M4A, AAC, FLAC, WEBM; máximo 30 MB).
 - Overlay transparente para OBS con animación, avatar, imagen del regalo, monedas y nombre del sonido.
-- URL de overlay protegida con token aleatorio.
+- **Frasco de donaciones** que se llena con las monedas de los regalos, con meta configurable, porcentaje y regalos recientes.
+- URL de overlay y frasco protegidas con token aleatorio.
 - Estadísticas básicas y feed de actividad.
 - Pruebas de eventos sin necesidad de estar en directo.
 - Inicio de sesión por **código QR** dentro de la app, para salas privadas, +18 o LIVE de prueba.
@@ -33,6 +34,8 @@ También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 - Conexión sin Euler Stream, sin claves de API y sin servidor de firma de pago.
 
 ![Overlay para OBS](docs/overlay.png)
+
+![Frasco de donaciones para OBS](docs/jar.png)
 
 ## Stack
 
@@ -107,6 +110,15 @@ La conexión es anónima y no usa Euler ni claves de API. Si TikTok no encuentra
 - Si también quieres escuchar los sonidos en el panel, deja activada **Reproducir también en esta ventana**. Si no, desactívala para no duplicar el audio.
 
 El overlay se sirve solo en `127.0.0.1` y el token impide que otra página local se conecte al flujo de eventos.
+
+## Frasco de donaciones
+
+El paso **04** del panel tiene su propia URL de OBS. El frasco se llena con las monedas de los regalos y muestra los últimos regalos recibidos.
+
+- Cambia la **meta de monedas** en el panel.
+- Pulsa **Reiniciar** para volver a cero.
+- Usa **Vista previa** para abrirlo en el navegador.
+- La URL del frasco también está protegida por token.
 
 ## Datos y privacidad
 

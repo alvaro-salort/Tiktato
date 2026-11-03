@@ -71,6 +71,15 @@ function createDefaultConfig() {
       showGiftImage: true,
       durationMs: 5000
     },
+    jar: {
+      title: 'Frasco de donaciones',
+      goalCoins: 1000,
+      currentCoins: 0,
+      currentGifts: 0,
+      accent: '#e83e5f',
+      showRecentGifts: true,
+      recentGifts: []
+    },
     rules: defaultRules(),
     sounds: []
   };
@@ -115,6 +124,33 @@ function normalizeSound(input) {
   };
 }
 
+function normalizeJar(input) {
+  const defaults = createDefaultConfig().jar;
+  const jar = input && typeof input === 'object' ? input : {};
+  const recentGifts = Array.isArray(jar.recentGifts)
+    ? jar.recentGifts
+        .filter((gift) => gift && typeof gift === 'object')
+        .slice(0, 8)
+        .map((gift) => ({
+          name: String(gift.name || 'Regalo').slice(0, 60),
+          imageUrl: String(gift.imageUrl || '').slice(0, 500),
+          coins: Math.max(0, Number(gift.coins) || 0),
+          username: String(gift.username || '').slice(0, 80),
+          at: String(gift.at || new Date().toISOString())
+        }))
+    : [];
+
+  return {
+    title: String(jar.title || defaults.title).trim().slice(0, 40) || defaults.title,
+    goalCoins: Math.round(clampNumber(jar.goalCoins, defaults.goalCoins, 1, 1_000_000_000)),
+    currentCoins: Math.round(clampNumber(jar.currentCoins, 0, 0, 1_000_000_000)),
+    currentGifts: Math.round(clampNumber(jar.currentGifts, 0, 0, 1_000_000_000)),
+    accent: /^#[0-9a-f]{6}$/i.test(String(jar.accent || '')) ? String(jar.accent) : defaults.accent,
+    showRecentGifts: jar.showRecentGifts !== false,
+    recentGifts
+  };
+}
+
 function normalizeConfig(input) {
   const defaults = createDefaultConfig();
   const source = input && typeof input === 'object' ? input : {};
@@ -151,6 +187,7 @@ function normalizeConfig(input) {
       showGiftImage: overlay.showGiftImage !== false,
       durationMs: Math.round(clampNumber(overlay.durationMs, defaults.overlay.durationMs, 1500, 20_000))
     },
+    jar: normalizeJar(source.jar),
     rules,
     sounds
   };
@@ -244,6 +281,22 @@ function mimeForExtension(extension) {
   return map[extension] || 'application/octet-stream';
 }
 
+function publicJar(config) {
+  const jar = config.jar || createDefaultConfig().jar;
+  const percent = Math.max(0, Math.min(100, (Number(jar.currentCoins) / Math.max(1, Number(jar.goalCoins))) * 100));
+  return {
+    title: jar.title,
+    goalCoins: jar.goalCoins,
+    currentCoins: jar.currentCoins,
+    currentGifts: jar.currentGifts,
+    accent: jar.accent,
+    showRecentGifts: jar.showRecentGifts,
+    recentGifts: jar.recentGifts,
+    percent,
+    completed: percent >= 100
+  };
+}
+
 function publicConfig(config, { overlayUrl } = {}) {
   return {
     version: config.version,
@@ -261,6 +314,7 @@ function publicConfig(config, { overlayUrl } = {}) {
       durationMs: config.overlay.durationMs
     },
     overlayUrl: overlayUrl || '',
+    jar: publicJar(config),
     rules: config.rules,
     sounds: config.sounds
   };
@@ -277,8 +331,10 @@ module.exports = {
   importSound,
   loadConfig,
   normalizeConfig,
+  normalizeJar,
   normalizeRule,
   publicConfig,
+  publicJar,
   saveConfig,
   soundsDir
 };

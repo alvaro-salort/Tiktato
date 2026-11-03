@@ -8,6 +8,7 @@ const {
   loadConfig,
   normalizeRule,
   publicConfig,
+  publicJar,
   saveConfig
 } = require('./config.cjs');
 const { buildAlert, markPlayed, selectRule } = require('./alert-matcher.cjs');
@@ -17,6 +18,10 @@ const { TikTokService } = require('./tiktok-service.cjs');
 
 const isDev = process.argv.includes('--dev');
 const MAX_ACTIVITY = 40;
+
+if (process.env.TIKTATO_USER_DATA) {
+  app.setPath('userData', path.resolve(process.env.TIKTATO_USER_DATA));
+}
 
 let mainWindow = null;
 let loginWindow = null;
@@ -135,6 +140,14 @@ function overlayUrl() {
   return overlayServer ? overlayServer.getUrl() : '';
 }
 
+function jarUrl() {
+  return overlayServer ? overlayServer.getJarUrl() : '';
+}
+
+function updateJarOverlay() {
+  overlayServer?.setJar(publicJar(config));
+}
+
 function overlaySettings() {
   return {
     ...config.overlay,
@@ -150,6 +163,7 @@ function publicState() {
       ...base.overlay,
       port: overlayServer?.port || base.overlay.port
     },
+    jarUrl: jarUrl(),
     sounds: config.sounds.map((sound) => ({ ...sound, url: soundUrl(sound) })),
     status: tiktok ? tiktok.getStatus() : { state: 'disconnected', message: 'Sin conexión' },
     stats: {
@@ -185,6 +199,7 @@ function updateOverlayConfig() {
     showGiftImage: config.overlay.showGiftImage,
     durationMs: config.overlay.durationMs
   });
+  overlayServer?.setJar(publicJar(config));
 }
 
 function resolveSound(soundId) {
@@ -242,6 +257,24 @@ function registerActivity(event, alert) {
   return record;
 }
 
+function addToJar(event) {
+  if (event.type !== 'gift') return;
+  config.jar.currentGifts += 1;
+  config.jar.currentCoins += Math.max(0, Number(event.coins) || 0);
+  if (config.jar.showRecentGifts) {
+    config.jar.recentGifts.unshift({
+      name: event.giftName || 'Regalo',
+      imageUrl: event.giftImageUrl || '',
+      coins: Number(event.coins) || 0,
+      username: event.username || '',
+      at: new Date().toISOString()
+    });
+    config.jar.recentGifts = config.jar.recentGifts.slice(0, 8);
+  }
+  config = saveConfig(app.getPath('userData'), config);
+  updateJarOverlay();
+}
+
 function processEvent(event) {
   const now = Date.now();
   const rule = selectRule(config.rules, event, cooldowns, now);
@@ -253,6 +286,7 @@ function processEvent(event) {
     sendAlert(alert);
   }
   registerActivity(event, alert);
+  addToJar(event);
   sendState();
   return alert;
 }
@@ -303,6 +337,18 @@ function applySettings(patch) {
     if (overlay.port !== undefined) {
       config.overlay.port = Math.max(1024, Math.min(65535, Number(overlay.port) || 3477));
     }
+  }
+
+  if (patch.jar && typeof patch.jar === 'object') {
+    const jar = patch.jar;
+    if (typeof jar.title === 'string') config.jar.title = jar.title.trim().slice(0, 40) || 'Frasco de donaciones';
+    if (jar.goalCoins !== undefined) {
+      config.jar.goalCoins = Math.max(1, Math.min(1_000_000_000, Number(jar.goalCoins) || 1000));
+    }
+    if (typeof jar.accent === 'string' && /^#[0-9a-f]{6}$/i.test(jar.accent)) {
+      config.jar.accent = jar.accent;
+    }
+    if (typeof jar.showRecentGifts === 'boolean') config.jar.showRecentGifts = jar.showRecentGifts;
   }
 
   if (typeof patch.sessionId === 'string' && patch.sessionId.trim()) {
@@ -460,9 +506,23 @@ function createWindow() {
   });
 
   if (smokeScreenshot) {
+    if (process.env.TIKTATO_SMOKE_TALL === '1') {
+      mainWindow.setContentSize(1320, 1500);
+    }
     mainWindow.webContents.once('did-finish-load', () => {
+      if (process.env.TIKTATO_SMOKE_TEST_EVENT === '1') {
+        setTimeout(async () => {
+          await mainWindow.webContents.executeJavaScript(
+            'document.querySelector(\'[data-test="gift"]\')?.click()'
+          );
+        }, 450);
+      }
       setTimeout(async () => {
         try {
+          if (process.env.TIKTATO_SMOKE_SCROLL === 'bottom') {
+            await mainWindow.webContents.executeJavaScript('window.scrollTo(0, document.body.scrollHeight)');
+            await new Promise((resolve) => setTimeout(resolve, 350));
+          }
           const image = await mainWindow.webContents.capturePage();
           fs.writeFileSync(smokeScreenshot, image.toPNG());
           logger.info(`[smoke] captura guardada en ${smokeScreenshot}`);
@@ -593,6 +653,26 @@ function registerIpc() {
   ipcMain.handle('overlay:open', async () => {
     if (overlayUrl()) await shell.openExternal(`${overlayUrl()}&preview=1`);
     return { ok: true };
+  });
+
+  ipcMain.handle('jar:copy', () => {
+    clipboard.writeText(jarUrl());
+    return { ok: true, url: jarUrl() };
+  });
+
+  ipcMain.handle('jar:open', async () => {
+    if (jarUrl()) await shell.openExternal(`${jarUrl()}&preview=1`);
+    return { ok: true };
+  });
+
+  ipcMain.handle('jar:reset', () => {
+    config.jar.currentCoins = 0;
+    config.jar.currentGifts = 0;
+    config.jar.recentGifts = [];
+    config = saveConfig(app.getPath('userData'), config);
+    updateJarOverlay();
+    sendState();
+    return publicState();
   });
 
   ipcMain.handle('app:open-data-folder', async () => {

@@ -67,13 +67,15 @@ class OverlayServer {
     this.sharedDir = sharedDir;
     this.soundsDir = soundsDir;
     this.token = token;
-    this.requestedPort = Number(port) || 3477;
+    const requested = Number(port);
+    this.requestedPort = Number.isFinite(requested) ? requested : 3477;
     this.logger = logger;
     this.server = null;
     this.wss = null;
     this.port = null;
     this.clients = new Set();
     this.config = {};
+    this.jar = {};
   }
 
   async start() {
@@ -81,7 +83,7 @@ class OverlayServer {
     this.wss = new WebSocketServer({ noServer: true });
     this.wss.on('connection', (socket) => {
       this.clients.add(socket);
-      this.#send(socket, { type: 'hello', config: this.config });
+      this.#send(socket, { type: 'hello', config: this.config, jar: this.jar });
       socket.on('close', () => this.clients.delete(socket));
       socket.on('error', () => this.clients.delete(socket));
     });
@@ -151,6 +153,25 @@ class OverlayServer {
       return;
     }
 
+    if (pathname === '/jar' || pathname === '/jar/') {
+      response.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self' https: data:; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; media-src 'self' https: data:; connect-src 'self' ws://127.0.0.1:*;"
+      );
+      serveFile(response, path.join(this.overlayDir, 'jar.html'));
+      return;
+    }
+
+    if (pathname === '/jar.js') {
+      serveFile(response, path.join(this.overlayDir, 'jar.js'));
+      return;
+    }
+
+    if (pathname === '/jar.css') {
+      serveFile(response, path.join(this.overlayDir, 'jar.css'));
+      return;
+    }
+
     if (pathname === '/shared/audio-engine.js') {
       serveFile(response, path.join(this.sharedDir, 'audio-engine.js'));
       return;
@@ -162,6 +183,15 @@ class OverlayServer {
         return;
       }
       sendJson(response, 200, this.config);
+      return;
+    }
+
+    if (pathname === '/api/jar') {
+      if (!tokenMatches(this.token, url.searchParams.get('token'))) {
+        sendJson(response, 401, { error: 'Token inválido' });
+        return;
+      }
+      sendJson(response, 200, this.jar);
       return;
     }
 
@@ -205,6 +235,11 @@ class OverlayServer {
     this.broadcast({ type: 'config', config });
   }
 
+  setJar(jar) {
+    this.jar = jar;
+    this.broadcast({ type: 'jar', jar });
+  }
+
   broadcast(payload) {
     const message = JSON.stringify(payload);
     for (const client of this.clients) {
@@ -220,6 +255,10 @@ class OverlayServer {
 
   getUrl() {
     return `http://127.0.0.1:${this.port}/overlay?token=${this.token}`;
+  }
+
+  getJarUrl() {
+    return `http://127.0.0.1:${this.port}/jar?token=${this.token}`;
   }
 
   async stop() {

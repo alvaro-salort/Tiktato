@@ -23,6 +23,12 @@ const EVENT_ICONS = {
   like: '❤️'
 };
 
+const QUICK_RULES = [
+  { type: 'gift', label: 'Regalos', description: 'Cualquier regalo', icon: '🎁', soundId: 'builtin:coin' },
+  { type: 'follow', label: 'Follows', description: 'Nuevos seguidores', icon: '💜', soundId: 'builtin:chime' },
+  { type: 'share', label: 'Shares', description: 'Comparten tu directo', icon: '🔁', soundId: 'builtin:pop' }
+];
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -92,7 +98,7 @@ function updateStatus(status) {
   liveBadge.classList.toggle('is-live', status.state === 'connected');
   disconnect.disabled = !['connected', 'connecting', 'error'].includes(status.state);
   connect.disabled = status.state === 'connecting';
-  connect.textContent = status.state === 'connecting' ? 'Conectando…' : 'Conectar LIVE';
+  connect.textContent = status.state === 'connecting' ? 'Conectando…' : 'Conectar';
   message.textContent = status.message || 'Sin conexión';
   message.classList.toggle('is-error', status.state === 'error');
   $('#statViewers').textContent = formatNumber(status.viewerCount || 0);
@@ -128,9 +134,11 @@ function render(nextState) {
   $('#statFollows').textContent = formatNumber(state.stats.follows);
 
   updateStatus(state.status);
+  renderQuickRules();
   renderRules();
   renderSounds();
   renderActivity();
+  renderJar();
   updateRuleSoundOptions();
 }
 
@@ -174,6 +182,64 @@ function renderRules() {
       `;
     })
     .join('');
+}
+
+function soundOptionsHtml(selectedId) {
+  return [
+    ...BUILTIN_SOUNDS.map(
+      (sound) =>
+        `<option value="${escapeHtml(sound.id)}" ${sound.id === selectedId ? 'selected' : ''}>${sound.emoji} ${escapeHtml(sound.name)}</option>`
+    ),
+    ...(state.sounds || []).map(
+      (sound) =>
+        `<option value="${escapeHtml(sound.id)}" ${sound.id === selectedId ? 'selected' : ''}>🎵 ${escapeHtml(sound.name)}</option>`
+    )
+  ].join('');
+}
+
+function renderQuickRules() {
+  const container = $('#quickRules');
+  if (!container) return;
+
+  container.innerHTML = QUICK_RULES.map((item) => {
+    const rule = (state.rules || []).find((candidate) => candidate.eventType === item.type);
+    const soundId = rule?.soundId || item.soundId;
+    const enabled = rule ? rule.enabled !== false : true;
+    return `
+      <div class="quick-rule" data-quick-type="${item.type}">
+        <span class="quick-rule-icon">${item.icon}</span>
+        <div class="quick-rule-copy">
+          <strong>${item.label}</strong>
+          <span>${rule ? escapeHtml(soundName(soundId)) : item.description}</span>
+        </div>
+        <select data-quick-sound aria-label="Sonido para ${item.label}">
+          ${soundOptionsHtml(soundId)}
+        </select>
+        <label class="switch" title="${enabled ? 'Desactivar' : 'Activar'}">
+          <input type="checkbox" data-quick-toggle ${enabled ? 'checked' : ''} />
+          <span></span>
+        </label>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderJar() {
+  const jar = state.jar;
+  if (!jar) return;
+  const percent = Math.max(0, Math.min(100, Number(jar.percent) || 0));
+  setInputValue('#jarGoal', jar.goalCoins);
+  setInputValue('#jarUrl', state.jarUrl || '');
+  const fill = $('#jarFill');
+  const percentLabel = $('#jarPercent');
+  const amount = $('#jarAmount');
+  const gifts = $('#jarGifts');
+  if (fill) fill.style.height = `${percent}%`;
+  if (percentLabel) percentLabel.textContent = `${Math.round(percent)}%`;
+  if (amount) amount.textContent = `${formatNumber(jar.currentCoins)} / ${formatNumber(jar.goalCoins)}`;
+  if (gifts) gifts.textContent = `${formatNumber(jar.currentGifts)} regalos`;
+  const card = $('#jarCard');
+  if (card) card.classList.toggle('is-complete', percent >= 100);
 }
 
 function renderSounds() {
@@ -299,6 +365,79 @@ async function updateSettings(patch, message = '') {
 }
 
 function wireEvents() {
+  const openDialog = (selector) => {
+    const dialog = $(selector);
+    if (dialog && !dialog.open) dialog.showModal();
+  };
+  $$('[data-close]').forEach((button) => {
+    button.addEventListener('click', () => button.closest('dialog')?.close());
+  });
+  $$('dialog').forEach((dialog) => {
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+  });
+
+  $('#btnSettings').addEventListener('click', () => openDialog('#settingsDialog'));
+  $('#btnHelp').addEventListener('click', () => openDialog('#helpDialog'));
+  $('#btnAdvancedRules').addEventListener('click', () => openDialog('#rulesDialog'));
+  $('#btnSounds').addEventListener('click', () => openDialog('#soundsDialog'));
+  $('#btnOverlaySettings').addEventListener('click', () => openDialog('#overlayDialog'));
+  $('#btnHelpConnect').addEventListener('click', () => {
+    $('#helpDialog').close();
+    $('#connectForm').requestSubmit();
+  });
+
+  $('#quickRules').addEventListener('change', async (event) => {
+    const row = event.target.closest('[data-quick-type]');
+    if (!row) return;
+    const type = row.dataset.quickType;
+    const existing = state.rules.find((rule) => rule.eventType === type);
+    const defaults = QUICK_RULES.find((item) => item.type === type);
+    const rules = [...state.rules];
+
+    if (event.target.matches('[data-quick-sound]')) {
+      const soundId = event.target.value;
+      if (existing) {
+        const index = rules.findIndex((rule) => rule.id === existing.id);
+        rules[index] = { ...rules[index], soundId };
+      } else {
+        rules.push({
+          eventType: type,
+          giftName: '',
+          minCoins: 0,
+          soundId: soundId || defaults.soundId,
+          volume: 1,
+          cooldownSeconds: type === 'gift' ? 2 : 0,
+          enabled: true,
+          order: rules.length
+        });
+      }
+      await saveRules(rules, `${defaults.label}: sonido actualizado`);
+      return;
+    }
+
+    if (event.target.matches('[data-quick-toggle]')) {
+      const enabled = event.target.checked;
+      if (existing) {
+        const index = rules.findIndex((rule) => rule.id === existing.id);
+        rules[index] = { ...rules[index], enabled };
+      } else {
+        rules.push({
+          eventType: type,
+          giftName: '',
+          minCoins: 0,
+          soundId: defaults.soundId,
+          volume: 1,
+          cooldownSeconds: type === 'gift' ? 2 : 0,
+          enabled,
+          order: rules.length
+        });
+      }
+      await saveRules(rules, enabled ? `${defaults.label} activado` : `${defaults.label} desactivado`);
+    }
+  });
+
   $('#connectForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     setError('');
@@ -332,7 +471,7 @@ function wireEvents() {
       showToast(error.message || 'No se pudo conectar.', 'error');
     } finally {
       button.disabled = false;
-      button.textContent = 'Conectar LIVE';
+      button.textContent = 'Conectar';
     }
   });
 
@@ -395,6 +534,28 @@ function wireEvents() {
 
   $('#btnOpenOverlay').addEventListener('click', () => api.openOverlay());
   $('#btnOpenData').addEventListener('click', () => api.openDataFolder());
+
+  $('#btnCopyJar').addEventListener('click', async () => {
+    try {
+      await api.copyJarUrl();
+      showToast('URL del frasco copiada');
+    } catch {
+      showToast('No se pudo copiar la URL del frasco', 'error');
+    }
+  });
+
+  $('#btnOpenJar').addEventListener('click', () => api.openJar());
+
+  $('#btnResetJar').addEventListener('click', async () => {
+    if (!confirm('¿Reiniciar el frasco a cero?')) return;
+    state = await api.resetJar();
+    render(state);
+    showToast('Frasco reiniciado');
+  });
+
+  $('#jarGoal').addEventListener('change', (event) => {
+    updateSettings({ jar: { goalCoins: Number(event.target.value) } }, 'Meta del frasco actualizada');
+  });
 
   const overlayField = (selector, patch) => {
     $(selector).addEventListener('change', (event) => updateSettings({ overlay: patch(event.target) }));
