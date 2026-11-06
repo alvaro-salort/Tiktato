@@ -1,6 +1,6 @@
 {
   "name": "tiktato",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Alertas de sonido y overlays para donaciones y eventos de TikTok LIVE, sin suscripciones.",
   "main": "electron/main.cjs",
   "author": "Alvaro Salort",

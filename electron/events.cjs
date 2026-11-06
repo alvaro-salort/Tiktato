@@ -25,7 +25,7 @@ function userInfo(user) {
   };
 }
 
-function normalizeTikTokEvent(type, data, now = Date.now()) {
+function normalizeTikTokEvent(type, data, now = Date.now(), options = {}) {
   const base = {
     type,
     timestamp: now,
@@ -39,7 +39,8 @@ function normalizeTikTokEvent(type, data, now = Date.now()) {
     const repeatEnd =
       typeof repeatEndRaw === 'boolean' ? repeatEndRaw : Number(repeatEndRaw) !== 0;
 
-    if (giftType === 1 && !repeatEnd) return null;
+    const playEveryStreak = Boolean(options && (options.playEveryStreak || options.allowCombos));
+    if (giftType === 1 && !repeatEnd && !playEveryStreak) return null;
 
     const rawGiftName = String(gift.name || gift.giftName || data.giftName || '').trim();
     const isTest = Boolean(
@@ -90,6 +91,23 @@ function normalizeTikTokEvent(type, data, now = Date.now()) {
     };
   }
 
+  if (type === 'chat') {
+    const text = String(
+      data?.comment ||
+      data?.content ||
+      data?.text ||
+      data?.message ||
+      ''
+    ).trim();
+    return {
+      ...base,
+      comment: text,
+      message: text,
+      repeatCount: 1,
+      coins: 0
+    };
+  }
+
   if (type === 'like') {
     return {
       ...base,
@@ -107,7 +125,23 @@ function normalizeTikTokEvent(type, data, now = Date.now()) {
 }
 
 function makeTestEvent(input = {}) {
-  const type = ['gift', 'follow', 'share', 'like'].includes(input.type) ? input.type : 'gift';
+  const type = ['gift', 'follow', 'share', 'like', 'chat'].includes(input.type) ? input.type : 'gift';
+  if (type === 'chat') {
+    const message = String(input.message || input.comment || '¡Hola a todos en el directo!');
+    return {
+      type: 'chat',
+      userId: 'test_user',
+      username: 'tiktato_test',
+      displayName: String(input.displayName || 'Viewer de prueba'),
+      avatarUrl: '',
+      comment: message,
+      message,
+      repeatCount: 1,
+      coins: 0,
+      test: true,
+      timestamp: Date.now()
+    };
+  }
   const repeatCount = Math.max(1, Number(input.repeatCount || 1));
   const rawInputName = type === 'gift' ? String(input.giftName || '').trim() : '';
   const catalogGift =

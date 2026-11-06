@@ -1,7 +1,13 @@
 import { BUILTIN_SOUNDS, SoundEngine } from '../shared/audio-engine.js';
+import { TTSQueue, formatChatTTS, formatGiftTTS } from '../shared/tts-engine.js';
 
 const api = window.tiktato;
 const audio = new SoundEngine();
+const ttsQueue = new TTSQueue({
+  soundEngine: audio,
+  onStateChange: (stateData) => updateTtsQueueUI(stateData)
+});
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
@@ -13,14 +19,16 @@ const EVENT_LABELS = {
   gift: 'Regalo',
   follow: 'Follow',
   share: 'Share',
-  like: 'Like'
+  like: 'Like',
+  chat: 'Chat'
 };
 
 const EVENT_ICONS = {
   gift: 'gift',
   follow: 'follow',
   share: 'share',
-  like: 'like'
+  like: 'like',
+  chat: 'chat'
 };
 
 const QUICK_RULES = [
@@ -58,6 +66,8 @@ const ICON_PATHS = {
     '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>',
   like:
     '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6a5.5 5.5 0 0 0 1-8.8Z"/>',
+  chat:
+    '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   music:
     '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
   play: '<path d="m8 5 11 7-11 7z"/>',
@@ -306,6 +316,7 @@ function render(nextState) {
   renderSounds();
   renderActivity();
   renderJar();
+  renderTTS();
   updateRuleSoundOptions();
   if (!$('#ruleFormWrap')?.hidden) {
     updateRuleGiftOptions($('#ruleGiftSelect')?.value || $('#ruleGiftId')?.value, $('#ruleGiftName')?.value);
@@ -574,6 +585,124 @@ function renderJar() {
   if (card) card.classList.toggle('is-complete', percent >= 100);
 }
 
+function renderTTS() {
+  const tts = state?.tts;
+  if (!tts) return;
+  const chatCheckbox = $('#ttsChatEnabled');
+  const giftsCheckbox = $('#ttsGiftsEnabled');
+  const duckingCheckbox = $('#ttsDucking');
+  const streaksCheckbox = $('#ttsPlayEveryStreak');
+  const antiSpamCheckbox = $('#ttsAntiSpam');
+  const providerSelect = $('#ttsVoiceProvider');
+  const volumeSlider = $('#ttsVolume');
+  const volumeLabel = $('#ttsVolumeValue');
+  const minCoinsSlider = $('#ttsMinCoins');
+  const minCoinsLabel = $('#ttsMinCoinsValue');
+
+  if (chatCheckbox) chatCheckbox.checked = tts.chatEnabled !== false;
+  if (giftsCheckbox) giftsCheckbox.checked = tts.giftsEnabled !== false;
+  if (duckingCheckbox) duckingCheckbox.checked = tts.ducking !== false;
+  if (streaksCheckbox) streaksCheckbox.checked = tts.playEveryStreak !== false;
+  if (antiSpamCheckbox) antiSpamCheckbox.checked = Boolean(tts.antiSpam);
+  if (providerSelect) providerSelect.value = tts.voiceProvider || 'google';
+
+  const volPercent = Math.round((tts.volume ?? 0.8) * 100);
+  if (volumeSlider) volumeSlider.value = volPercent;
+  if (volumeLabel) volumeLabel.textContent = `${volPercent}%`;
+
+  const minCoins = Number(tts.minCoins ?? 1);
+  if (minCoinsSlider) minCoinsSlider.value = minCoins;
+  if (minCoinsLabel) minCoinsLabel.textContent = formatNumber(minCoins);
+
+  updateTtsQueueUI({
+    speaking: ttsQueue.isSpeaking,
+    current: ttsQueue.currentItem,
+    queueLength: ttsQueue.queue.length,
+    isMuted: ttsQueue.isMuted
+  });
+}
+
+function updateTtsQueueUI({ speaking, current, queueLength, isMuted }) {
+  const badge = $('#ttsQueueBadge');
+  const clearBtn = $('#btnClearTTS');
+  if (clearBtn) {
+    clearBtn.textContent = isMuted ? 'Reanudar voz' : 'Silenciar / Vaciar cola';
+    clearBtn.title = isMuted ? 'Reanudar lectura de voz' : 'Silenciar y vaciar la cola de voz';
+  }
+  if (!badge) return;
+  if (isMuted) {
+    badge.textContent = 'SILENCIADO';
+    badge.className = 'chip';
+  } else if (speaking) {
+    badge.textContent = queueLength > 0 ? `HABLANDO (+${queueLength})` : 'HABLANDO';
+    badge.className = 'chip is-speaking';
+  } else if (queueLength > 0) {
+    badge.textContent = `${queueLength} EN COLA`;
+    badge.className = 'chip';
+  } else {
+    badge.textContent = (state?.tts?.chatEnabled || state?.tts?.giftsEnabled) ? 'LISTO' : 'INACTIVO';
+    badge.className = 'chip';
+  }
+}
+
+async function saveTtsPatch(patch) {
+  try {
+    const nextState = await api.updateSettings({
+      tts: patch
+    });
+    if (nextState) {
+      state = nextState;
+      renderTTS();
+    }
+  } catch (err) {
+    showToast(err.message || 'No se pudo guardar la configuración de voz', 'error');
+  }
+}
+
+function handleIncomingEventForTTS(event) {
+  if (!event || !state?.tts?.enabled) return;
+  const ttsSettings = state.tts;
+  const username = event.displayName || event.username || 'Alguien';
+
+  if (event.type === 'chat') {
+    if (!ttsSettings.chatEnabled) return;
+    const comment = event.comment || event.message || '';
+    if (!comment) return;
+    const text = formatChatTTS(username, comment);
+    ttsQueue.enqueue({
+      text,
+      username,
+      type: 'chat',
+      voiceProvider: ttsSettings.voiceProvider || 'google',
+      voiceLanguage: ttsSettings.voiceLanguage || 'es-ES',
+      volume: (state.masterVolume ?? 0.8) * (ttsSettings.volume ?? 0.8),
+      ducking: ttsSettings.ducking !== false,
+      duckingLevel: ttsSettings.duckingLevel ?? 0.25,
+      antiSpam: Boolean(ttsSettings.antiSpam),
+      maxChars: ttsSettings.maxChars || 120
+    });
+  } else if (event.type === 'gift') {
+    if (!ttsSettings.giftsEnabled) return;
+    if (event.repeatEnd === false) return;
+    const minCoins = Number(ttsSettings.minCoins ?? 1);
+    const coins = Number(event.coins || 0);
+    if (coins < minCoins) return;
+    const text = formatGiftTTS(username, event.giftName || 'un regalo', event.repeatCount || 1);
+    ttsQueue.enqueue({
+      text,
+      username,
+      type: 'gift',
+      voiceProvider: ttsSettings.voiceProvider || 'google',
+      voiceLanguage: ttsSettings.voiceLanguage || 'es-ES',
+      volume: (state.masterVolume ?? 0.8) * (ttsSettings.volume ?? 0.8),
+      ducking: ttsSettings.ducking !== false,
+      duckingLevel: ttsSettings.duckingLevel ?? 0.25,
+      antiSpam: Boolean(ttsSettings.antiSpam),
+      maxChars: ttsSettings.maxChars || 120
+    });
+  }
+}
+
 function renderSounds() {
   $('#builtinSounds').innerHTML = BUILTIN_SOUNDS.map(
     (sound) => `
@@ -618,7 +747,9 @@ function renderActivity() {
             ? 'empezó a seguirte'
             : item.type === 'share'
               ? 'compartió el directo'
-              : `envió ${formatNumber(item.repeatCount)} likes`;
+              : item.type === 'chat'
+                ? `dice: <em>${escapeHtml(item.comment || item.message || '')}</em>`
+                : `envió ${formatNumber(item.repeatCount)} likes`;
       return `
         <div class="activity-row ${item.test ? 'is-test' : ''}">
           <span class="activity-icon">${
@@ -1362,10 +1493,89 @@ function wireEvents() {
         giftId: type === 'gift' ? '5655' : '',
         giftName: type === 'gift' ? 'Rosa' : '',
         coins: type === 'gift' ? 1 : 0,
-        repeatCount: type === 'like' ? 25 : 1
+        repeatCount: type === 'like' ? 25 : 1,
+        message: type === 'chat' ? '¡Hola a todos! Este es un mensaje de prueba de chat en directo.' : ''
       });
       if (result.state) render(result.state);
     });
+  });
+
+  $('#ttsChatEnabled')?.addEventListener('change', (e) => {
+    saveTtsPatch({ chatEnabled: e.target.checked });
+  });
+
+  $('#ttsGiftsEnabled')?.addEventListener('change', (e) => {
+    saveTtsPatch({ giftsEnabled: e.target.checked });
+  });
+
+  $('#ttsDucking')?.addEventListener('change', (e) => {
+    saveTtsPatch({ ducking: e.target.checked });
+  });
+
+  $('#ttsPlayEveryStreak')?.addEventListener('change', (e) => {
+    saveTtsPatch({ playEveryStreak: e.target.checked });
+  });
+
+  $('#ttsAntiSpam')?.addEventListener('change', (e) => {
+    saveTtsPatch({ antiSpam: e.target.checked });
+  });
+
+  $('#ttsVoiceProvider')?.addEventListener('change', (e) => {
+    saveTtsPatch({ voiceProvider: e.target.value });
+  });
+
+  $('#ttsVolume')?.addEventListener('input', (e) => {
+    const val = Number(e.target.value);
+    $('#ttsVolumeValue').textContent = `${val}%`;
+  });
+  $('#ttsVolume')?.addEventListener('change', (e) => {
+    const val = Number(e.target.value) / 100;
+    saveTtsPatch({ volume: val });
+  });
+
+  $('#ttsMinCoins')?.addEventListener('input', (e) => {
+    const val = Number(e.target.value);
+    $('#ttsMinCoinsValue').textContent = formatNumber(val);
+  });
+  $('#ttsMinCoins')?.addEventListener('change', (e) => {
+    const val = Number(e.target.value);
+    saveTtsPatch({ minCoins: val });
+  });
+
+  $('#btnTestTTS')?.addEventListener('click', async () => {
+    await audio.unlock();
+    ttsQueue.enqueue({
+      text: '¡Hola! La voz y el texto a voz de Tiktato están funcionando en directo.',
+      username: 'Tiktato',
+      type: 'test',
+      voiceProvider: state?.tts?.voiceProvider || 'google',
+      voiceLanguage: state?.tts?.voiceLanguage || 'es-ES',
+      volume: (state?.masterVolume ?? 0.8) * (state?.tts?.volume ?? 0.8),
+      ducking: state?.tts?.ducking !== false,
+      duckingLevel: state?.tts?.duckingLevel ?? 0.25,
+      antiSpam: Boolean(state?.tts?.antiSpam),
+      maxChars: state?.tts?.maxChars || 120
+    });
+    showToast('Reproduciendo prueba de voz…');
+  });
+
+  $('#btnSkipTTS')?.addEventListener('click', () => {
+    ttsQueue.skip();
+    showToast('Mensaje de voz saltado');
+  });
+
+  $('#btnClearTTS')?.addEventListener('click', () => {
+    if (ttsQueue.isMuted) {
+      ttsQueue.mute(false);
+      showToast('Voz reanudada');
+    } else {
+      ttsQueue.mute(true);
+      showToast('Cola de voz silenciada y vaciada');
+    }
+  });
+
+  api.onIncomingEvent?.((event) => {
+    handleIncomingEventForTTS(event);
   });
 
   api.onAlert((alert) => {

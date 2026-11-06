@@ -76,6 +76,10 @@ function isRuleEligible(rule, event, cooldowns, now) {
 
   if (event.test) return true;
 
+  if (event.type === 'gift' && event.repeatEnd === false) {
+    return true;
+  }
+
   const cooldownMs = Math.max(0, Number(rule.cooldownSeconds) || 0) * 1000;
   if (cooldownMs <= 0) return true;
   const lastPlayed = cooldowns.get(cooldownKey(rule, event)) || 0;
@@ -108,6 +112,9 @@ function selectRule(rules, event, cooldowns = new Map(), now = Date.now()) {
 }
 
 function markPlayed(rule, event, cooldowns = new Map(), now = Date.now()) {
+  if (event.type === 'gift' && event.repeatEnd === false) {
+    return cooldowns;
+  }
   cooldowns.set(cooldownKey(rule, event), now);
   return cooldowns;
 }

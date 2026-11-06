@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('tiktato', {
   resetJar: () => ipcRenderer.invoke('jar:reset'),
   openDataFolder: () => ipcRenderer.invoke('app:open-data-folder'),
   onAlert: (callback) => subscribe('alert', callback),
+  onIncomingEvent: (callback) => subscribe('event:incoming', callback),
   onState: (callback) => subscribe('state:update', callback),
   onStatus: (callback) => subscribe('status:update', callback)
 });

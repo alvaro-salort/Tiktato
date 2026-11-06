@@ -2,7 +2,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const EVENT_TYPES = ['gift', 'follow', 'share', 'like'];
+const EVENT_TYPES = ['gift', 'follow', 'share', 'like', 'chat'];
 const BUILTIN_IDS = [
   'builtin:coin',
   'builtin:chime',
@@ -80,6 +80,20 @@ function createDefaultConfig() {
       showRecentGifts: true,
       recentGifts: []
     },
+    tts: {
+      enabled: true,
+      chatEnabled: true,
+      giftsEnabled: true,
+      minCoins: 1,
+      volume: 0.8,
+      voiceProvider: 'google',
+      voiceLanguage: 'es-ES',
+      ducking: true,
+      duckingLevel: 0.25,
+      antiSpam: false,
+      playEveryStreak: true,
+      maxChars: 120
+    },
     rules: defaultRules(),
     sounds: []
   };
@@ -156,6 +170,29 @@ function normalizeJar(input) {
   };
 }
 
+function normalizeTts(input) {
+  const defaults = createDefaultConfig().tts;
+  const tts = input && typeof input === 'object' ? input : {};
+  const voiceProvider = ['google', 'local'].includes(tts.voiceProvider)
+    ? tts.voiceProvider
+    : defaults.voiceProvider;
+
+  return {
+    enabled: tts.enabled !== false,
+    chatEnabled: tts.chatEnabled !== false,
+    giftsEnabled: tts.giftsEnabled !== false,
+    minCoins: Math.round(clampNumber(tts.minCoins, defaults.minCoins, 0, 1_000_000)),
+    volume: clampNumber(tts.volume, defaults.volume, 0, 1),
+    voiceProvider,
+    voiceLanguage: String(tts.voiceLanguage || defaults.voiceLanguage).slice(0, 20),
+    ducking: tts.ducking !== false,
+    duckingLevel: clampNumber(tts.duckingLevel, defaults.duckingLevel, 0, 1),
+    antiSpam: tts.antiSpam === true,
+    playEveryStreak: tts.playEveryStreak !== false,
+    maxChars: Math.round(clampNumber(tts.maxChars, defaults.maxChars, 20, 500))
+  };
+}
+
 function normalizeConfig(input) {
   const defaults = createDefaultConfig();
   const source = input && typeof input === 'object' ? input : {};
@@ -193,6 +230,7 @@ function normalizeConfig(input) {
       durationMs: Math.round(clampNumber(overlay.durationMs, defaults.overlay.durationMs, 1500, 20_000))
     },
     jar: normalizeJar(source.jar),
+    tts: normalizeTts(source.tts),
     rules,
     sounds
   };
@@ -320,6 +358,7 @@ function publicConfig(config, { overlayUrl } = {}) {
     },
     overlayUrl: overlayUrl || '',
     jar: publicJar(config),
+    tts: config.tts || createDefaultConfig().tts,
     rules: config.rules,
     sounds: config.sounds
   };
@@ -338,6 +377,7 @@ module.exports = {
   normalizeConfig,
   normalizeJar,
   normalizeRule,
+  normalizeTts,
   publicConfig,
   publicJar,
   saveConfig,

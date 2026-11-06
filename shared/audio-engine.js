@@ -29,8 +29,49 @@ export class SoundEngine {
   constructor() {
     this.context = null;
     this.queue = Promise.resolve();
-    this.activeNodes = new Set();
-    this.activeAudio = new Set();
+    this.activeNodes = new Map();
+    this.activeAudio = new Map();
+    this.isDucked = false;
+    this.duckFactor = 0.25;
+  }
+
+  duck(factor = 0.25) {
+    this.isDucked = true;
+    this.duckFactor = Math.max(0, Math.min(1, Number(factor) || 0.25));
+    for (const [audio, baseVol] of this.activeAudio.entries()) {
+      try {
+        audio.volume = Math.max(0, Math.min(1, baseVol * this.duckFactor));
+      } catch {}
+    }
+    for (const [node, baseVol] of this.activeNodes.entries()) {
+      try {
+        if (this.context) {
+          node.gain.setValueAtTime(node.gain.value, this.context.currentTime);
+          node.gain.linearRampToValueAtTime(Math.max(0, Math.min(1, baseVol * this.duckFactor)), this.context.currentTime + 0.05);
+        } else {
+          node.gain.value = Math.max(0, Math.min(1, baseVol * this.duckFactor));
+        }
+      } catch {}
+    }
+  }
+
+  restore() {
+    this.isDucked = false;
+    for (const [audio, baseVol] of this.activeAudio.entries()) {
+      try {
+        audio.volume = Math.max(0, Math.min(1, baseVol));
+      } catch {}
+    }
+    for (const [node, baseVol] of this.activeNodes.entries()) {
+      try {
+        if (this.context) {
+          node.gain.setValueAtTime(node.gain.value, this.context.currentTime);
+          node.gain.linearRampToValueAtTime(Math.max(0, Math.min(1, baseVol)), this.context.currentTime + 0.08);
+        } else {
+          node.gain.value = Math.max(0, Math.min(1, baseVol));
+        }
+      } catch {}
+    }
   }
 
   async unlock() {
@@ -86,8 +127,12 @@ export class SoundEngine {
   async #startFile(url, volume, { waitForEnd = true } = {}) {
     const audio = new Audio(url);
     audio.preload = 'auto';
-    audio.volume = Math.max(0, Math.min(1, volume));
-    this.activeAudio.add(audio);
+    const baseVolume = Math.max(0, Math.min(1, Number(volume) || 0));
+    const effectiveVolume = this.isDucked
+      ? Math.max(0, Math.min(1, baseVolume * this.duckFactor))
+      : baseVolume;
+    audio.volume = effectiveVolume;
+    this.activeAudio.set(audio, baseVolume);
 
     const cleanup = () => {
       this.activeAudio.delete(audio);
@@ -127,9 +172,13 @@ export class SoundEngine {
   async #playBuiltin(key, volume) {
     const ctx = this.context;
     const master = ctx.createGain();
-    master.gain.value = Math.max(0, Math.min(1, volume));
+    const baseVolume = Math.max(0, Math.min(1, Number(volume) || 0));
+    const effectiveVolume = this.isDucked
+      ? Math.max(0, Math.min(1, baseVolume * this.duckFactor))
+      : baseVolume;
+    master.gain.value = effectiveVolume;
     master.connect(ctx.destination);
-    this.activeNodes.add(master);
+    this.activeNodes.set(master, baseVolume);
 
     const now = ctx.currentTime + 0.01;
     const safe = (frequency, duration, type, gain) =>
@@ -195,7 +244,7 @@ export class SoundEngine {
   }
 
   stopAll() {
-    for (const audio of this.activeAudio) {
+    for (const [audio] of this.activeAudio.entries()) {
       try {
         audio.__stoppedByUser = true;
         audio.pause();
@@ -205,7 +254,7 @@ export class SoundEngine {
       }
     }
     this.activeAudio.clear();
-    for (const node of this.activeNodes) {
+    for (const [node] of this.activeNodes.entries()) {
       try {
         node.disconnect();
       } catch {

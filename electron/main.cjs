@@ -1,6 +1,7 @@
-const { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, session, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, powerSaveBlocker, safeStorage, session, shell } = require('electron');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const {
@@ -8,6 +9,7 @@ const {
   importSound,
   loadConfig,
   normalizeRule,
+  normalizeTts,
   publicConfig,
   publicJar,
   saveConfig
@@ -94,6 +96,47 @@ function initLogger() {
     }
   } catch {
     // Ignorado.
+  }
+}
+
+let powerSaveBlockerId = null;
+
+function acquireStreamResources() {
+  try {
+    if (powerSaveBlockerId === null || !powerSaveBlocker.isStarted(powerSaveBlockerId)) {
+      powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+      logger.info(`[sistema] powerSaveBlocker activado (id: ${powerSaveBlockerId})`);
+    }
+  } catch (error) {
+    logger.warn('[sistema] no se pudo activar powerSaveBlocker', error);
+  }
+  try {
+    if (os.constants?.priority?.PRIORITY_ABOVE_NORMAL !== undefined) {
+      os.setPriority(os.constants.priority.PRIORITY_ABOVE_NORMAL);
+      logger.info('[sistema] prioridad de proceso establecida en ABOVE_NORMAL');
+    }
+  } catch (error) {
+    logger.warn('[sistema] no se pudo elevar la prioridad del proceso', error);
+  }
+}
+
+function releaseStreamResources() {
+  try {
+    if (powerSaveBlockerId !== null && powerSaveBlocker.isStarted(powerSaveBlockerId)) {
+      powerSaveBlocker.stop(powerSaveBlockerId);
+      logger.info(`[sistema] powerSaveBlocker liberado (id: ${powerSaveBlockerId})`);
+      powerSaveBlockerId = null;
+    }
+  } catch (error) {
+    logger.warn('[sistema] no se pudo detener powerSaveBlocker', error);
+  }
+  try {
+    if (os.constants?.priority?.PRIORITY_NORMAL !== undefined) {
+      os.setPriority(os.constants.priority.PRIORITY_NORMAL);
+      logger.info('[sistema] prioridad de proceso restaurada a NORMAL');
+    }
+  } catch (error) {
+    logger.warn('[sistema] no se pudo restaurar la prioridad del proceso', error);
   }
 }
 
@@ -238,14 +281,36 @@ function resolveSound(soundId) {
 function registerActivity(event, alert) {
   stats.uniqueUsers.add(event.userId || event.username || 'anon');
   if (event.type === 'gift') {
-    stats.gifts += 1;
-    stats.coins += Number(event.coins || 0);
+    if (event.repeatEnd !== false) {
+      stats.gifts += 1;
+      stats.coins += Number(event.coins || 0);
+    }
   } else if (event.type === 'follow') {
     stats.follows += 1;
   } else if (event.type === 'share') {
     stats.shares += 1;
   } else if (event.type === 'like') {
     stats.likes += Number(event.repeatCount || 1);
+  }
+
+  const currentStreak = recentActivity[0];
+  const isOngoingStreak =
+    currentStreak &&
+    currentStreak.type === 'gift' &&
+    currentStreak.username === (event.username || 'alguien') &&
+    currentStreak.giftName === (event.giftName || '') &&
+    currentStreak.repeatEnd === false;
+
+  if (isOngoingStreak) {
+    currentStreak.repeatCount = Number(event.repeatCount || 1);
+    currentStreak.coins = Number(event.coins || 0);
+    currentStreak.repeatEnd = event.repeatEnd !== false;
+    currentStreak.createdAt = new Date().toISOString();
+    if (alert) {
+      currentStreak.played = true;
+      currentStreak.soundName = alert?.sound?.name || currentStreak.soundName;
+    }
+    return currentStreak;
   }
 
   const record = {
@@ -258,10 +323,12 @@ function registerActivity(event, alert) {
     giftImageUrl: event.giftImageUrl || '',
     coins: Number(event.coins || 0),
     repeatCount: Number(event.repeatCount || 1),
+    comment: event.comment || event.message || '',
     createdAt: new Date().toISOString(),
     played: Boolean(alert),
     soundName: alert?.sound?.name || '',
-    test: Boolean(event.test)
+    test: Boolean(event.test),
+    repeatEnd: event.repeatEnd !== false
   };
   recentActivity.unshift(record);
   if (recentActivity.length > MAX_ACTIVITY) recentActivity.length = MAX_ACTIVITY;
@@ -270,6 +337,7 @@ function registerActivity(event, alert) {
 
 function addToJar(event) {
   if (event.type !== 'gift') return;
+  if (event.repeatEnd === false) return;
   config.jar.currentGifts += 1;
   config.jar.currentCoins += Math.max(0, Number(event.coins) || 0);
   if (config.jar.showRecentGifts) {
@@ -298,6 +366,9 @@ function processEvent(event) {
   }
   registerActivity(event, alert);
   addToJar(event);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('event:incoming', event);
+  }
   sendState();
   return alert;
 }
@@ -360,6 +431,14 @@ function applySettings(patch) {
       config.jar.accent = jar.accent;
     }
     if (typeof jar.showRecentGifts === 'boolean') config.jar.showRecentGifts = jar.showRecentGifts;
+  }
+
+  if (patch.tts && typeof patch.tts === 'object') {
+    config.tts = normalizeTts({
+      ...config.tts,
+      ...patch.tts
+    });
+    tiktok?.setOptions({ playEveryStreak: config.tts.playEveryStreak !== false });
   }
 
   if (typeof patch.sessionId === 'string' && patch.sessionId.trim()) {
@@ -503,7 +582,7 @@ function createWindow() {
     height: 860,
     minWidth: 980,
     minHeight: 680,
-    backgroundColor: '#090910',
+    backgroundColor: '#f4efe6',
     show: false,
     autoHideMenuBar: true,
     title: 'Tiktato',
@@ -724,8 +803,14 @@ function registerIpc() {
 
 function wireTikTok() {
   tiktok = new TikTokService({ logger });
+  tiktok.setOptions({ playEveryStreak: config.tts?.playEveryStreak !== false });
   tiktok.on('event', (event) => processEvent(event));
   tiktok.on('status', (status) => {
+    if (status.state === 'connected') {
+      acquireStreamResources();
+    } else if (status.state === 'disconnected' || status.state === 'error') {
+      releaseStreamResources();
+    }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('status:update', status);
     }
@@ -782,6 +867,7 @@ if (!singleInstance) {
   app.on('before-quit', () => {
     if (quitting) return;
     quitting = true;
+    releaseStreamResources();
     tiktok?.disconnect().catch(() => {});
     overlayServer?.stop().catch(() => {});
   });

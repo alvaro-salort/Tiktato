@@ -8,8 +8,8 @@ Tiktato es una reimplementación local y acotada de la función principal de Tik
 
 ## Descargar
 
-- [Instalador de Windows v0.2.2](https://github.com/alvaro-salort/Tiktato/releases/download/v0.2.2/Tiktato.Setup.0.2.2.exe)
-- [Versión portable v0.2.2](https://github.com/alvaro-salort/Tiktato/releases/download/v0.2.2/Tiktato.0.2.2.exe)
+- [Instalador de Windows v0.3.0](https://github.com/alvaro-salort/Tiktato/releases/download/v0.3.0/Tiktato.Setup.0.3.0.exe)
+- [Versión portable v0.3.0](https://github.com/alvaro-salort/Tiktato/releases/download/v0.3.0/Tiktato.0.3.0.exe)
 
 También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 
@@ -26,6 +26,8 @@ También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 - Subida de sonidos propios (MP3, WAV, OGG, M4A, AAC, FLAC, WEBM; máximo 30 MB) con preescucha instantánea.
 - Overlay transparente para OBS con animación, avatar, imagen del regalo, monedas y nombre del sonido.
 - **Frasco de donaciones** que se llena con las monedas de los regalos, con meta configurable, porcentaje y regalos recientes.
+- **Voz para el chat y regalos (TTS)**: Síntesis de voz en tiempo real con Google Natural Voices y soporte para voces locales de Windows, plantillas personalizables (`{user}: {message}` y `{user} envió {count} {gift}`), cola inteligente con auto-ducking (baja el volumen de los efectos mientras habla la voz) y selector de volumen/velocidad.
+- **Filtro anti-spam y rachas de combos opcionales**: Control de spam para acortar letras repetidas o comandos de chat, con opción para mantener el sonido rápido de racha en cada impacto si quieres que se escuche repetidas veces.
 - URL de overlay y frasco protegidas con token aleatorio.
 - Estadísticas básicas, feed de actividad y pruebas individuales por cada regla o evento.
 - Inicio de sesión por **código QR** dentro de la app, para salas privadas, +18 o LIVE de prueba.

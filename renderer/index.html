@@ -198,6 +198,76 @@
               <button id="btnResetJar" class="btn btn-ghost" type="button">Reiniciar</button>
             </div>
           </article>
+
+          <article id="ttsCard" class="step-card step-tts">
+            <div class="step-head">
+              <span class="step-index">05</span>
+              <div>
+                <h2>Voz y texto a voz (TTS)</h2>
+                <p>Lee comentarios y regalos con voz en directo.</p>
+              </div>
+              <span id="ttsQueueBadge" class="chip">INACTIVO</span>
+            </div>
+
+            <div class="tts-settings-group">
+              <div class="tts-section-label">Disparadores de voz</div>
+              <div class="tts-toggles-grid">
+                <label class="checkline tts-checkline">
+                  <input id="ttsChatEnabled" type="checkbox" />
+                  <span><strong>Leer chat</strong> <small>Mensajes de espectadores</small></span>
+                </label>
+
+                <label class="checkline tts-checkline">
+                  <input id="ttsGiftsEnabled" type="checkbox" />
+                  <span><strong>Anunciar regalos</strong> <small>Quién envió y qué regalo</small></span>
+                </label>
+
+                <label class="checkline tts-checkline">
+                  <input id="ttsDucking" type="checkbox" checked />
+                  <span><strong>Bajar volumen al hablar</strong> <small>Atenúa alertas durante el TTS</small></span>
+                </label>
+              </div>
+
+              <div class="tts-section-label">Combos y anti-spam</div>
+              <div class="tts-toggles-grid">
+                <label class="checkline tts-checkline">
+                  <input id="ttsPlayEveryStreak" type="checkbox" checked />
+                  <span><strong>Repetir sonido en combos</strong> <small>Suena cada impacto de la racha</small></span>
+                </label>
+
+                <label class="checkline tts-checkline">
+                  <input id="ttsAntiSpam" type="checkbox" />
+                  <span><strong>Filtro anti-spam (opcional)</strong> <small>Evita letras repetidas y comandos</small></span>
+                </label>
+              </div>
+
+              <div class="tts-sliders-grid">
+                <label class="field">
+                  <span>Proveedor de voz</span>
+                  <select id="ttsVoiceProvider">
+                    <option value="google">Google Cloud Voice (gratuita)</option>
+                    <option value="local">Voz del sistema (Web Speech API)</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Volumen de voz <strong id="ttsVolumeValue">80%</strong></span>
+                  <input id="ttsVolume" type="range" min="0" max="100" step="5" value="80" />
+                </label>
+
+                <label class="field">
+                  <span>Mínimo monedas para regalo <strong id="ttsMinCoinsValue">1</strong></span>
+                  <input id="ttsMinCoins" type="range" min="0" max="100" step="1" value="1" />
+                </label>
+              </div>
+            </div>
+
+            <div class="step-actions tts-actions">
+              <button id="btnTestTTS" class="btn btn-secondary" type="button">Probar voz</button>
+              <button id="btnSkipTTS" class="btn btn-ghost" type="button" title="Saltar mensaje actual">Saltar</button>
+              <button id="btnClearTTS" class="btn btn-ghost" type="button" title="Silenciar y vaciar la cola de voz">Silenciar / Vaciar cola</button>
+            </div>
+          </article>
         </section>
 
         <section class="activity-section">
@@ -208,6 +278,7 @@
             </div>
             <div class="test-actions">
               <span>Probar:</span>
+              <button class="btn btn-tiny" data-test="chat" type="button">Chat</button>
               <button class="btn btn-tiny" data-test="gift" type="button">Regalo</button>
               <button class="btn btn-tiny" data-test="follow" type="button">Follow</button>
               <button class="btn btn-tiny" data-test="share" type="button">Share</button>

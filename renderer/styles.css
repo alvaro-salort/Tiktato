@@ -1712,7 +1712,7 @@ select,
 }
 
 .steps {
-  grid-template-columns: 1.25fr 1fr 0.9fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
 }
 
@@ -1756,6 +1756,10 @@ select,
 
 .step-jar {
   --step-accent: #d62f52;
+}
+
+.step-tts {
+  --step-accent: #7c3aed;
 }
 
 .step-connect .step-head,
@@ -2207,6 +2211,106 @@ select,
   width: 18px;
   height: 18px;
   object-fit: contain;
+}
+
+.tts-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.tts-section-label {
+  font-family: "Fredoka", "Nunito", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-2);
+  margin-top: 4px;
+}
+
+.tts-toggles-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.tts-checkline {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 253, 249, 0.7);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.tts-checkline:hover {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+}
+
+.tts-checkline input[type="checkbox"] {
+  margin-top: 2px;
+  flex: 0 0 16px;
+  accent-color: #7c3aed;
+}
+
+.tts-checkline span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.25;
+}
+
+.tts-checkline strong {
+  font-size: 11.5px;
+  color: var(--ink);
+}
+
+.tts-checkline small {
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+.tts-sliders-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.tts-sliders-grid .field {
+  display: grid;
+  gap: 4px;
+}
+
+.tts-sliders-grid .field > span {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.tts-sliders-grid input[type="range"] {
+  accent-color: #7c3aed;
+}
+
+.tts-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 14px;
+  margin-top: auto;
+}
+
+#ttsQueueBadge.is-speaking {
+  background: #ede9fe;
+  color: #6d28d9;
+  border-color: #c4b5fd;
 }
 
 @media (max-width: 1100px) {
