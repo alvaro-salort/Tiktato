@@ -1,3 +1,5 @@
+const { findGiftById, findGiftByName, normalizeGiftText } = require('./gifts-catalog.cjs');
+
 function firstUrl(image) {
   if (!image) return '';
   if (Array.isArray(image.urlList)) return image.urlList.find(Boolean) || '';
@@ -39,25 +41,52 @@ function normalizeTikTokEvent(type, data, now = Date.now()) {
 
     if (giftType === 1 && !repeatEnd) return null;
 
+    const rawGiftName = String(gift.name || gift.giftName || data.giftName || '').trim();
+    const isTest = Boolean(
+      data?.test ||
+      data?.isTest ||
+      /prueba|test/i.test(rawGiftName)
+    );
+
+    const giftId = String(data.giftId || gift.id || '');
+    let catalogGift = (giftId && giftId !== '0') ? findGiftById(giftId) : null;
+    if (!catalogGift && isTest) {
+      catalogGift = findGiftByName(rawGiftName);
+    }
+    const resolvedGiftId = giftId && giftId !== '0' ? giftId : (catalogGift?.id || '');
+
+    const shouldTranslateToEs =
+      !isTest &&
+      catalogGift &&
+      (!rawGiftName || normalizeGiftText(rawGiftName) === normalizeGiftText(catalogGift.nameEn));
+    const displayGiftName = shouldTranslateToEs
+      ? String(catalogGift.name).replace(/\s*\(\d+\)\s*$/, '')
+      : rawGiftName || catalogGift?.name || 'Regalo';
+
     const repeatCount = Math.max(1, Number(data.repeatCount || data.comboCount || 1));
+    const rawCoins = Number(gift.diamondCount ?? data.diamondCount ?? 0);
     const coinsPerGift = Math.max(
       0,
-      Number(gift.diamondCount ?? data.diamondCount ?? 0)
+      rawCoins > 0 ? rawCoins : Number(catalogGift?.coins || 0)
     );
 
     return {
       ...base,
-      giftId: String(data.giftId || gift.id || ''),
-      giftName: String(gift.name || gift.giftName || data.giftName || 'Regalo'),
+      giftId: resolvedGiftId,
+      giftName: displayGiftName,
+      giftNameRaw: rawGiftName || displayGiftName,
       giftImageUrl:
         firstUrl(gift.image) ||
         firstUrl(gift.giftImage) ||
         firstUrl(gift.icon) ||
-        firstUrl(gift.previewImage),
+        firstUrl(gift.previewImage) ||
+        catalogGift?.imageUrl ||
+        '',
       coins: coinsPerGift * repeatCount,
       coinsPerGift,
       repeatCount,
-      repeatEnd
+      repeatEnd,
+      test: isTest
     };
   }
 
@@ -80,19 +109,35 @@ function normalizeTikTokEvent(type, data, now = Date.now()) {
 function makeTestEvent(input = {}) {
   const type = ['gift', 'follow', 'share', 'like'].includes(input.type) ? input.type : 'gift';
   const repeatCount = Math.max(1, Number(input.repeatCount || 1));
-  const coinsPerGift = Math.max(0, Number(input.coins ?? 1));
+  const rawInputName = type === 'gift' ? String(input.giftName || '').trim() : '';
+  const catalogGift =
+    type === 'gift'
+      ? (input.giftId ? findGiftById(input.giftId) : null) ||
+        (rawInputName ? findGiftByName(rawInputName) : null) ||
+        findGiftById('5655')
+      : null;
+  const giftNameInput =
+    type === 'gift'
+      ? rawInputName || catalogGift?.name || 'Rosa'
+      : '';
+  const coinsPerGift = Math.max(
+    0,
+    Number(input.coins ?? catalogGift?.coins ?? 1)
+  );
   return {
     type,
     userId: 'test_user',
     username: 'tiktato_test',
     displayName: String(input.displayName || 'Viewer de prueba'),
     avatarUrl: '',
-    giftName: type === 'gift' ? String(input.giftName || 'Rosa') : '',
-    giftImageUrl: '',
+    giftId: type === 'gift' ? String(input.giftId || catalogGift?.id || '') : '',
+    giftName: type === 'gift' ? giftNameInput : '',
+    giftImageUrl: type === 'gift' ? String(input.giftImageUrl || catalogGift?.imageUrl || '') : '',
     coins: type === 'gift' ? coinsPerGift * repeatCount : 0,
     coinsPerGift: type === 'gift' ? coinsPerGift : 0,
     repeatCount,
     repeatEnd: true,
+    test: true,
     message: String(input.message || ''),
     timestamp: Date.now()
   };

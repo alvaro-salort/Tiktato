@@ -19,15 +19,15 @@ También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 
 - Conexión directa a un TikTok LIVE por nombre de usuario.
 - Reglas por **regalo**, **follow**, **share** y **like**.
-- Coincidencia de regalos por nombre, comodines (`*rosa*`) y mínimo de monedas.
+- Sonidos individuales por regalo (**Rosa**, **Eres increíble**, **GG**, **Maracas**, etc.) con catálogo integrado, tarjetas de acceso rápido y coincidencia por ID oficial (`giftId`).
+- Coincidencia bilingüe de regalos (español e inglés: *Rosa* / *Rose*, *Eres increíble* / *You're awesome*, etc.), comodines (`*rosa*`) y mínimo de monedas sin caer por error en el sonido por defecto.
 - Cooldown por regla y usuario para evitar spam.
 - Sonidos incluidos sintetizados (moneda, campanilla, pop, destello, fanfarria, redoble).
-- Subida de sonidos propios (MP3, WAV, OGG, M4A, AAC, FLAC, WEBM; máximo 30 MB).
+- Subida de sonidos propios (MP3, WAV, OGG, M4A, AAC, FLAC, WEBM; máximo 30 MB) con preescucha instantánea.
 - Overlay transparente para OBS con animación, avatar, imagen del regalo, monedas y nombre del sonido.
 - **Frasco de donaciones** que se llena con las monedas de los regalos, con meta configurable, porcentaje y regalos recientes.
 - URL de overlay y frasco protegidas con token aleatorio.
-- Estadísticas básicas y feed de actividad.
-- Pruebas de eventos sin necesidad de estar en directo.
+- Estadísticas básicas, feed de actividad y pruebas individuales por cada regla o evento.
 - Inicio de sesión por **código QR** dentro de la app, para salas privadas, +18 o LIVE de prueba.
 - Sesión de TikTok guardada cifrada con el llavero de Windows.
 - Campo de **roomId manual** para conectar una sala que TikTok no publica en su API.
@@ -77,10 +77,10 @@ Los artefactos quedan en `dist/`.
 1. Inicia un directo en TikTok desde el móvil o desde LIVE Studio.
 2. Abre Tiktato y escribe tu usuario de TikTok, sin la `@`.
 3. Pulsa **Conectar LIVE**.
-4. Añade reglas en **Reglas de sonido**. Por defecto:
-   - Cualquier regalo → Moneda.
-   - Follow → Campanilla.
-   - Share → Pop.
+4. Configura tus sonidos en **Reglas de sonido**:
+   - Por defecto: Cualquier regalo → Moneda, Follow → Campanilla, Share → Pop.
+   - Pulsa en los regalos destacados (**Rosa**, **Eres increíble**, **GG**, **Maracas**, etc.) o en **Añadir regla de regalo** para asignarles su propio sonido (incluido o MP3 propio).
+   - Puedes probar cada regla individualmente con su botón de **Probar**.
 5. En OBS, añade una **Fuente de navegador** de `800 × 600` y pega la URL que aparece en **Overlay**.
 6. Usa los botones **Regalo / Follow / Share / Like** de la sección **Actividad** para comprobar que el overlay y el audio funcionan.
 
@@ -135,7 +135,8 @@ Puedes abrir la carpeta desde el pie del panel o borrar `%APPDATA%\tiktato` para
 electron/
   main.cjs             Proceso principal de Electron e IPC
   config.cjs           Configuración, sonidos y validación
-  alert-matcher.cjs    Motor de reglas y cooldown
+  gifts-catalog.cjs    Catálogo bilingüe de regalos y sinónimos
+  alert-matcher.cjs    Motor de reglas, giftId y cooldown
   events.cjs           Normalización de eventos de TikTok
   tiktok-service.cjs   Conexión y eventos del LIVE
   overlay-server.cjs   HTTP + WebSocket local para OBS

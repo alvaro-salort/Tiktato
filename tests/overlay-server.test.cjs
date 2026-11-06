@@ -65,6 +65,64 @@ test('sirve health, overlay y config protegida', async () => {
   }
 });
 
+test('sirve archivos de sonido con soporte de Range HTTP (206) y HEAD', async () => {
+  const { server, sounds } = makeServer();
+  try {
+    await server.start();
+    fs.writeFileSync(path.join(sounds, 'mi audio.mp3'), Buffer.from('sonido con espacios'));
+    const soundUrl = `http://127.0.0.1:${server.port}/sounds/demo.mp3?token=${token}`;
+
+    const headRes = await fetch(soundUrl, { method: 'HEAD' });
+    assert.equal(headRes.status, 200);
+    assert.equal(headRes.headers.get('content-length'), '4');
+    assert.equal(headRes.headers.get('accept-ranges'), 'bytes');
+    assert.equal(await headRes.text(), '');
+
+    const rangeRes = await fetch(soundUrl, {
+      headers: { Range: 'bytes=0-1' }
+    });
+    assert.equal(rangeRes.status, 206);
+    assert.equal(rangeRes.headers.get('content-range'), 'bytes 0-1/4');
+    assert.equal(rangeRes.headers.get('content-length'), '2');
+    assert.equal(await rangeRes.text(), 'fa');
+
+    const rangeRes2 = await fetch(soundUrl, {
+      headers: { Range: 'bytes=2-' }
+    });
+    assert.equal(rangeRes2.status, 206);
+    assert.equal(rangeRes2.headers.get('content-range'), 'bytes 2-3/4');
+    assert.equal(rangeRes2.headers.get('content-length'), '2');
+    assert.equal(await rangeRes2.text(), 'ke');
+
+    const suffixRes = await fetch(soundUrl, {
+      headers: { Range: 'bytes=-2' }
+    });
+    assert.equal(suffixRes.status, 206);
+    assert.equal(suffixRes.headers.get('content-range'), 'bytes 2-3/4');
+    assert.equal(await suffixRes.text(), 'ke');
+
+    const clampedSuffix = await fetch(soundUrl, {
+      headers: { Range: 'bytes=-10' }
+    });
+    assert.equal(clampedSuffix.status, 206);
+    assert.equal(clampedSuffix.headers.get('content-range'), 'bytes 0-3/4');
+    assert.equal(await clampedSuffix.text(), 'fake');
+
+    const badRange = await fetch(soundUrl, {
+      headers: { Range: 'bytes=10-20' }
+    });
+    assert.equal(badRange.status, 416);
+    assert.equal(badRange.headers.get('content-range'), 'bytes */4');
+
+    const encodedRes = await fetch(`http://127.0.0.1:${server.port}/sounds/mi%20audio.mp3?token=${token}`);
+    assert.equal(encodedRes.status, 200);
+    assert.equal(await encodedRes.text(), 'sonido con espacios');
+  } finally {
+    await server.stop();
+    fs.rmSync(sounds, { recursive: true, force: true });
+  }
+});
+
 test('sirve el frasco y su estado protegido', async () => {
   const { server, sounds } = makeServer();
   try {

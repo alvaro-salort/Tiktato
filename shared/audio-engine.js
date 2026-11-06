@@ -53,34 +53,74 @@ export class SoundEngine {
     return this.queue;
   }
 
-  async #playOne(sound, volume) {
+  async preview(sound, volume = 1) {
     if (!sound) return;
+    this.stopAll();
+    const safeVolume = Math.max(0, Math.min(2, Number(volume) || 0));
     await this.unlock();
-    if (!this.context) return;
 
     if (sound.kind === 'file' && sound.url) {
-      await this.#playFile(sound.url, volume);
+      await this.#startFile(sound.url, safeVolume, { waitForEnd: false });
       return;
     }
 
+    if (!this.context) throw new Error('Audio no disponible.');
+    this.#playBuiltin(sound.key || String(sound.id || '').replace('builtin:', ''), safeVolume).catch(
+      (error) => console.warn('[audio] error en vista previa', error)
+    );
+  }
+
+  async #playOne(sound, volume) {
+    if (!sound) return;
+    await this.unlock();
+
+    if (sound.kind === 'file' && sound.url) {
+      await this.#startFile(sound.url, volume, { waitForEnd: true });
+      return;
+    }
+
+    if (!this.context) return;
     await this.#playBuiltin(sound.key || String(sound.id || '').replace('builtin:', ''), volume);
   }
 
-  async #playFile(url, volume) {
-    await new Promise((resolve) => {
-      const audio = new Audio(url);
-      audio.volume = Math.max(0, Math.min(1, volume));
-      this.activeAudio.add(audio);
+  async #startFile(url, volume, { waitForEnd = true } = {}) {
+    const audio = new Audio(url);
+    audio.preload = 'auto';
+    audio.volume = Math.max(0, Math.min(1, volume));
+    this.activeAudio.add(audio);
+
+    const cleanup = () => {
+      this.activeAudio.delete(audio);
+    };
+    audio.addEventListener('ended', cleanup, { once: true });
+    audio.addEventListener('error', cleanup, { once: true });
+
+    if (!waitForEnd) {
+      try {
+        await audio.play();
+      } catch (error) {
+        cleanup();
+        throw new Error('No se pudo reproducir el archivo de audio.');
+      }
+      return;
+    }
+
+    await new Promise((resolve, reject) => {
       let settled = false;
-      const finish = () => {
+      const done = (err) => {
         if (settled) return;
         settled = true;
-        this.activeAudio.delete(audio);
-        resolve();
+        cleanup();
+        if (err && !audio.__stoppedByUser) reject(err);
+        else resolve();
       };
-      audio.addEventListener('ended', finish, { once: true });
-      audio.addEventListener('error', finish, { once: true });
-      audio.play().catch(finish);
+      audio.addEventListener('ended', () => done(), { once: true });
+      audio.addEventListener(
+        'error',
+        () => done(new Error('No se pudo cargar o reproducir el archivo de audio.')),
+        { once: true }
+      );
+      audio.play().catch((err) => done(err));
     });
   }
 
@@ -157,7 +197,9 @@ export class SoundEngine {
   stopAll() {
     for (const audio of this.activeAudio) {
       try {
+        audio.__stoppedByUser = true;
         audio.pause();
+        audio.dispatchEvent(new Event('ended'));
       } catch {
         // Ignorado: el elemento ya terminó.
       }

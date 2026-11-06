@@ -41,24 +41,103 @@ function sendJson(response, status, payload) {
   response.end(body);
 }
 
-function serveFile(response, filePath, { cache = false } = {}) {
-  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+function serveFile(request, response, filePath, { cache = false } = {}) {
+  let stat;
+  try {
+    stat = fs.statSync(filePath);
+    if (!stat.isFile()) {
+      sendJson(response, 404, { error: 'No encontrado' });
+      return;
+    }
+  } catch {
     sendJson(response, 404, { error: 'No encontrado' });
     return;
   }
+
   const extension = path.extname(filePath).toLowerCase();
-  response.writeHead(200, {
-    'Content-Type': MIME[extension] || 'application/octet-stream',
+  const contentType = MIME[extension] || 'application/octet-stream';
+  const total = stat.size;
+  const rangeHeader = request?.headers?.range;
+
+  const baseHeaders = {
+    'Content-Type': contentType,
+    'Accept-Ranges': 'bytes',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+    'Access-Control-Allow-Headers': 'Range, Content-Type, Authorization',
     'Cache-Control': cache ? 'public, max-age=3600' : 'no-store',
     'X-Content-Type-Options': 'nosniff'
+  };
+
+  if (request?.method === 'OPTIONS') {
+    response.writeHead(204, baseHeaders);
+    response.end();
+    return;
+  }
+
+  if (request?.method === 'HEAD') {
+    response.writeHead(200, {
+      ...baseHeaders,
+      'Content-Length': total
+    });
+    response.end();
+    return;
+  }
+
+  if (rangeHeader && typeof rangeHeader === 'string' && rangeHeader.startsWith('bytes=')) {
+    const parts = rangeHeader.slice(6).split('-');
+    let start = parseInt(parts[0], 10);
+    let end = parts[1] ? parseInt(parts[1], 10) : total - 1;
+
+    if (Number.isNaN(start)) {
+      start = total - end;
+      end = total - 1;
+    }
+    if (start < 0) {
+      start = 0;
+    }
+    if (Number.isNaN(end) || end >= total) {
+      end = total - 1;
+    }
+
+    if (start > end || start >= total || start < 0) {
+      response.writeHead(416, {
+        ...baseHeaders,
+        'Content-Range': `bytes */${total}`
+      });
+      response.end();
+      return;
+    }
+
+    const chunkSize = end - start + 1;
+    response.writeHead(206, {
+      ...baseHeaders,
+      'Content-Range': `bytes ${start}-${end}/${total}`,
+      'Content-Length': chunkSize
+    });
+    const stream = fs.createReadStream(filePath, { start, end });
+    response.on('close', () => stream.destroy());
+    stream.pipe(response);
+    return;
+  }
+
+  response.writeHead(200, {
+    ...baseHeaders,
+    'Content-Length': total
   });
-  fs.createReadStream(filePath).pipe(response);
+  const stream = fs.createReadStream(filePath);
+  response.on('close', () => stream.destroy());
+  stream.pipe(response);
 }
 
 function safeChild(root, requested) {
   const resolvedRoot = path.resolve(root);
   const resolved = path.resolve(resolvedRoot, path.basename(requested));
-  return resolved.startsWith(`${resolvedRoot}${path.sep}`) ? resolved : null;
+  const rootPrefix = resolvedRoot.endsWith(path.sep) ? resolvedRoot : `${resolvedRoot}${path.sep}`;
+  if (process.platform === 'win32') {
+    return resolved.toLowerCase().startsWith(rootPrefix.toLowerCase()) ? resolved : null;
+  }
+  return resolved.startsWith(rootPrefix) ? resolved : null;
 }
 
 class OverlayServer {
@@ -137,43 +216,43 @@ class OverlayServer {
     if (pathname === '/' || pathname === '/overlay' || pathname === '/overlay/') {
       response.setHeader(
         'Content-Security-Policy',
-        "default-src 'self' https: data:; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; media-src 'self' https: data:; connect-src 'self' ws://127.0.0.1:*;"
+        "default-src 'self' https: data:; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* https: data: blob:; media-src 'self' http://127.0.0.1:* https: data: blob:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*;"
       );
-      serveFile(response, path.join(this.overlayDir, 'index.html'));
+      serveFile(request, response, path.join(this.overlayDir, 'index.html'));
       return;
     }
 
     if (pathname === '/overlay.js') {
-      serveFile(response, path.join(this.overlayDir, 'overlay.js'));
+      serveFile(request, response, path.join(this.overlayDir, 'overlay.js'));
       return;
     }
 
     if (pathname === '/overlay.css') {
-      serveFile(response, path.join(this.overlayDir, 'overlay.css'));
+      serveFile(request, response, path.join(this.overlayDir, 'overlay.css'));
       return;
     }
 
     if (pathname === '/jar' || pathname === '/jar/') {
       response.setHeader(
         'Content-Security-Policy',
-        "default-src 'self' https: data:; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; media-src 'self' https: data:; connect-src 'self' ws://127.0.0.1:*;"
+        "default-src 'self' https: data:; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* https: data: blob:; media-src 'self' http://127.0.0.1:* https: data: blob:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*;"
       );
-      serveFile(response, path.join(this.overlayDir, 'jar.html'));
+      serveFile(request, response, path.join(this.overlayDir, 'jar.html'));
       return;
     }
 
     if (pathname === '/jar.js') {
-      serveFile(response, path.join(this.overlayDir, 'jar.js'));
+      serveFile(request, response, path.join(this.overlayDir, 'jar.js'));
       return;
     }
 
     if (pathname === '/jar.css') {
-      serveFile(response, path.join(this.overlayDir, 'jar.css'));
+      serveFile(request, response, path.join(this.overlayDir, 'jar.css'));
       return;
     }
 
     if (pathname === '/shared/audio-engine.js') {
-      serveFile(response, path.join(this.sharedDir, 'audio-engine.js'));
+      serveFile(request, response, path.join(this.sharedDir, 'audio-engine.js'));
       return;
     }
 
@@ -200,12 +279,18 @@ class OverlayServer {
         sendJson(response, 401, { error: 'Token inválido' });
         return;
       }
-      const file = safeChild(this.soundsDir, pathname.slice('/sounds/'.length));
+      let rawFilename = pathname.slice('/sounds/'.length);
+      try {
+        rawFilename = decodeURIComponent(rawFilename);
+      } catch {
+        // Fallback si la codificación es inválida
+      }
+      const file = safeChild(this.soundsDir, rawFilename);
       if (!file) {
         sendJson(response, 400, { error: 'Ruta inválida' });
         return;
       }
-      serveFile(response, file, { cache: true });
+      serveFile(request, response, file, { cache: true });
       return;
     }
 

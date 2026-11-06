@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' https: data:; media-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*"
+      content="default-src 'self'; img-src 'self' http://127.0.0.1:* https: data: blob:; media-src 'self' http://127.0.0.1:* https: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tiktato · Sound alerts para TikTok LIVE</title>
@@ -98,10 +98,22 @@
               <span class="step-index">02</span>
               <div>
                 <h2>Elige tus sonidos</h2>
-                <p>Lo esencial ya está listo. Cámbialo cuando quieras.</p>
+                <p>Asigna un sonido a cada regalo o usa los eventos generales.</p>
               </div>
             </div>
 
+            <div class="gift-quick-section">
+              <div class="gift-quick-header">
+                <span class="gift-quick-title">Sonidos por regalo</span>
+                <button id="btnPickGift" class="btn btn-tiny btn-secondary" type="button">+ Elegir regalo</button>
+              </div>
+              <div id="giftPresets" class="gift-presets" aria-label="Regalos rápidos"></div>
+              <div id="giftQuickList" class="quick-rules gift-quick-list"></div>
+            </div>
+
+            <div class="gift-quick-header general-rules-header">
+              <span class="gift-quick-title">Eventos generales</span>
+            </div>
             <div id="quickRules" class="quick-rules"></div>
 
             <div class="step-actions">
@@ -271,9 +283,10 @@
       <div class="dialog-head">
         <div>
           <p class="eyebrow">Automatización</p>
-          <h2>Reglas avanzadas</h2>
+          <h2>Sonidos por regalo y reglas</h2>
         </div>
         <div class="dialog-head-actions">
+          <button id="btnImportSoundFromRules" class="btn btn-ghost btn-small" type="button">Subir MP3</button>
           <button id="btnAddRule" class="btn btn-secondary" type="button">+ Nueva regla</button>
           <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
         </div>
@@ -282,6 +295,27 @@
       <div id="ruleFormWrap" class="rule-form-wrap" hidden>
         <form id="ruleForm" class="rule-form">
           <input id="ruleId" type="hidden" />
+          <input id="ruleGiftId" type="hidden" />
+          <input id="ruleGiftImageUrl" type="hidden" />
+
+          <div class="gift-picker-box gift-only span-3">
+            <div class="gift-picker-toolbar">
+              <span class="gift-picker-label">Elige un regalo de TikTok <small id="giftCatalogCount"></small></span>
+              <div class="gift-picker-search-row">
+                <input
+                  id="giftSearch"
+                  type="search"
+                  autocomplete="off"
+                  placeholder="Buscar regalo: Rosa, Eres increíble, GG, Maracas, Galaxia…"
+                />
+                <button id="btnClearGiftSelection" class="btn btn-tiny btn-ghost" type="button" title="Cualquier regalo">
+                  Cualquiera
+                </button>
+              </div>
+            </div>
+            <div id="giftCatalogGrid" class="gift-catalog-grid" role="listbox" aria-label="Catálogo de regalos de TikTok"></div>
+          </div>
+
           <label class="field">
             <span>Evento</span>
             <select id="ruleEventType">
@@ -292,8 +326,9 @@
             </select>
           </label>
           <label class="field gift-only">
-            <span>Regalo <small>(vacío = cualquiera, * = comodín)</small></span>
-            <input id="ruleGiftName" placeholder="Rosa, Galaxy, *rosa*…" maxlength="80" />
+            <span>Regalo <small>(ordenados por monedas)</small></span>
+            <select id="ruleGiftSelect" aria-label="Elegir regalo ordenado por monedas"></select>
+            <input id="ruleGiftName" placeholder="Escribe el nombre o comodín *" maxlength="80" hidden />
           </label>
           <label class="field gift-only">
             <span>Mínimo de monedas</span>
@@ -301,7 +336,12 @@
           </label>
           <label class="field">
             <span>Sonido</span>
-            <select id="ruleSound"></select>
+            <div class="sound-select-row">
+              <select id="ruleSound"></select>
+              <button id="btnPreviewRuleSound" class="icon-btn" type="button" title="Probar sonido seleccionado">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7z"></path></svg>
+              </button>
+            </div>
           </label>
           <label class="field">
             <span>Volumen</span>

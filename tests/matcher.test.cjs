@@ -90,3 +90,186 @@ test('las reglas desactivadas no se usan', () => {
   const disabled = [{ ...rules[0], enabled: false }];
   assert.equal(selectRule(disabled, gift, new Map(), Date.now()), null);
 });
+
+test('coincide regalos en español e inglés aunque TikTok envíe el nombre en inglés o sin tilde', () => {
+  assert.equal(giftMatches('Rosa', 'Rose'), true);
+  assert.equal(giftMatches('Rose', 'Rosa'), true);
+  assert.equal(giftMatches('Eres increible', "You're awesome"), true);
+  assert.equal(giftMatches('Eres increíble', "You're awesome"), true);
+  assert.equal(giftMatches('eres increible', 'Eres increíble'), true);
+  assert.equal(giftMatches('GG', 'GG'), true);
+  assert.equal(giftMatches('Maracas', 'Maracas'), true);
+  assert.equal(giftMatches('Corazon coreano', 'Finger Heart'), true);
+  assert.equal(giftMatches('Galaxia', 'Galaxy'), true);
+  assert.equal(giftMatches('Quiereme', 'Heart Me'), true);
+});
+
+test('una regla personalizada para Rosa nunca cae en el sonido por defecto Moneda cuando llega Rose en un LIVE', () => {
+  const liveRules = [
+    {
+      id: 'rule_gift_default',
+      eventType: 'gift',
+      giftName: '',
+      minCoins: 1,
+      soundId: 'builtin:coin',
+      volume: 1,
+      cooldownSeconds: 2,
+      enabled: true,
+      order: 0
+    },
+    {
+      id: 'rule_rosa_custom',
+      eventType: 'gift',
+      giftId: '5655',
+      giftName: 'Rosa',
+      minCoins: 0,
+      soundId: 'sound_custom_mp3',
+      volume: 1,
+      cooldownSeconds: 0,
+      enabled: true,
+      order: 1
+    },
+    {
+      id: 'rule_awesome_custom',
+      eventType: 'gift',
+      giftName: 'eres increible',
+      minCoins: 0,
+      soundId: 'sound_awesome_mp3',
+      volume: 1,
+      cooldownSeconds: 0,
+      enabled: true,
+      order: 2
+    }
+  ];
+
+  const liveRoseEvent = {
+    type: 'gift',
+    userId: 'u99',
+    username: 'fan1',
+    giftId: '5655',
+    giftName: 'Rose',
+    giftNameRaw: 'Rose',
+    coins: 1,
+    repeatCount: 1
+  };
+  const selectedRose = selectRule(liveRules, liveRoseEvent);
+  assert.equal(selectedRose.id, 'rule_rosa_custom');
+  assert.equal(selectedRose.soundId, 'sound_custom_mp3');
+
+  const liveAwesomeEvent = {
+    type: 'gift',
+    userId: 'u99',
+    username: 'fan1',
+    giftId: '15232',
+    giftName: "You're awesome",
+    giftNameRaw: "You're awesome",
+    coins: 1,
+    repeatCount: 1
+  };
+  const selectedAwesome = selectRule(liveRules, liveAwesomeEvent);
+  assert.equal(selectedAwesome.id, 'rule_awesome_custom');
+  assert.equal(selectedAwesome.soundId, 'sound_awesome_mp3');
+
+  const otherGiftEvent = {
+    type: 'gift',
+    userId: 'u99',
+    username: 'fan1',
+    giftId: '7032',
+    giftName: 'Maracas',
+    coins: 1,
+    repeatCount: 1
+  };
+  const selectedOther = selectRule(liveRules, otherGiftEvent);
+  assert.equal(selectedOther.id, 'rule_gift_default');
+});
+
+test('distingue regalos distintos por giftId cuando ambos están configurados', () => {
+  const heartRules = [
+    {
+      id: 'rule_heart_1',
+      eventType: 'gift',
+      giftId: '6247',
+      giftName: 'Corazón',
+      minCoins: 0,
+      soundId: 'sound_heart_1',
+      enabled: true,
+      order: 0
+    },
+    {
+      id: 'rule_heart_10',
+      eventType: 'gift',
+      giftId: '5576',
+      giftName: 'Corazón (10)',
+      minCoins: 0,
+      soundId: 'sound_heart_10',
+      enabled: true,
+      order: 1
+    }
+  ];
+
+  assert.equal(
+    selectRule(heartRules, { type: 'gift', giftId: '6247', giftName: 'Heart', coins: 1 }).id,
+    'rule_heart_1'
+  );
+  assert.equal(
+    selectRule(heartRules, { type: 'gift', giftId: '5576', giftName: 'Heart', coins: 10 }).id,
+    'rule_heart_10'
+  );
+});
+
+test('coincide regalos de prueba con sufijos "de prueba" o "test" con la regla personalizada de Rosa', () => {
+  const customRosaRules = [
+    {
+      id: 'rule_default_coin',
+      eventType: 'gift',
+      giftName: '',
+      minCoins: 1,
+      soundId: 'builtin:coin',
+      volume: 1,
+      cooldownSeconds: 0,
+      enabled: true,
+      order: 0
+    },
+    {
+      id: 'rule_custom_rosa',
+      eventType: 'gift',
+      giftName: 'Rosa',
+      minCoins: 1,
+      soundId: 'sound_custom_mp3',
+      volume: 1,
+      cooldownSeconds: 30,
+      enabled: true,
+      order: 1
+    }
+  ];
+
+  const testEvent1 = {
+    type: 'gift',
+    userId: 'test_user',
+    username: 'tiktato_test',
+    giftName: 'Rosa de prueba',
+    coins: 10,
+    test: true
+  };
+  const matched1 = selectRule(customRosaRules, testEvent1);
+  assert.equal(matched1?.id, 'rule_custom_rosa');
+  assert.equal(matched1?.soundId, 'sound_custom_mp3');
+
+  const testEvent2 = {
+    type: 'gift',
+    userId: 'test_user',
+    username: 'tiktato_test',
+    giftName: 'Test Rose',
+    coins: 10,
+    test: true
+  };
+  const matched2 = selectRule(customRosaRules, testEvent2);
+  assert.equal(matched2?.id, 'rule_custom_rosa');
+
+  const cooldowns = new Map();
+  const now = 1_000_000;
+  markPlayed(matched1, testEvent1, cooldowns, now);
+  const matchedAfterCooldown = selectRule(customRosaRules, testEvent1, cooldowns, now + 100);
+  assert.equal(matchedAfterCooldown?.id, 'rule_custom_rosa');
+});
+

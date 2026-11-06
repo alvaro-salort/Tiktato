@@ -87,3 +87,32 @@ test('normaliza valores peligrosos o inválidos', () => {
   assert.equal(config.rules[0].volume, 1.5);
   assert.equal(config.rules[0].cooldownSeconds, 0);
 });
+
+test('conserva giftId, giftImageUrl e IDs con guiones bajos en las reglas', () => {
+  const config = normalizeConfig({
+    rules: [
+      {
+        id: 'rule_gift_default',
+        eventType: 'gift',
+        giftName: '',
+        minCoins: 1,
+        soundId: 'builtin:coin'
+      },
+      {
+        id: 'rule_rosa_5655',
+        eventType: 'gift',
+        giftId: '5655',
+        giftName: 'Rosa',
+        giftImageUrl: 'https://example.com/rose.webp',
+        minCoins: 0,
+        soundId: 'sound_abc123'
+      }
+    ]
+  });
+  assert.equal(config.rules[0].id, 'rule_gift_default');
+  assert.equal(config.rules[1].id, 'rule_rosa_5655');
+  assert.equal(config.rules[1].giftId, '5655');
+  assert.equal(config.rules[1].giftName, 'Rosa');
+  assert.equal(config.rules[1].giftImageUrl, 'https://example.com/rose.webp');
+});
+

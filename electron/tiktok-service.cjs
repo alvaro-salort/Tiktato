@@ -144,6 +144,7 @@ class TikTokService extends EventEmitter {
       }
 
       const client = new TikTokLiveClient(clean || 'manual');
+      if (typeof client.language === 'function') client.language('es');
       const cookie = sessionCookie(sessionId, ttTargetIdc);
       if (cookie) client.cookies(cookie);
       this.client = client;

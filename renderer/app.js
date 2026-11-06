@@ -24,10 +24,30 @@ const EVENT_ICONS = {
 };
 
 const QUICK_RULES = [
-  { type: 'gift', label: 'Regalos', description: 'Cualquier regalo', icon: 'gift', soundId: 'builtin:coin' },
-  { type: 'follow', label: 'Follows', description: 'Nuevos seguidores', icon: 'follow', soundId: 'builtin:chime' },
-  { type: 'share', label: 'Shares', description: 'Comparten tu directo', icon: 'share', soundId: 'builtin:pop' }
+  {
+    type: 'gift',
+    label: 'Otros regalos',
+    description: 'Si no tienen sonido propio',
+    icon: 'gift',
+    soundId: 'builtin:coin'
+  },
+  {
+    type: 'follow',
+    label: 'Follows',
+    description: 'Nuevos seguidores',
+    icon: 'follow',
+    soundId: 'builtin:chime'
+  },
+  {
+    type: 'share',
+    label: 'Shares',
+    description: 'Comparten tu directo',
+    icon: 'share',
+    soundId: 'builtin:pop'
+  }
 ];
+
+const FEATURED_GIFT_IDS = ['5655', '15232', '6064', '7032', '6247', '7934', '5487', '11046'];
 
 const ICON_PATHS = {
   gift:
@@ -58,6 +78,27 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function normalizeText(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u2018\u2019`´]/g, "'")
+    .replace(/\s+/g, ' ');
+}
+
+function stripCoinSuffix(value) {
+  return normalizeText(value).replace(/\s*\(\d+\)\s*$/, '');
+}
+
+function stripTestSuffix(value) {
+  return stripCoinSuffix(value)
+    .replace(/\s*(?:de\s+)?prueba\s*$/i, '')
+    .replace(/^test\s+/i, '')
+    .replace(/\s+test\s*$/i, '');
 }
 
 function formatNumber(value) {
@@ -97,6 +138,107 @@ function soundName(soundId) {
     return builtin ? builtin.name : soundId.replace('builtin:', '');
   }
   return state?.sounds?.find((sound) => sound.id === soundId)?.name || 'Archivo eliminado';
+}
+
+function resolveClientSound(soundId) {
+  const id = String(soundId || 'builtin:coin');
+  if (id.startsWith('builtin:')) {
+    const builtin = BUILTIN_SOUNDS.find((item) => item.id === id);
+    return {
+      id,
+      name: builtin ? builtin.name : id.replace('builtin:', ''),
+      kind: 'builtin',
+      key: id.replace('builtin:', '')
+    };
+  }
+  const custom = (state?.sounds || []).find((item) => item.id === id);
+  if (!custom) return null;
+  return {
+    id: custom.id,
+    name: custom.name,
+    kind: 'file',
+    url: custom.url
+  };
+}
+
+async function previewSoundById(soundId, ruleVolume = 1) {
+  const sound = resolveClientSound(soundId);
+  if (!sound) {
+    showToast('El archivo de sonido no está disponible', 'error');
+    return;
+  }
+  try {
+    const baseVolume = Math.max(0.25, Number(state?.masterVolume ?? 0.8));
+    await audio.preview(sound, baseVolume * Number(ruleVolume ?? 1));
+    showToast(`Reproduciendo ${sound.name}`);
+  } catch (error) {
+    showToast(error.message || `No se pudo reproducir ${sound.name}`, 'error');
+  }
+}
+
+function findCatalogGift({ giftId, giftName } = {}) {
+  const gifts = state?.gifts || [];
+  if (giftId) {
+    const byId = gifts.find((item) => String(item.id) === String(giftId));
+    if (byId) return byId;
+  }
+  const normalized = stripCoinSuffix(giftName);
+  if (!normalized) return null;
+  const testStripped = stripTestSuffix(giftName);
+  return (
+    gifts.find((item) => {
+      const es = stripCoinSuffix(item.name);
+      const en = stripCoinSuffix(item.nameEn);
+      return (
+        es === normalized ||
+        en === normalized ||
+        (testStripped && (es === testStripped || en === testStripped))
+      );
+    }) || null
+  );
+}
+
+function findGeneralRule(type) {
+  const rules = state?.rules || [];
+  if (type === 'gift') {
+    return rules.find((rule) => rule.eventType === 'gift' && !rule.giftName && !rule.giftId) || null;
+  }
+  return rules.find((rule) => rule.eventType === type) || null;
+}
+
+function getSpecificGiftRules() {
+  return (state?.rules || [])
+    .filter((rule) => rule.eventType === 'gift' && (rule.giftId || rule.giftName))
+    .sort((left, right) => (left.order || 0) - (right.order || 0));
+}
+
+function findRuleForCatalogGift(gift) {
+  if (!gift) return null;
+  const giftRules = getSpecificGiftRules();
+  const byId = giftRules.find((rule) => rule.giftId && String(rule.giftId) === String(gift.id));
+  if (byId) return byId;
+  const targetEs = stripCoinSuffix(gift.name);
+  const targetEn = stripCoinSuffix(gift.nameEn);
+  const testEs = stripTestSuffix(gift.name);
+  return (
+    giftRules.find((rule) => {
+      if (rule.giftId) return false;
+      const ruleName = stripCoinSuffix(rule.giftName);
+      const testRuleName = stripTestSuffix(rule.giftName);
+      return (
+        ruleName &&
+        (ruleName === targetEs ||
+          ruleName === targetEn ||
+          (testRuleName && (testRuleName === targetEs || testRuleName === testEs)))
+      );
+    }) || null
+  );
+}
+
+function defaultSoundForNewGiftRule() {
+  const custom = state?.sounds || [];
+  if (custom.length > 0) return custom[custom.length - 1].id;
+  return 'builtin:sparkle';
 }
 
 function updateStatus(status) {
@@ -156,18 +298,157 @@ function render(nextState) {
   $('#statFollows').textContent = formatNumber(state.stats.follows);
 
   updateStatus(state.status);
+  renderGiftPresets();
+  renderGiftQuickList();
   renderQuickRules();
   renderRules();
+  renderGiftCatalog();
   renderSounds();
   renderActivity();
   renderJar();
   updateRuleSoundOptions();
+  if (!$('#ruleFormWrap')?.hidden) {
+    updateRuleGiftOptions($('#ruleGiftSelect')?.value || $('#ruleGiftId')?.value, $('#ruleGiftName')?.value);
+  }
+}
+
+function soundOptionsHtml(selectedId, { allowImport = true } = {}) {
+  const custom = state?.sounds || [];
+  const customGroup =
+    custom.length > 0
+      ? `<optgroup label="Tus sonidos MP3">${custom
+          .map(
+            (sound) =>
+              `<option value="${escapeHtml(sound.id)}" ${sound.id === selectedId ? 'selected' : ''}>🎵 ${escapeHtml(sound.name)}</option>`
+          )
+          .join('')}</optgroup>`
+      : '';
+  const builtinGroup = `<optgroup label="Sonidos incluidos">${BUILTIN_SOUNDS.map(
+    (sound) =>
+      `<option value="${escapeHtml(sound.id)}" ${sound.id === selectedId ? 'selected' : ''}>${escapeHtml(sound.name)}</option>`
+  ).join('')}</optgroup>`;
+  const importOption = allowImport
+    ? `<option value="__import__">+ Subir archivo MP3…</option>`
+    : '';
+  return `${customGroup}${builtinGroup}${importOption}`;
+}
+
+function renderGiftPresets() {
+  const container = $('#giftPresets');
+  if (!container) return;
+  const gifts = state?.gifts || [];
+  const featured = FEATURED_GIFT_IDS.map((id) => gifts.find((item) => String(item.id) === id)).filter(Boolean);
+
+  container.innerHTML = featured
+    .map((gift) => {
+      const existing = findRuleForCatalogGift(gift);
+      const displayName = String(gift.name).replace(/\s*\(\d+\)\s*$/, '');
+      return `
+        <button
+          class="gift-preset-chip ${existing ? 'is-configured' : ''}"
+          data-preset-gift-id="${escapeHtml(gift.id)}"
+          type="button"
+          title="${existing ? `${displayName}: ${soundName(existing.soundId)}` : `Asignar sonido a ${displayName}`}"
+        >
+          ${gift.imageUrl ? `<img src="${escapeHtml(gift.imageUrl)}" alt="" loading="lazy" />` : ''}
+          <span>${escapeHtml(displayName)}</span>
+          <small>${existing ? '✓' : '+'}</small>
+        </button>
+      `;
+    })
+    .join('');
+}
+
+function renderGiftQuickList() {
+  const container = $('#giftQuickList');
+  if (!container) return;
+  const giftRules = getSpecificGiftRules();
+
+  if (giftRules.length === 0) {
+    container.innerHTML = `
+      <div class="gift-quick-empty">
+        Pulsa en <strong>Rosa</strong>, <strong>Eres increíble</strong>, <strong>GG</strong>, <strong>Maracas</strong> o en <strong>+ Elegir regalo</strong> para ponerle un MP3 a cada donación.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = giftRules
+    .map((rule) => {
+      const catalogGift = findCatalogGift({ giftId: rule.giftId, giftName: rule.giftName });
+      const imageUrl = rule.giftImageUrl || catalogGift?.imageUrl || '';
+      const title = rule.giftName || catalogGift?.name || 'Regalo';
+      const coins = catalogGift?.coins || rule.minCoins || 1;
+      const enabled = rule.enabled !== false;
+      return `
+        <div class="quick-rule gift-rule-item ${enabled ? '' : 'is-disabled'}" data-gift-rule-id="${escapeHtml(rule.id)}">
+          <span class="quick-rule-icon gift-rule-thumb">
+            ${
+              imageUrl
+                ? `<img src="${escapeHtml(imageUrl)}" alt="" loading="lazy" />`
+                : iconSvg('gift')
+            }
+          </span>
+          <div class="quick-rule-copy">
+            <strong>${escapeHtml(title)}</strong>
+            <span>${formatNumber(coins)} ${coins === 1 ? 'moneda' : 'monedas'} · ${escapeHtml(soundName(rule.soundId))}</span>
+          </div>
+          <select data-gift-rule-sound aria-label="Sonido para ${escapeHtml(title)}">
+            ${soundOptionsHtml(rule.soundId)}
+          </select>
+          <div class="gift-rule-actions">
+            <button class="icon-btn" data-gift-rule-action="test" type="button" title="Probar alerta y sonido de ${escapeHtml(title)}">
+              ${iconSvg('play')}
+            </button>
+            <button class="icon-btn" data-gift-rule-action="delete" type="button" title="Quitar sonido de ${escapeHtml(title)}">
+              ${iconSvg('trash')}
+            </button>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function renderQuickRules() {
+  const container = $('#quickRules');
+  if (!container) return;
+
+  container.innerHTML = QUICK_RULES.map((item) => {
+    const rule = findGeneralRule(item.type);
+    const soundId = rule?.soundId || item.soundId;
+    const enabled = rule ? rule.enabled !== false : true;
+    return `
+      <div class="quick-rule" data-quick-type="${item.type}">
+        <span class="quick-rule-icon">${iconSvg(item.icon)}</span>
+        <div class="quick-rule-copy">
+          <strong>${item.label}</strong>
+          <span>${escapeHtml(item.description)} · ${escapeHtml(soundName(soundId))}</span>
+        </div>
+        <select data-quick-sound aria-label="Sonido para ${item.label}">
+          ${soundOptionsHtml(soundId)}
+        </select>
+        <div class="gift-rule-actions">
+          <button class="icon-btn" data-quick-preview type="button" title="Probar sonido">
+            ${iconSvg('play')}
+          </button>
+          <label class="switch" title="${enabled ? 'Desactivar' : 'Activar'}">
+            <input type="checkbox" data-quick-toggle ${enabled ? 'checked' : ''} />
+            <span></span>
+          </label>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function renderRules() {
   const list = $('#rulesList');
   const empty = $('#rulesEmpty');
   const rules = [...(state.rules || [])].sort((left, right) => {
+    const leftSpecific = left.eventType === 'gift' && (left.giftId || left.giftName) ? 0 : 1;
+    const rightSpecific = right.eventType === 'gift' && (right.giftId || right.giftName) ? 0 : 1;
+    if (leftSpecific !== rightSpecific) return leftSpecific - rightSpecific;
     const byType = left.eventType.localeCompare(right.eventType);
     if (byType !== 0) return byType;
     return (left.order || 0) - (right.order || 0);
@@ -176,11 +457,16 @@ function renderRules() {
   empty.hidden = rules.length > 0;
   list.innerHTML = rules
     .map((rule) => {
+      const catalogGift =
+        rule.eventType === 'gift'
+          ? findCatalogGift({ giftId: rule.giftId, giftName: rule.giftName })
+          : null;
+      const giftImageUrl = rule.giftImageUrl || catalogGift?.imageUrl || '';
       const trigger =
         rule.eventType === 'gift'
           ? rule.giftName
             ? escapeHtml(rule.giftName)
-            : 'Cualquier regalo'
+            : 'Cualquier otro regalo'
           : EVENT_LABELS[rule.eventType] || rule.eventType;
       const meta =
         rule.eventType === 'gift'
@@ -193,10 +479,14 @@ function renderRules() {
             <span></span>
           </label>
           <span class="event-badge event-${escapeHtml(rule.eventType)}">${escapeHtml(EVENT_LABELS[rule.eventType] || rule.eventType)}</span>
-          <span class="rule-gift">${trigger}</span>
+          <span class="rule-gift">
+            ${giftImageUrl ? `<img class="rule-gift-img" src="${escapeHtml(giftImageUrl)}" alt="" loading="lazy" />` : ''}
+            <span>${trigger}</span>
+          </span>
           <span class="rule-sound">${escapeHtml(soundName(rule.soundId))}</span>
           <span class="rule-meta">${meta}</span>
           <span class="rule-actions">
+            <button class="icon-btn" data-action="test" type="button" title="Probar regla">${iconSvg('play')}</button>
             <button class="icon-btn" data-action="edit" type="button" title="Editar">${iconSvg('edit')}</button>
             <button class="icon-btn" data-action="delete" type="button" title="Eliminar">${iconSvg('trash')}</button>
           </span>
@@ -206,44 +496,64 @@ function renderRules() {
     .join('');
 }
 
-function soundOptionsHtml(selectedId) {
-  return [
-    ...BUILTIN_SOUNDS.map(
-      (sound) =>
-        `<option value="${escapeHtml(sound.id)}" ${sound.id === selectedId ? 'selected' : ''}>${escapeHtml(sound.name)}</option>`
-    ),
-    ...(state.sounds || []).map(
-      (sound) =>
-        `<option value="${escapeHtml(sound.id)}" ${sound.id === selectedId ? 'selected' : ''}>${escapeHtml(sound.name)}</option>`
-    )
-  ].join('');
-}
+function renderGiftCatalog() {
+  const grid = $('#giftCatalogGrid');
+  if (!grid) return;
+  const gifts = state?.gifts || [];
+  const countEl = $('#giftCatalogCount');
+  if (countEl) countEl.textContent = gifts.length ? `(${formatNumber(gifts.length)} disponibles)` : '';
 
-function renderQuickRules() {
-  const container = $('#quickRules');
-  if (!container) return;
+  const query = normalizeText($('#giftSearch')?.value || '');
+  const selectedId = $('#ruleGiftId')?.value || '';
+  const selectedName = stripCoinSuffix($('#ruleGiftName')?.value || '');
 
-  container.innerHTML = QUICK_RULES.map((item) => {
-    const rule = (state.rules || []).find((candidate) => candidate.eventType === item.type);
-    const soundId = rule?.soundId || item.soundId;
-    const enabled = rule ? rule.enabled !== false : true;
-    return `
-      <div class="quick-rule" data-quick-type="${item.type}">
-        <span class="quick-rule-icon">${iconSvg(item.icon)}</span>
-        <div class="quick-rule-copy">
-          <strong>${item.label}</strong>
-          <span>${rule ? escapeHtml(soundName(soundId)) : item.description}</span>
-        </div>
-        <select data-quick-sound aria-label="Sonido para ${item.label}">
-          ${soundOptionsHtml(soundId)}
-        </select>
-        <label class="switch" title="${enabled ? 'Desactivar' : 'Activar'}">
-          <input type="checkbox" data-quick-toggle ${enabled ? 'checked' : ''} />
-          <span></span>
-        </label>
-      </div>
-    `;
-  }).join('');
+  const filtered = query
+    ? gifts.filter(
+        (gift) =>
+          normalizeText(gift.name).includes(query) ||
+          normalizeText(gift.nameEn).includes(query) ||
+          String(gift.coins).includes(query)
+      )
+    : gifts;
+
+  const visible = filtered.slice(0, 60);
+  if (visible.length === 0) {
+    grid.innerHTML = `<div class="gift-catalog-empty">No se encontró ese regalo en el catálogo, pero puedes escribir su nombre abajo.</div>`;
+    return;
+  }
+
+  grid.innerHTML = visible
+    .map((gift) => {
+      const isSelected =
+        (selectedId && String(gift.id) === String(selectedId)) ||
+        (!selectedId && selectedName && stripCoinSuffix(gift.name) === selectedName);
+      const existingRule = findRuleForCatalogGift(gift);
+      const showEn =
+        gift.nameEn && normalizeText(gift.nameEn) !== stripCoinSuffix(gift.name)
+          ? gift.nameEn
+          : '';
+      return `
+        <button
+          class="gift-card ${isSelected ? 'is-selected' : ''} ${existingRule ? 'has-rule' : ''}"
+          data-catalog-gift-id="${escapeHtml(gift.id)}"
+          type="button"
+        >
+          ${
+            gift.imageUrl
+              ? `<img class="gift-card-img" src="${escapeHtml(gift.imageUrl)}" alt="" loading="lazy" />`
+              : `<span class="gift-card-fallback">${iconSvg('gift')}</span>`
+          }
+          <span class="gift-card-body">
+            <strong class="gift-card-name">${escapeHtml(gift.name)}</strong>
+            <small class="gift-card-meta">
+              ${formatNumber(gift.coins)} ${gift.coins === 1 ? 'moneda' : 'monedas'}${showEn ? ` · ${escapeHtml(showEn)}` : ''}
+            </small>
+          </span>
+          ${existingRule ? `<span class="gift-card-badge" title="Sonido asignado: ${escapeHtml(soundName(existingRule.soundId))}">♪</span>` : ''}
+        </button>
+      `;
+    })
+    .join('');
 }
 
 function renderJar() {
@@ -311,7 +621,11 @@ function renderActivity() {
               : `envió ${formatNumber(item.repeatCount)} likes`;
       return `
         <div class="activity-row ${item.test ? 'is-test' : ''}">
-          <span class="activity-icon">${iconSvg(EVENT_ICONS[item.type] || 'music')}</span>
+          <span class="activity-icon">${
+            item.giftImageUrl
+              ? `<img class="activity-gift-img" src="${escapeHtml(item.giftImageUrl)}" alt="" />`
+              : iconSvg(EVENT_ICONS[item.type] || 'music')
+          }</span>
           <span class="activity-user">${escapeHtml(item.displayName || item.username)}</span>
           <span class="activity-detail">${detail}${item.test ? ' <em>(prueba)</em>' : ''}</span>
           <span class="activity-coins">${item.coins > 0 ? `${formatNumber(item.coins)} monedas` : '—'}</span>
@@ -326,13 +640,56 @@ function updateRuleSoundOptions() {
   const select = $('#ruleSound');
   if (!select) return;
   const current = select.value;
-  const options = [
-    ...BUILTIN_SOUNDS.map((sound) => `<option value="${escapeHtml(sound.id)}">${escapeHtml(sound.name)}</option>`),
-    ...(state.sounds || []).map((sound) => `<option value="${escapeHtml(sound.id)}">${escapeHtml(sound.name)}</option>`)
-  ];
-  select.innerHTML = options.join('');
+  select.innerHTML = soundOptionsHtml(current, { allowImport: true });
   if (current && [...select.options].some((option) => option.value === current)) {
     select.value = current;
+  }
+}
+
+function updateRuleGiftOptions(selectedGiftId = '', customGiftName = '') {
+  const select = $('#ruleGiftSelect');
+  if (!select) return;
+
+  const gifts = state?.gifts || [];
+  // Sort gifts strictly from cheapest to most expensive (by coins ascending, then name)
+  const sortedGifts = [...gifts].sort((left, right) => {
+    const diff = Number(left.coins || 0) - Number(right.coins || 0);
+    if (diff !== 0) return diff;
+    return String(left.name || '').localeCompare(String(right.name || ''), 'es');
+  });
+
+  const options = [];
+  options.push('<option value="">Cualquier otro regalo (sin filtro)</option>');
+
+  for (const gift of sortedGifts) {
+    const displayName = String(gift.name).replace(/\s*\(\d+\)\s*$/, '');
+    const coins = Number(gift.coins || 1);
+    const coinLabel = `${formatNumber(coins)} ${coins === 1 ? 'moneda' : 'monedas'}`;
+    const showEn = gift.nameEn && normalizeText(gift.nameEn) !== normalizeText(displayName)
+      ? ` · ${escapeHtml(gift.nameEn)}`
+      : '';
+    const isSelected = selectedGiftId && String(gift.id) === String(selectedGiftId);
+    options.push(
+      `<option value="${escapeHtml(gift.id)}" data-coins="${coins}" data-name="${escapeHtml(displayName)}" ${isSelected ? 'selected' : ''}>` +
+        `${escapeHtml(displayName)} · ${coinLabel}${showEn}` +
+      `</option>`
+    );
+  }
+
+  const isCustom = selectedGiftId === '__custom__' || (customGiftName && !selectedGiftId && !sortedGifts.some((g) => normalizeText(g.name) === normalizeText(customGiftName)));
+  options.push(`<option value="__custom__" ${isCustom ? 'selected' : ''}>✏️ Escribir nombre manual / comodín (*)…</option>`);
+
+  select.innerHTML = options.join('');
+
+  if (isCustom) {
+    select.value = '__custom__';
+    $('#ruleGiftName').hidden = false;
+  } else if (selectedGiftId) {
+    select.value = selectedGiftId;
+    $('#ruleGiftName').hidden = true;
+  } else {
+    select.value = '';
+    $('#ruleGiftName').hidden = true;
   }
 }
 
@@ -343,25 +700,98 @@ function toggleGiftFields() {
   });
 }
 
+function selectGiftInRuleForm(gift) {
+  if (!gift) {
+    $('#ruleGiftId').value = '';
+    $('#ruleGiftImageUrl').value = '';
+    $('#ruleGiftName').value = '';
+    $('#ruleMinCoins').value = 0;
+    if ($('#ruleGiftSelect')) $('#ruleGiftSelect').value = '';
+    $('#ruleGiftName').hidden = true;
+    renderGiftCatalog();
+    return;
+  }
+  const existing = findRuleForCatalogGift(gift);
+  if (existing && !editingRuleId) {
+    openRuleForm(existing);
+    return;
+  }
+  $('#ruleEventType').value = 'gift';
+  $('#ruleGiftId').value = gift.id;
+  $('#ruleGiftImageUrl').value = gift.imageUrl || '';
+  const cleanName = String(gift.name).replace(/\s*\(\d+\)\s*$/, '');
+  $('#ruleGiftName').value = cleanName;
+  $('#ruleMinCoins').value = gift.coins || 0;
+  if ($('#ruleGiftSelect')) {
+    $('#ruleGiftSelect').value = gift.id;
+    $('#ruleGiftName').hidden = true;
+  }
+  toggleGiftFields();
+  renderGiftCatalog();
+}
+
 function openRuleForm(rule = null) {
+  updateRuleSoundOptions();
   editingRuleId = rule?.id || null;
   $('#ruleFormWrap').hidden = false;
   $('#ruleId').value = rule?.id || '';
   $('#ruleEventType').value = rule?.eventType || 'gift';
+  $('#ruleGiftId').value = rule?.giftId || '';
+  $('#ruleGiftImageUrl').value = rule?.giftImageUrl || '';
   $('#ruleGiftName').value = rule?.giftName || '';
   $('#ruleMinCoins').value = rule?.minCoins ?? 0;
-  $('#ruleSound').value = rule?.soundId || 'builtin:coin';
+  $('#ruleSound').value = rule?.soundId || defaultSoundForNewGiftRule();
   $('#ruleVolume').value = Math.round((rule?.volume ?? 1) * 100);
   $('#ruleCooldown').value = rule?.cooldownSeconds ?? 0;
+  if ($('#giftSearch')) $('#giftSearch').value = '';
+
+  let giftIdToSelect = rule?.giftId || '';
+  if (!giftIdToSelect && rule?.giftName && rule?.eventType === 'gift') {
+    const match = findCatalogGift({ giftName: rule.giftName });
+    if (match) {
+      giftIdToSelect = match.id;
+      $('#ruleGiftId').value = match.id;
+      if (!rule.giftImageUrl && match.imageUrl) $('#ruleGiftImageUrl').value = match.imageUrl;
+    }
+  }
+  updateRuleGiftOptions(giftIdToSelect, rule?.giftName || '');
+
   toggleGiftFields();
+  renderGiftCatalog();
   $('#ruleFormWrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  $('#ruleGiftName').focus();
 }
 
 function closeRuleForm() {
   editingRuleId = null;
   $('#ruleFormWrap').hidden = true;
   $('#ruleForm').reset();
+  $('#ruleGiftId').value = '';
+  $('#ruleGiftImageUrl').value = '';
+  $('#ruleGiftName').value = '';
+  if ($('#ruleGiftSelect')) $('#ruleGiftSelect').value = '';
+  $('#ruleGiftName').hidden = true;
+}
+
+async function importAndReturnSound() {
+  try {
+    const result = await api.importSound();
+    if (result.canceled) return null;
+    if (result.error) {
+      showToast(result.error, 'error');
+      return null;
+    }
+    state = await api.bootstrap();
+    render(state);
+    const imported = result.sound || (state.sounds || [])[state.sounds.length - 1] || null;
+    if (imported) {
+      showToast(`Sonido "${imported.name}" añadido`);
+      await previewSoundById(imported.id, 1);
+    }
+    return imported;
+  } catch (error) {
+    showToast(error.message || 'No se pudo añadir el sonido', 'error');
+    return null;
+  }
 }
 
 async function saveRules(rules, message = 'Reglas guardadas') {
@@ -384,6 +814,34 @@ async function updateSettings(patch, message = '') {
     showToast(error.message || 'No se pudo guardar la configuración', 'error');
     return false;
   }
+}
+
+async function triggerTestForRule(rule) {
+  if (!rule) return;
+  const catalogGift =
+    rule.eventType === 'gift'
+      ? findCatalogGift({ giftId: rule.giftId, giftName: rule.giftName })
+      : null;
+  const giftName =
+    rule.eventType === 'gift'
+      ? rule.giftName || catalogGift?.name || 'Rosa'
+      : '';
+  const coins =
+    rule.eventType === 'gift'
+      ? Math.max(1, Number(rule.minCoins) || Number(catalogGift?.coins) || 1)
+      : 0;
+  const result = await api.testEvent({
+    type: rule.eventType,
+    giftId: rule.giftId || catalogGift?.id || '',
+    giftName,
+    giftImageUrl: rule.giftImageUrl || catalogGift?.imageUrl || '',
+    coins,
+    repeatCount: rule.eventType === 'like' ? 25 : 1
+  });
+  if (result.alert) {
+    showToast(`Probando alerta de ${giftName || EVENT_LABELS[rule.eventType] || 'evento'}`);
+  }
+  if (result.state) render(result.state);
 }
 
 function wireEvents() {
@@ -410,16 +868,118 @@ function wireEvents() {
     $('#connectForm').requestSubmit();
   });
 
+  $('#btnPickGift')?.addEventListener('click', () => {
+    openDialog('#rulesDialog');
+    openRuleForm(null);
+    $('#giftSearch')?.focus();
+  });
+
+  $('#giftPresets')?.addEventListener('click', async (event) => {
+    const chip = event.target.closest('[data-preset-gift-id]');
+    if (!chip) return;
+    const giftId = chip.dataset.presetGiftId;
+    const gift = (state.gifts || []).find((item) => String(item.id) === String(giftId));
+    if (!gift) return;
+
+    const existing = findRuleForCatalogGift(gift);
+    if (existing) {
+      await triggerTestForRule(existing);
+      return;
+    }
+
+    const cleanName = String(gift.name).replace(/\s*\(\d+\)\s*$/, '');
+    const soundId = defaultSoundForNewGiftRule();
+    const rules = [
+      ...state.rules,
+      {
+        eventType: 'gift',
+        giftId: gift.id,
+        giftName: cleanName,
+        giftImageUrl: gift.imageUrl || '',
+        minCoins: 0,
+        soundId,
+        volume: 1,
+        cooldownSeconds: 0,
+        enabled: true,
+        order: state.rules.length
+      }
+    ];
+    await saveRules(rules, `${cleanName} añadido: elige su sonido`);
+  });
+
+  $('#giftQuickList')?.addEventListener('change', async (event) => {
+    const row = event.target.closest('[data-gift-rule-id]');
+    if (!row || !event.target.matches('[data-gift-rule-sound]')) return;
+    const ruleId = row.dataset.giftRuleId;
+    const rule = state.rules.find((item) => item.id === ruleId);
+    if (!rule) return;
+
+    let soundId = event.target.value;
+    if (soundId === '__import__') {
+      const imported = await importAndReturnSound();
+      if (!imported) {
+        renderGiftQuickList();
+        return;
+      }
+      soundId = imported.id;
+    }
+
+    const rules = state.rules.map((item) =>
+      item.id === ruleId ? { ...item, soundId } : item
+    );
+    await saveRules(rules, `${rule.giftName || 'Regalo'}: ${soundName(soundId)}`);
+    await previewSoundById(soundId, rule.volume ?? 1);
+  });
+
+  $('#giftQuickList')?.addEventListener('click', async (event) => {
+    const row = event.target.closest('[data-gift-rule-id]');
+    if (!row) return;
+    const rule = state.rules.find((item) => item.id === row.dataset.giftRuleId);
+    if (!rule) return;
+    const action = event.target.closest('[data-gift-rule-action]')?.dataset.giftRuleAction;
+    if (!action) return;
+
+    if (action === 'test') {
+      await triggerTestForRule(rule);
+      return;
+    }
+    if (action === 'delete') {
+      await saveRules(
+        state.rules.filter((item) => item.id !== rule.id),
+        `Regla de ${rule.giftName || 'regalo'} eliminada`
+      );
+    }
+  });
+
+  $('#quickRules').addEventListener('click', async (event) => {
+    const previewBtn = event.target.closest('[data-quick-preview]');
+    if (!previewBtn) return;
+    const row = previewBtn.closest('[data-quick-type]');
+    if (!row) return;
+    const type = row.dataset.quickType;
+    const existing = findGeneralRule(type);
+    const defaults = QUICK_RULES.find((item) => item.type === type);
+    await previewSoundById(existing?.soundId || defaults.soundId, existing?.volume ?? 1);
+  });
+
   $('#quickRules').addEventListener('change', async (event) => {
     const row = event.target.closest('[data-quick-type]');
     if (!row) return;
     const type = row.dataset.quickType;
-    const existing = state.rules.find((rule) => rule.eventType === type);
+    const existing = findGeneralRule(type);
     const defaults = QUICK_RULES.find((item) => item.type === type);
     const rules = [...state.rules];
 
     if (event.target.matches('[data-quick-sound]')) {
-      const soundId = event.target.value;
+      let soundId = event.target.value;
+      if (soundId === '__import__') {
+        const imported = await importAndReturnSound();
+        if (!imported) {
+          renderQuickRules();
+          return;
+        }
+        soundId = imported.id;
+      }
       if (existing) {
         const index = rules.findIndex((rule) => rule.id === existing.id);
         rules[index] = { ...rules[index], soundId };
@@ -427,7 +987,7 @@ function wireEvents() {
         rules.push({
           eventType: type,
           giftName: '',
-          minCoins: 0,
+          minCoins: type === 'gift' ? 1 : 0,
           soundId: soundId || defaults.soundId,
           volume: 1,
           cooldownSeconds: type === 'gift' ? 2 : 0,
@@ -436,6 +996,7 @@ function wireEvents() {
         });
       }
       await saveRules(rules, `${defaults.label}: sonido actualizado`);
+      await previewSoundById(soundId, existing?.volume ?? 1);
       return;
     }
 
@@ -448,7 +1009,7 @@ function wireEvents() {
         rules.push({
           eventType: type,
           giftName: '',
-          minCoins: 0,
+          minCoins: type === 'gift' ? 1 : 0,
           soundId: defaults.soundId,
           volume: 1,
           cooldownSeconds: type === 'gift' ? 2 : 0,
@@ -592,15 +1153,122 @@ function wireEvents() {
   $('#btnCancelRule').addEventListener('click', closeRuleForm);
   $('#ruleEventType').addEventListener('change', toggleGiftFields);
 
+  $('#giftSearch')?.addEventListener('input', () => renderGiftCatalog());
+
+  $('#btnClearGiftSelection')?.addEventListener('click', () => {
+    selectGiftInRuleForm(null);
+  });
+
+  $('#giftCatalogGrid')?.addEventListener('click', (event) => {
+    const card = event.target.closest('[data-catalog-gift-id]');
+    if (!card) return;
+    const gift = (state.gifts || []).find(
+      (item) => String(item.id) === String(card.dataset.catalogGiftId)
+    );
+    if (gift) selectGiftInRuleForm(gift);
+  });
+
+  $('#ruleGiftSelect')?.addEventListener('change', (event) => {
+    const val = event.target.value;
+    if (val === '__custom__') {
+      $('#ruleGiftName').hidden = false;
+      $('#ruleGiftName').focus();
+      return;
+    }
+    $('#ruleGiftName').hidden = true;
+    if (!val) {
+      $('#ruleGiftId').value = '';
+      $('#ruleGiftImageUrl').value = '';
+      $('#ruleGiftName').value = '';
+      $('#ruleMinCoins').value = 0;
+      renderGiftCatalog();
+      return;
+    }
+    const gift = (state?.gifts || []).find((item) => String(item.id) === String(val));
+    if (gift) {
+      selectGiftInRuleForm(gift);
+    }
+  });
+
+  $('#ruleGiftName')?.addEventListener('input', (event) => {
+    const text = event.target.value.trim();
+    if (!text || text.includes('*')) {
+      $('#ruleGiftId').value = '';
+      $('#ruleGiftImageUrl').value = '';
+      renderGiftCatalog();
+      return;
+    }
+    const match = findCatalogGift({ giftName: text });
+    $('#ruleGiftId').value = match ? match.id : '';
+    $('#ruleGiftImageUrl').value = match ? match.imageUrl || '' : '';
+    renderGiftCatalog();
+  });
+
+  $('#ruleSound')?.addEventListener('change', async (event) => {
+    if (event.target.value === '__import__') {
+      const imported = await importAndReturnSound();
+      updateRuleSoundOptions();
+      if (imported) {
+        $('#ruleSound').value = imported.id;
+      }
+    }
+  });
+
+  $('#btnPreviewRuleSound')?.addEventListener('click', async () => {
+    const soundId = $('#ruleSound').value;
+    const volume = (Number($('#ruleVolume').value) || 100) / 100;
+    await previewSoundById(soundId, volume);
+  });
+
+  $('#btnImportSoundFromRules')?.addEventListener('click', async () => {
+    const imported = await importAndReturnSound();
+    if (imported && !$('#ruleFormWrap').hidden) {
+      updateRuleSoundOptions();
+      $('#ruleSound').value = imported.id;
+    }
+  });
+
   $('#ruleForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     const eventType = $('#ruleEventType').value;
+    let giftId = $('#ruleGiftId').value;
+    let giftImageUrl = $('#ruleGiftImageUrl').value;
+    let giftName = $('#ruleGiftName').value.trim();
+
+    if (eventType === 'gift') {
+      const selectVal = $('#ruleGiftSelect')?.value;
+      if (selectVal && selectVal !== '__custom__') {
+        const selectedGift = (state?.gifts || []).find((item) => String(item.id) === String(selectVal));
+        if (selectedGift) {
+          giftId = selectedGift.id;
+          giftImageUrl = selectedGift.imageUrl || '';
+          giftName = String(selectedGift.name).replace(/\s*\(\d+\)\s*$/, '');
+        }
+      } else if (selectVal === '') {
+        giftId = '';
+        giftImageUrl = '';
+        giftName = '';
+      }
+    }
+
+    const catalogGift =
+      eventType === 'gift'
+        ? findCatalogGift({ giftId, giftName })
+        : null;
     const rule = {
       id: $('#ruleId').value || undefined,
       eventType,
-      giftName: eventType === 'gift' ? $('#ruleGiftName').value.trim() : '',
+      giftId:
+        eventType === 'gift' && !giftName.includes('*')
+          ? giftId || catalogGift?.id || ''
+          : '',
+      giftName,
+      giftImageUrl:
+        eventType === 'gift' && !giftName.includes('*')
+          ? giftImageUrl || catalogGift?.imageUrl || ''
+          : '',
       minCoins: eventType === 'gift' ? Number($('#ruleMinCoins').value) || 0 : 0,
-      soundId: $('#ruleSound').value,
+      soundId: $('#ruleSound').value === '__import__' ? 'builtin:coin' : $('#ruleSound').value,
       volume: (Number($('#ruleVolume').value) || 100) / 100,
       cooldownSeconds: Number($('#ruleCooldown').value) || 0,
       enabled: true,
@@ -610,7 +1278,7 @@ function wireEvents() {
     const rules = [...state.rules];
     const index = editingRuleId ? rules.findIndex((item) => item.id === editingRuleId) : -1;
     if (index >= 0) {
-      rules[index] = { ...rules[index], ...rule, enabled: rules[index].enabled };
+      rules[index] = { ...rules[index], ...rule, enabled: rules[index].enabled, order: rules[index].order ?? index };
     } else {
       rules.push(rule);
     }
@@ -626,12 +1294,16 @@ function wireEvents() {
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (!action) return;
 
+    if (action === 'test') {
+      await triggerTestForRule(rule);
+      return;
+    }
     if (action === 'edit') {
       openRuleForm(rule);
       return;
     }
     if (action === 'delete') {
-      if (!confirm(`¿Eliminar la regla de ${EVENT_LABELS[rule.eventType]}?`)) return;
+      if (!confirm(`¿Eliminar la regla de ${rule.giftName || EVENT_LABELS[rule.eventType]}?`)) return;
       await saveRules(state.rules.filter((item) => item.id !== rule.id), 'Regla eliminada');
       return;
     }
@@ -647,10 +1319,7 @@ function wireEvents() {
   $('#builtinSounds').addEventListener('click', async (event) => {
     const button = event.target.closest('[data-builtin]');
     if (!button) return;
-    const id = button.dataset.builtin;
-    const builtin = BUILTIN_SOUNDS.find((sound) => sound.id === id);
-    await audio.play({ id, kind: 'builtin', key: id.replace('builtin:', '') }, state?.masterVolume ?? 0.8);
-    showToast(`Reproduciendo ${builtin?.name || 'sonido'}`);
+    await previewSoundById(button.dataset.builtin, 1);
   });
 
   $('#customSounds').addEventListener('click', async (event) => {
@@ -659,10 +1328,6 @@ function wireEvents() {
     const sound = state.sounds.find((item) => item.id === row.dataset.soundId);
     if (!sound) return;
     const action = event.target.closest('[data-sound-action]')?.dataset.soundAction;
-    if (action === 'play') {
-      await audio.play({ kind: 'file', url: sound.url }, state?.masterVolume ?? 0.8);
-      showToast(`Reproduciendo ${sound.name}`);
-    }
     if (action === 'delete') {
       if (!confirm(`¿Eliminar "${sound.name}"? Las reglas que lo usen pasarán a Moneda.`)) return;
       const result = await api.deleteSound(sound.id);
@@ -673,32 +1338,30 @@ function wireEvents() {
       state = await api.bootstrap();
       render(state);
       showToast('Sonido eliminado');
+      return;
     }
+    await previewSoundById(sound.id, 1);
   });
 
   $('#btnImportSound').addEventListener('click', async () => {
-    try {
-      const result = await api.importSound();
-      if (result.canceled) return;
-      if (result.error) {
-        showToast(result.error, 'error');
-        return;
-      }
-      state = await api.bootstrap();
-      render(state);
-      showToast('Sonido añadido');
-    } catch (error) {
-      showToast(error.message || 'No se pudo añadir el sonido', 'error');
-    }
+    await importAndReturnSound();
   });
 
   $$('[data-test]').forEach((button) => {
     button.addEventListener('click', async () => {
       const type = button.dataset.test;
+      if (type === 'gift') {
+        const firstSpecific = getSpecificGiftRules().find((item) => item.enabled !== false);
+        if (firstSpecific) {
+          await triggerTestForRule(firstSpecific);
+          return;
+        }
+      }
       const result = await api.testEvent({
         type,
-        giftName: type === 'gift' ? 'Rosa de prueba' : '',
-        coins: 10,
+        giftId: type === 'gift' ? '5655' : '',
+        giftName: type === 'gift' ? 'Rosa' : '',
+        coins: type === 'gift' ? 1 : 0,
         repeatCount: type === 'like' ? 25 : 1
       });
       if (result.state) render(result.state);
@@ -706,8 +1369,11 @@ function wireEvents() {
   });
 
   api.onAlert((alert) => {
-    if (!state?.playInDashboard || !alert?.sound) return;
-    audio.play(alert.sound, (state.masterVolume ?? 0.8) * (alert.sound.volume ?? 1));
+    if ((!state?.playInDashboard && !alert?.test) || !alert?.sound) return;
+    const master = alert?.test
+      ? Math.max(0.25, Number(state?.masterVolume ?? 0.8))
+      : Number(state?.masterVolume ?? 0.8);
+    audio.play(alert.sound, master * Number(alert.sound.volume ?? 1));
   });
 
   api.onState((nextState) => render(nextState));

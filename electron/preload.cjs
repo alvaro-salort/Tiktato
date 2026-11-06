@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('tiktato', {
   saveRules: (rules) => ipcRenderer.invoke('rules:save', rules),
   importSound: () => ipcRenderer.invoke('sound:import'),
   deleteSound: (soundId) => ipcRenderer.invoke('sound:delete', soundId),
+  refreshGifts: () => ipcRenderer.invoke('gifts:refresh'),
   connect: (payload) => ipcRenderer.invoke('tiktok:connect', payload),
   disconnect: () => ipcRenderer.invoke('tiktok:disconnect'),
   loginTikTok: () => ipcRenderer.invoke('tiktok:login'),

@@ -95,9 +95,11 @@ function normalizeRule(input, index = 0) {
   if (!input || typeof input !== 'object') return null;
   const eventType = EVENT_TYPES.includes(input.eventType) ? input.eventType : 'gift';
   const giftName = eventType === 'gift' ? String(input.giftName || '').trim().slice(0, 80) : '';
+  const giftId = eventType === 'gift' ? String(input.giftId || '').trim().slice(0, 40) : '';
+  const giftImageUrl = eventType === 'gift' ? String(input.giftImageUrl || '').trim().slice(0, 500) : '';
   const soundId = String(input.soundId || 'builtin:coin');
-  return {
-    id: /^rule_[a-z0-9]+$/i.test(String(input.id || '')) ? String(input.id) : makeId('rule'),
+  const rule = {
+    id: /^rule_[a-z0-9_]+$/i.test(String(input.id || '')) ? String(input.id) : makeId('rule'),
     eventType,
     giftName,
     minCoins: eventType === 'gift' ? Math.round(clampNumber(input.minCoins, 0, 0, 1_000_000)) : 0,
@@ -107,6 +109,9 @@ function normalizeRule(input, index = 0) {
     enabled: input.enabled !== false,
     order: Number.isFinite(Number(input.order)) ? Number(input.order) : index
   };
+  if (giftId) rule.giftId = giftId;
+  if (giftImageUrl) rule.giftImageUrl = giftImageUrl;
+  return rule;
 }
 
 function normalizeSound(input) {

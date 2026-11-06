@@ -1433,6 +1433,13 @@ select {
   border: 1px solid var(--line);
   border-radius: 11px;
   background: rgba(248, 241, 230, 0.55);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 120ms ease;
+}
+
+.custom-sound:hover {
+  border-color: rgba(16, 181, 166, 0.3);
+  background: var(--teal-soft);
 }
 
 .custom-sound .sound-name {
@@ -1923,6 +1930,283 @@ select,
   color: rgba(255, 247, 251, 0.55);
   font-size: 7px;
   text-align: right;
+}
+
+.gift-quick-section {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 253, 249, 0.72);
+}
+
+.gift-quick-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.general-rules-header {
+  margin-bottom: 6px;
+}
+
+.gift-quick-title {
+  color: var(--muted-2);
+  font-size: 9.5px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gift-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.gift-preset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px 4px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: #fffdf9;
+  color: var(--ink);
+  font-family: "Nunito", sans-serif;
+  font-size: 10.5px;
+  font-weight: 750;
+  transition: border-color 140ms ease, background 140ms ease, transform 120ms ease;
+}
+
+.gift-preset-chip:hover {
+  transform: translateY(-1px);
+  border-color: var(--pink);
+  background: var(--pink-soft);
+}
+
+.gift-preset-chip.is-configured {
+  border-color: rgba(16, 181, 166, 0.42);
+  background: var(--teal-soft);
+  color: #087f74;
+}
+
+.gift-preset-chip img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.gift-preset-chip small {
+  color: var(--muted-2);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.gift-preset-chip.is-configured small {
+  color: #087f74;
+}
+
+.gift-quick-list {
+  max-height: 210px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.gift-quick-empty {
+  padding: 9px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.gift-quick-empty strong {
+  color: var(--ink);
+}
+
+.gift-rule-thumb img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.gift-rule-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.span-3 {
+  grid-column: 1 / -1;
+}
+
+.gift-picker-box {
+  display: grid;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fffdf9;
+}
+
+.gift-picker-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gift-picker-label {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.gift-picker-label small {
+  color: var(--muted-2);
+  font-weight: 600;
+}
+
+.gift-picker-search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 260px;
+}
+
+.gift-picker-search-row input {
+  min-height: 32px;
+  font-size: 11px;
+}
+
+.gift-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 6px;
+  max-height: 210px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.gift-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(248, 241, 230, 0.52);
+  color: var(--ink);
+  text-align: left;
+  transition: border-color 140ms ease, background 140ms ease, transform 120ms ease;
+}
+
+.gift-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--pink);
+  background: #fff;
+}
+
+.gift-card.is-selected {
+  border-color: var(--pink);
+  background: var(--pink-soft);
+  box-shadow: 0 0 0 2px rgba(232, 62, 95, 0.14);
+}
+
+.gift-card.has-rule:not(.is-selected) {
+  border-color: rgba(16, 181, 166, 0.36);
+}
+
+.gift-card-img,
+.gift-card-fallback {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  object-fit: contain;
+}
+
+.gift-card-fallback {
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--pink);
+}
+
+.gift-card-body {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+.gift-card-name {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gift-card-meta {
+  overflow: hidden;
+  color: var(--muted-2);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gift-card-badge {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 50%;
+  background: var(--teal-soft);
+  color: #087f74;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.gift-catalog-empty {
+  grid-column: 1 / -1;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.sound-select-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.rule-gift {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rule-gift-img {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  object-fit: contain;
+}
+
+.activity-gift-img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
 @media (max-width: 1100px) {

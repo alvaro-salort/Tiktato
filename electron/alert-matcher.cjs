@@ -1,17 +1,53 @@
+const {
+  findGiftById,
+  getEquivalentGiftNames,
+  normalizeGiftText,
+  stripCoinSuffix
+} = require('./gifts-catalog.cjs');
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function giftMatches(pattern, giftName) {
-  const normalizedPattern = String(pattern || '').trim().toLowerCase();
+function giftMatches(pattern, giftName, options = {}) {
+  const normalizedPattern = normalizeGiftText(pattern);
   if (!normalizedPattern) return true;
-  const normalizedGift = String(giftName || '').trim().toLowerCase();
-  if (!normalizedGift) return false;
-  const regex = new RegExp(
-    `^${normalizedPattern.split('*').map(escapeRegExp).join('.*')}$`,
-    'i'
-  );
-  return regex.test(normalizedGift);
+
+  const eventCandidates = new Set([
+    ...getEquivalentGiftNames(giftName),
+    ...getEquivalentGiftNames(options.giftNameRaw)
+  ]);
+
+  if (options.eventGiftId) {
+    const catalogGift = findGiftById(options.eventGiftId);
+    if (catalogGift) {
+      getEquivalentGiftNames(catalogGift).forEach((name) => eventCandidates.add(name));
+    }
+  }
+
+  if (eventCandidates.size === 0) return false;
+
+  if (normalizedPattern.includes('*')) {
+    const regex = new RegExp(
+      `^${normalizedPattern.split('*').map(escapeRegExp).join('.*')}$`,
+      'i'
+    );
+    for (const candidate of eventCandidates) {
+      if (regex.test(candidate)) return true;
+    }
+    return false;
+  }
+
+  const patternCandidates = new Set([
+    normalizedPattern,
+    stripCoinSuffix(normalizedPattern),
+    ...getEquivalentGiftNames(pattern)
+  ]);
+
+  for (const candidate of eventCandidates) {
+    if (patternCandidates.has(candidate)) return true;
+  }
+  return false;
 }
 
 function cooldownKey(rule, event) {
@@ -24,8 +60,21 @@ function isRuleEligible(rule, event, cooldowns, now) {
 
   if (event.type === 'gift') {
     if (Number(event.coins || 0) < Number(rule.minCoins || 0)) return false;
-    if (!giftMatches(rule.giftName, event.giftName)) return false;
+    const ruleGiftId = String(rule.giftId || '').trim();
+    const eventGiftId = String(event.giftId || '').trim();
+
+    if (ruleGiftId && eventGiftId) {
+      if (ruleGiftId !== eventGiftId) {
+        if (!rule.giftName || !giftMatches(rule.giftName, event.giftName, { eventGiftId, giftNameRaw: event.giftNameRaw })) {
+          return false;
+        }
+      }
+    } else if (!giftMatches(rule.giftName, event.giftName, { eventGiftId, giftNameRaw: event.giftNameRaw })) {
+      return false;
+    }
   }
+
+  if (event.test) return true;
 
   const cooldownMs = Math.max(0, Number(rule.cooldownSeconds) || 0) * 1000;
   if (cooldownMs <= 0) return true;
@@ -33,8 +82,17 @@ function isRuleEligible(rule, event, cooldowns, now) {
   return now - lastPlayed >= cooldownMs;
 }
 
-function specificity(rule) {
-  const giftBonus = rule.eventType === 'gift' && rule.giftName ? 1_000_000 : 0;
+function specificity(rule, event) {
+  let giftBonus = 0;
+  if (rule.eventType === 'gift') {
+    const ruleGiftId = String(rule.giftId || '').trim();
+    const eventGiftId = String(event?.giftId || '').trim();
+    if (ruleGiftId && eventGiftId && ruleGiftId === eventGiftId) {
+      giftBonus = 2_000_000;
+    } else if (ruleGiftId || rule.giftName) {
+      giftBonus = 1_000_000;
+    }
+  }
   return giftBonus + Number(rule.minCoins || 0) * 100;
 }
 
@@ -42,7 +100,7 @@ function selectRule(rules, event, cooldowns = new Map(), now = Date.now()) {
   const eligible = (Array.isArray(rules) ? rules : [])
     .filter((rule) => isRuleEligible(rule, event, cooldowns, now))
     .sort((left, right) => {
-      const bySpecificity = specificity(right) - specificity(left);
+      const bySpecificity = specificity(right, event) - specificity(left, event);
       if (bySpecificity !== 0) return bySpecificity;
       return Number(left.order || 0) - Number(right.order || 0);
     });
@@ -61,13 +119,14 @@ function buildAlert(event, rule, { sound, now = Date.now(), test = false } = {})
     username: event.username || 'alguien',
     displayName: event.displayName || event.username || 'Alguien',
     avatarUrl: event.avatarUrl || '',
+    giftId: event.giftId || rule.giftId || '',
     giftName: event.giftName || '',
-    giftImageUrl: event.giftImageUrl || '',
+    giftImageUrl: event.giftImageUrl || rule.giftImageUrl || '',
     coins: Number(event.coins || 0),
     repeatCount: Number(event.repeatCount || 1),
     message: event.message || '',
     createdAt: new Date(now).toISOString(),
-    test,
+    test: Boolean(test || event.test),
     ruleId: rule.id,
     sound: sound
       ? {

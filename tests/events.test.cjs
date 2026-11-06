@@ -140,7 +140,68 @@ test('traduce errores comunes de TikTok', () => {
 test('crea eventos de prueba reproducibles', () => {
   const event = makeTestEvent({ type: 'gift', giftName: 'Rosa', coins: 3, repeatCount: 2 });
   assert.equal(event.type, 'gift');
+  assert.equal(event.giftId, '5655');
   assert.equal(event.coins, 6);
   assert.equal(event.repeatCount, 2);
   assert.equal(event.displayName, 'Viewer de prueba');
+  assert.equal(event.test, true);
 });
+
+test('traduce nombres de regalos de inglés a español usando el catálogo cuando coincide el giftId', () => {
+  const roseEvent = normalizeTikTokEvent('gift', {
+    user: { id: '10', uniqueId: 'viewer1', nickname: 'Viewer 1' },
+    giftId: 5655,
+    repeatEnd: 1,
+    repeatCount: 1,
+    gift: {
+      type: 1,
+      name: 'Rose',
+      diamondCount: 1
+    }
+  });
+  assert.equal(roseEvent.giftId, '5655');
+  assert.equal(roseEvent.giftName, 'Rosa');
+  assert.equal(roseEvent.giftNameRaw, 'Rose');
+  assert.equal(Boolean(roseEvent.giftImageUrl), true);
+
+  const awesomeEvent = normalizeTikTokEvent('gift', {
+    user: { id: '11', uniqueId: 'viewer2', nickname: 'Viewer 2' },
+    giftId: 15232,
+    repeatEnd: 1,
+    repeatCount: 1,
+    gift: {
+      type: 1,
+      name: "You're awesome",
+      diamondCount: 1
+    }
+  });
+  assert.equal(awesomeEvent.giftId, '15232');
+  assert.equal(awesomeEvent.giftName, 'Eres increíble');
+  assert.equal(awesomeEvent.giftNameRaw, "You're awesome");
+});
+
+test('makeTestEvent resuelve el nombre desde el giftId cuando se omite giftName', () => {
+  const ggEvent = makeTestEvent({ type: 'gift', giftId: '6064' });
+  assert.equal(ggEvent.giftName, 'GG');
+  assert.equal(ggEvent.giftId, '6064');
+  assert.equal(ggEvent.coins, 1);
+});
+
+test('normalizeTikTokEvent resuelve regalo de prueba sin giftId como test y asigna monedas del catalogo', () => {
+  const testGiftEvent = normalizeTikTokEvent('gift', {
+    user: { id: '99', uniqueId: 'tester', nickname: 'Tester' },
+    giftId: 0,
+    repeatEnd: 1,
+    repeatCount: 1,
+    gift: {
+      type: 1,
+      name: 'Rosa de prueba',
+      diamondCount: 0
+    }
+  });
+  assert.equal(testGiftEvent.giftId, '5655');
+  assert.equal(testGiftEvent.giftName, 'Rosa de prueba');
+  assert.equal(testGiftEvent.coins, 1);
+  assert.equal(testGiftEvent.test, true);
+});
+

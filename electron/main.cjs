@@ -1,4 +1,5 @@
 const { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, session, shell } = require('electron');
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -13,6 +14,7 @@ const {
 } = require('./config.cjs');
 const { buildAlert, markPlayed, selectRule } = require('./alert-matcher.cjs');
 const { makeTestEvent } = require('./events.cjs');
+const { getActiveCatalog, loadGiftsCatalog, refreshGiftsCatalog } = require('./gifts-catalog.cjs');
 const { OverlayServer } = require('./overlay-server.cjs');
 const { TikTokService } = require('./tiktok-service.cjs');
 
@@ -164,6 +166,7 @@ function publicState() {
       port: overlayServer?.port || base.overlay.port
     },
     jarUrl: jarUrl(),
+    gifts: getActiveCatalog(),
     sounds: config.sounds.map((sound) => ({ ...sound, url: soundUrl(sound) })),
     status: tiktok ? tiktok.getStatus() : { state: 'disconnected', message: 'Sin conexión' },
     stats: {
@@ -546,10 +549,30 @@ function createWindow() {
     });
   }
 
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    logger.info(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+  });
+  mainWindow.webContents.on('did-fail-load', (_event, code, description) => {
+    logger.error(`[renderer] falló la carga (${code}): ${description}`);
+  });
+
+  const showWindow = () => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  };
+
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   mainWindow.once('ready-to-show', () => {
-    if (!smokeScreenshot) mainWindow.show();
+    if (!smokeScreenshot) showWindow();
   });
+  mainWindow.webContents.once('did-finish-load', () => {
+    if (!smokeScreenshot) showWindow();
+  });
+  setTimeout(() => {
+    if (!smokeScreenshot) showWindow();
+  }, 400);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
@@ -582,21 +605,31 @@ function registerIpc() {
   ipcMain.handle('sound:import', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Añadir sonido',
-      properties: ['openFile'],
+      properties: ['openFile', 'multiSelections'],
       filters: [
         { name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'webm'] }
       ]
     });
     if (result.canceled || result.filePaths.length === 0) return { canceled: true };
     try {
-      const sound = importSound(app.getPath('userData'), result.filePaths[0]);
-      config.sounds.push(sound);
+      const imported = [];
+      for (const filePath of result.filePaths) {
+        const sound = importSound(app.getPath('userData'), filePath);
+        config.sounds.push(sound);
+        imported.push({ ...sound, url: soundUrl(sound) });
+      }
       config = saveConfig(app.getPath('userData'), config);
       sendState();
-      return { canceled: false, sound };
+      return { canceled: false, sound: imported[0], sounds: imported };
     } catch (error) {
       return { canceled: false, error: error.message };
     }
+  });
+
+  ipcMain.handle('gifts:refresh', async () => {
+    await refreshGiftsCatalog(app.getPath('userData'));
+    sendState();
+    return publicState();
   });
 
   ipcMain.handle('sound:delete', (_event, soundId) => {
@@ -704,6 +737,10 @@ async function bootstrap() {
   initLogger();
   logger.info(`Tiktato ${app.getVersion()} iniciando en ${app.getPath('userData')}`);
   config = loadConfig(app.getPath('userData'));
+  loadGiftsCatalog(app.getPath('userData'));
+  refreshGiftsCatalog(app.getPath('userData'))
+    .then(() => sendState())
+    .catch(() => {});
   await startOverlayServer();
   wireTikTok();
   registerIpc();
