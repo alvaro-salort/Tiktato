@@ -8,13 +8,13 @@ product
 Streamers pequeños y medianos de TikTok LIVE, hispanohablantes, en Windows. Abren Tiktato antes del directo, conectan su usuario, configuran sonidos por regalo, el overlay de OBS, el frasco y la voz (TTS), y luego lo dejan abierto en segundo plano mientras transmiten. Vuelven a la ventana solo para comprobar que está conectado, probar un sonido o ajustar algo rápido.
 
 ## Product Purpose
-Alternativa local y gratuita (sin cuenta, sin suscripción, sin paywall) a las alertas de sonido de TikFinity: escuchar eventos del LIVE (regalos, follows, shares, likes, chat) y reproducir sonidos, mostrar un overlay en OBS, llenar un frasco de donaciones y leer mensajes con voz. Éxito: el streamer configura todo en pocos minutos, entiende de un vistazo si está conectado y nunca tiene que buscar dónde estaba una opción.
+Alternativa local y gratuita (sin cuenta, sin suscripción, sin paywall) a las alertas de sonido: escuchar eventos del LIVE (regalos, follows, shares, likes, chat) y reproducir sonidos, mostrar un overlay en OBS, llenar un frasco de donaciones y leer mensajes con voz. Éxito: el streamer configura todo en pocos minutos, entiende de un vistazo si está conectado y nunca tiene que buscar dónde estaba una opción.
 
 ## Brand Personality
 Cálida, clara, confiable. Cercana como un amigo que te ayuda a montar el stream (la papa con auriculares), pero ordenada y seria como una herramienta en la que confías durante un directo en vivo. Tono en español rioplatense/neutro, directo, sin jerga técnica innecesaria.
 
 ## Anti-references
-- TikFinity: interfaz oscura, densa, con menús laterales enormes y decenas de opciones a la vista.
+- Interfaz oscura, densa, con menús laterales enormes y decenas de opciones a la vista.
 - Dashboards de streaming oscuros "gamer" (neón sobre negro).
 - Cualquier tema oscuro: Tiktato es siempre claro.
 - Plantillas SaaS genéricas (métricas gigantes, gradientes, tarjetas idénticas).
