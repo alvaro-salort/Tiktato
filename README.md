@@ -10,7 +10,7 @@ Sound alerts, voz TTS y frasco de donaciones 2D para **TikTok LIVE**, sin cuenta
 
 Tiktato es una aplicación de escritorio local para streamers de TikTok: escucha eventos de tu directo en tiempo real y reproduce alertas sonoras personalizadas, lee comentarios y donaciones mediante síntesis de voz (TTS) y ofrece overlays animados para OBS Studio o TikTok LIVE Studio (incluyendo el nuevo **Frasco Pro** con motor de física 2D).
 
-> Proyecto independiente. No está afiliado a TikTok ni a TikFinity. Úsalo solo con directos y cuentas que tengas derecho a analizar.
+> Proyecto independiente. No está afiliado a TikTok. Úsalo solo con directos y cuentas que tengas derecho a analizar.
 
 ## Descargar
 
