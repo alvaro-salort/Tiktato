@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 440" width="340" height="440" fill="none">
+  <defs>
+    <linearGradient id="frontRim" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.4)" />
+      <stop offset="25%" stop-color="rgba(255, 255, 255, 0.9)" />
+      <stop offset="50%" stop-color="rgba(255, 255, 255, 0.5)" />
+      <stop offset="85%" stop-color="rgba(255, 255, 255, 0.85)" />
+      <stop offset="100%" stop-color="rgba(255, 255, 255, 0.4)" />
+    </linearGradient>
+
+    <linearGradient id="shineLeft" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.55)" />
+      <stop offset="60%" stop-color="rgba(255, 255, 255, 0.25)" />
+      <stop offset="100%" stop-color="rgba(255, 255, 255, 0)" />
+    </linearGradient>
+
+    <linearGradient id="shineRight" x1="100%" y1="0%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.35)" />
+      <stop offset="70%" stop-color="rgba(255, 255, 255, 0.1)" />
+      <stop offset="100%" stop-color="rgba(255, 255, 255, 0)" />
+    </linearGradient>
+
+    <linearGradient id="diagShine" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.28)" />
+      <stop offset="20%" stop-color="rgba(255, 255, 255, 0.15)" />
+      <stop offset="45%" stop-color="rgba(255, 255, 255, 0.0)" />
+    </linearGradient>
+
+    <linearGradient id="glassWallStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.75)" />
+      <stop offset="30%" stop-color="rgba(255, 255, 255, 0.35)" />
+      <stop offset="70%" stop-color="rgba(255, 255, 255, 0.55)" />
+      <stop offset="100%" stop-color="rgba(255, 255, 255, 0.85)" />
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(0, 10)">
+    <!-- Contorno de vidrio frontal principal -->
+    <path d="M 55,20 L 285,20 L 285,70 L 315,100 L 315,370 L 290,395 L 50,395 L 25,370 L 25,100 L 55,70 Z"
+          stroke="url(#glassWallStroke)" stroke-width="3.5" stroke-linejoin="round" fill="none" />
+
+    <!-- Relieve / Labio del cuello del frasco (Apertura superior) -->
+    <ellipse cx="170" cy="20" rx="116" ry="8" fill="rgba(255, 255, 255, 0.25)" stroke="url(#frontRim)" stroke-width="2.5" />
+    <ellipse cx="170" cy="24" rx="110" ry="5" fill="none" stroke="rgba(255, 255, 255, 0.5)" stroke-width="1.5" />
+
+    <!-- Anillo exterior del cuello -->
+    <path d="M 50,28 C 50,33 290,33 290,28" stroke="rgba(255, 255, 255, 0.45)" stroke-width="2" fill="none" />
+    <path d="M 54,68 C 54,74 286,74 286,68" stroke="rgba(255, 255, 255, 0.3)" stroke-width="1.8" fill="none" />
+
+    <!-- Brillo vertical principal izquierdo (Curva especular de vidrio) -->
+    <path d="M 36,110 C 33,180 33,300 36,365 C 44,365 44,110 36,110 Z"
+          fill="url(#shineLeft)" />
+
+    <!-- Reflejo curvo estrecho borde izquierdo -->
+    <path d="M 30,115 C 28,180 28,290 30,360"
+          stroke="rgba(255, 255, 255, 0.7)" stroke-width="2.2" stroke-linecap="round" fill="none" />
+
+    <!-- Brillo vertical derecho secundario -->
+    <path d="M 304,120 C 307,180 307,290 304,355 C 298,355 298,120 304,120 Z"
+          fill="url(#shineRight)" opacity="0.6" />
+
+    <!-- Reflejo diagonal amplio en el cuerpo del vidrio -->
+    <path d="M 65,100 L 155,100 L 45,340 L 35,320 Z"
+          fill="url(#diagShine)" />
+
+    <!-- Base frontal de vidrio reforzada (Grosor y reflejos de la base) -->
+    <path d="M 45,390 L 295,390 L 290,402 L 50,402 Z"
+          fill="rgba(255, 255, 255, 0.22)" stroke="rgba(255, 255, 255, 0.6)" stroke-width="2" />
+    <path d="M 65,398 L 275,398"
+          stroke="rgba(255, 255, 255, 0.8)" stroke-width="1.5" stroke-linecap="round" />
+  </g>
+</svg>

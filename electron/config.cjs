@@ -78,19 +78,36 @@ function createDefaultConfig() {
       currentGifts: 0,
       accent: '#e83e5f',
       showRecentGifts: true,
-      recentGifts: []
+      recentGifts: [],
+      giftType: 'allGifts',
+      minimumValue: 1,
+      selectedGifts: [],
+      xOffset: 0,
+      yOffset: 0,
+      scale: 1.0,
+      giftScale: 1.0,
+      numberOfRanks: 'top5',
+      leaderboardDisplayFormat: 'avatarNameCoins',
+      displayRankBadges: true,
+      displayLeaderboard: true,
+      showTotalCoins: true,
+      displayAlert: true,
+      leaderboardDuration: 5,
+      alertDuration: 5,
+      topDonors: []
     },
     tts: {
       enabled: true,
       chatEnabled: true,
-      giftsEnabled: true,
+      giftsEnabled: false,
       minCoins: 1,
       volume: 0.8,
       voiceProvider: 'google',
       voiceLanguage: 'es-ES',
+      voiceId: 'google:es-ES',
       ducking: true,
       duckingLevel: 0.25,
-      antiSpam: false,
+      antiSpam: true,
       playEveryStreak: true,
       maxChars: 120
     },
@@ -143,6 +160,69 @@ function normalizeSound(input) {
   };
 }
 
+function computeBaseRadius(v) {
+  const value = Math.max(1, Math.min(100000, Number(v) || 1));
+  const normalized = (value - 1) / 99999;
+  const inner = Math.pow(normalized, 0.6) * 8;
+  return 11 + 89 * Math.tanh(inner);
+}
+
+function computeGiftRadius(value, scale = 1.0, giftScale = 1.0) {
+  const s = clampNumber(scale, 1.0, 0.1, 3.0);
+  const gs = clampNumber(giftScale, 1.0, 0.1, 3.0);
+  return computeBaseRadius(value) * s * gs;
+}
+
+function shouldPassJarFilter(jarConfig, event) {
+  if (!event || event.type !== 'gift') return false;
+  const giftType = jarConfig?.giftType || 'allGifts';
+  const coinsPerGift = Number(
+    event.coinsPerGift || (event.repeatCount ? Math.round(event.coins / event.repeatCount) : event.coins) || 0
+  );
+  const totalCoins = Number(event.coins || 0);
+
+  if (giftType === 'minimumValue') {
+    const min = Math.max(1, Number(jarConfig?.minimumValue) || 1);
+    if (coinsPerGift < min && totalCoins < min) {
+      return false;
+    }
+  }
+
+  if (giftType === 'selectedGifts') {
+    const selected = Array.isArray(jarConfig?.selectedGifts) ? jarConfig.selectedGifts : [];
+    if (selected.length > 0) {
+      const idMatch = event.giftId && selected.includes(String(event.giftId));
+      const nameMatch = event.giftName && selected.some((s) => s.toLowerCase() === event.giftName.toLowerCase());
+      if (!idMatch && !nameMatch) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+function updateTopDonorsList(currentDonors = [], { username, displayName, avatarUrl, coins = 0 } = {}) {
+  if (!username || coins <= 0) return Array.isArray(currentDonors) ? currentDonors : [];
+  const list = (Array.isArray(currentDonors) ? currentDonors : []).map((d) => ({ ...d }));
+  const existing = list.find((d) => d.username.toLowerCase() === username.toLowerCase());
+  if (existing) {
+    existing.totalCoins += coins;
+    if (displayName) existing.displayName = displayName;
+    if (avatarUrl) existing.avatarUrl = avatarUrl;
+  } else {
+    list.push({
+      username,
+      displayName: displayName || username,
+      avatarUrl: avatarUrl || '',
+      totalCoins: coins
+    });
+  }
+  list.sort((a, b) => b.totalCoins - a.totalCoins);
+  if (list.length > 20) list.length = 20;
+  return list;
+}
+
 function normalizeJar(input) {
   const defaults = createDefaultConfig().jar;
   const jar = input && typeof input === 'object' ? input : {};
@@ -159,6 +239,22 @@ function normalizeJar(input) {
         }))
     : [];
 
+  const topDonors = Array.isArray(jar.topDonors)
+    ? jar.topDonors
+        .filter((donor) => donor && typeof donor === 'object')
+        .slice(0, 20)
+        .map((donor) => ({
+          username: String(donor.username || '').slice(0, 80),
+          displayName: String(donor.displayName || donor.username || 'Alguien').slice(0, 80),
+          avatarUrl: String(donor.avatarUrl || '').slice(0, 500),
+          totalCoins: Math.max(0, Number(donor.totalCoins) || 0)
+        }))
+    : [];
+
+  const selectedGifts = Array.isArray(jar.selectedGifts)
+    ? jar.selectedGifts.map((id) => String(id || '').trim()).filter(Boolean).slice(0, 100)
+    : [];
+
   return {
     title: String(jar.title || defaults.title).trim().slice(0, 40) || defaults.title,
     goalCoins: Math.round(clampNumber(jar.goalCoins, defaults.goalCoins, 1, 1_000_000_000)),
@@ -166,7 +262,27 @@ function normalizeJar(input) {
     currentGifts: Math.round(clampNumber(jar.currentGifts, 0, 0, 1_000_000_000)),
     accent: /^#[0-9a-f]{6}$/i.test(String(jar.accent || '')) ? String(jar.accent) : defaults.accent,
     showRecentGifts: jar.showRecentGifts !== false,
-    recentGifts
+    recentGifts,
+    giftType: ['allGifts', 'minimumValue', 'selectedGifts'].includes(jar.giftType)
+      ? jar.giftType
+      : defaults.giftType,
+    minimumValue: Math.round(clampNumber(jar.minimumValue, defaults.minimumValue, 1, 1_000_000)),
+    selectedGifts,
+    xOffset: clampNumber(jar.xOffset, 0, -2000, 2000),
+    yOffset: clampNumber(jar.yOffset, 0, -2000, 2000),
+    scale: Number(clampNumber(jar.scale, 1.0, 0.1, 3.0).toFixed(2)),
+    giftScale: Number(clampNumber(jar.giftScale, 1.0, 0.1, 3.0).toFixed(2)),
+    numberOfRanks: ['top3', 'top5', 'top10'].includes(jar.numberOfRanks)
+      ? jar.numberOfRanks
+      : defaults.numberOfRanks,
+    leaderboardDisplayFormat: 'avatarNameCoins',
+    displayRankBadges: jar.displayRankBadges !== false,
+    displayLeaderboard: jar.displayLeaderboard !== false,
+    showTotalCoins: jar.showTotalCoins !== false,
+    displayAlert: jar.displayAlert !== false,
+    leaderboardDuration: Math.round(clampNumber(jar.leaderboardDuration, defaults.leaderboardDuration, 1, 60)),
+    alertDuration: Math.round(clampNumber(jar.alertDuration, defaults.alertDuration, 1, 60)),
+    topDonors
   };
 }
 
@@ -180,14 +296,15 @@ function normalizeTts(input) {
   return {
     enabled: tts.enabled !== false,
     chatEnabled: tts.chatEnabled !== false,
-    giftsEnabled: tts.giftsEnabled !== false,
+    giftsEnabled: tts.giftsEnabled === true,
     minCoins: Math.round(clampNumber(tts.minCoins, defaults.minCoins, 0, 1_000_000)),
     volume: clampNumber(tts.volume, defaults.volume, 0, 1),
     voiceProvider,
     voiceLanguage: String(tts.voiceLanguage || defaults.voiceLanguage).slice(0, 20),
+    voiceId: String(tts.voiceId || defaults.voiceId || 'google:es-ES').slice(0, 100),
     ducking: tts.ducking !== false,
     duckingLevel: clampNumber(tts.duckingLevel, defaults.duckingLevel, 0, 1),
-    antiSpam: tts.antiSpam === true,
+    antiSpam: tts.antiSpam !== undefined ? Boolean(tts.antiSpam) : true,
     playEveryStreak: tts.playEveryStreak !== false,
     maxChars: Math.round(clampNumber(tts.maxChars, defaults.maxChars, 20, 500))
   };
@@ -335,6 +452,22 @@ function publicJar(config) {
     accent: jar.accent,
     showRecentGifts: jar.showRecentGifts,
     recentGifts: jar.recentGifts,
+    giftType: jar.giftType || 'allGifts',
+    minimumValue: jar.minimumValue ?? 1,
+    selectedGifts: jar.selectedGifts || [],
+    xOffset: jar.xOffset || 0,
+    yOffset: jar.yOffset || 0,
+    scale: jar.scale ?? 1.0,
+    giftScale: jar.giftScale ?? 1.0,
+    numberOfRanks: jar.numberOfRanks || 'top5',
+    leaderboardDisplayFormat: jar.leaderboardDisplayFormat || 'avatarNameCoins',
+    displayRankBadges: jar.displayRankBadges !== false,
+    displayLeaderboard: jar.displayLeaderboard !== false,
+    showTotalCoins: jar.showTotalCoins !== false,
+    displayAlert: jar.displayAlert !== false,
+    leaderboardDuration: jar.leaderboardDuration || 5,
+    alertDuration: jar.alertDuration || 5,
+    topDonors: jar.topDonors || [],
     percent,
     completed: percent >= 100
   };
@@ -369,6 +502,8 @@ module.exports = {
   BUILTIN_IDS,
   EVENT_TYPES,
   MAX_SOUND_BYTES,
+  computeBaseRadius,
+  computeGiftRadius,
   configPath,
   createDefaultConfig,
   deleteSoundFile,
@@ -381,5 +516,7 @@ module.exports = {
   publicConfig,
   publicJar,
   saveConfig,
-  soundsDir
+  shouldPassJarFilter,
+  soundsDir,
+  updateTopDonorsList
 };

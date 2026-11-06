@@ -11,57 +11,331 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="page">
+    <div class="app">
       <header class="topbar">
         <div class="brand">
           <img class="brand-logo" src="assets/logo.png" alt="Logo de Tiktato: una papa con auriculares" />
           <div class="brand-copy">
-            <span class="brand-name">TIKTATO</span>
-            <span class="brand-tag">sonidos para TikTok LIVE</span>
+            <span class="brand-name">Tiktato</span>
+            <span class="brand-tag">Sonidos para TikTok LIVE</span>
           </div>
         </div>
+
+        <nav class="tabs" role="tablist" aria-label="Secciones">
+          <button class="tab" id="tab-sounds" role="tab" type="button" data-tab="sounds" aria-controls="panel-sounds" aria-selected="true">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+            Sonidos
+          </button>
+          <button class="tab" id="tab-obs" role="tab" type="button" data-tab="obs" aria-controls="panel-obs" aria-selected="false" tabindex="-1">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg>
+            OBS y frasco
+          </button>
+          <button class="tab" id="tab-voice" role="tab" type="button" data-tab="voice" aria-controls="panel-voice" aria-selected="false" tabindex="-1">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M8 9h8M8 13h5"></path></svg>
+            Voz
+          </button>
+        </nav>
+
         <div class="top-actions">
-          <div id="statusPill" class="status-pill status-disconnected">
-            <span class="status-dot"></span>
-            <span id="statusLabel">Desconectado</span>
-          </div>
-          <button id="btnSettings" class="icon-button" type="button" title="Ajustes" aria-label="Abrir ajustes">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"></path></svg>
+          <button id="btnSettings" class="icon-button" type="button" title="Ajustes de audio" aria-label="Abrir ajustes de audio">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"></path></svg>
           </button>
         </div>
       </header>
 
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
-      <div id="errorBanner" class="error-banner" hidden></div>
 
-      <main>
-        <section class="studio-intro">
-          <div>
-            <p class="eyebrow">Sound alerts para TikTok LIVE</p>
-            <h1>Tu live, con sonido.</h1>
-            <p>Conecta una vez. Lo demás ya está listo.</p>
-          </div>
-          <div class="intro-sticker" aria-hidden="true">
-            <img src="assets/logo.png" alt="" />
-            <span>SIN PAYWALL</span>
-          </div>
-        </section>
+      <div class="shell">
+        <main class="workspace">
+          <div id="errorBanner" class="error-banner" hidden></div>
 
-        <section class="steps">
-          <article class="step-card step-connect">
-            <div class="step-head">
-              <span class="step-index">01</span>
+          <!-- Sonidos -->
+          <section id="panel-sounds" class="panel" role="tabpanel" aria-labelledby="tab-sounds">
+            <header class="panel-head">
               <div>
-                <h2>Conecta tu LIVE</h2>
-                <p>Pega tu usuario de TikTok y pulsa conectar.</p>
+                <h1>Sonidos</h1>
+                <p>Cada regalo puede tener su propio sonido. Lo que no tenga uno usa los eventos generales.</p>
               </div>
-              <span id="liveBadge" class="chip">OFFLINE</span>
+              <div class="panel-actions">
+                <button id="btnSounds" class="btn btn-ghost" type="button">Biblioteca de sonidos</button>
+                <button id="btnAdvancedRules" class="btn btn-ghost" type="button">Reglas avanzadas</button>
+              </div>
+            </header>
+
+            <section class="block">
+              <div class="block-head">
+                <div>
+                  <h2>Sonidos por regalo</h2>
+                  <p>Toca un regalo para asignarle un sonido.</p>
+                </div>
+                <button id="btnPickGift" class="btn btn-secondary btn-small" type="button">
+                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+                  Elegir otro regalo
+                </button>
+              </div>
+              <div id="giftPresets" class="gift-presets" aria-label="Regalos rápidos"></div>
+              <div id="giftQuickList" class="quick-rules gift-quick-list"></div>
+            </section>
+
+            <section class="block">
+              <div class="block-head">
+                <div>
+                  <h2>Eventos generales</h2>
+                  <p>Suenan cuando no hay un sonido específico.</p>
+                </div>
+              </div>
+              <div id="quickRules" class="quick-rules"></div>
+
+              <label class="toggle-row">
+                <span class="toggle-copy">
+                  <strong>Repetir el sonido en cada combo</strong>
+                  <small>Si alguien manda 10 rosas seguidas, se escucha 10 veces.</small>
+                </span>
+                <span class="switch"><input id="ttsPlayEveryStreak" type="checkbox" checked /><span></span></span>
+              </label>
+            </section>
+          </section>
+
+          <!-- OBS y frasco -->
+          <section id="panel-obs" class="panel" role="tabpanel" aria-labelledby="tab-obs" hidden>
+            <header class="panel-head">
+              <div>
+                <h1>OBS y frasco</h1>
+                <p>Agrega cada URL como fuente de navegador en OBS o TikTok LIVE Studio.</p>
+              </div>
+            </header>
+
+            <div class="obs-grid">
+              <section class="block">
+                <div class="block-head">
+                  <div>
+                    <h2>Overlay de alertas</h2>
+                    <p>Muestra quién envió cada regalo. Tamaño 800 × 600.</p>
+                  </div>
+                </div>
+
+                <div class="url-row">
+                  <input id="overlayUrl" readonly aria-label="URL del overlay para OBS" />
+                  <button id="btnCopyOverlay" class="btn btn-primary" type="button">Copiar URL</button>
+                </div>
+
+                <div class="overlay-demo" aria-hidden="true">
+                  <div class="overlay-demo-card">
+                    <div class="overlay-demo-avatar">
+                      <img src="assets/logo.png" alt="" />
+                    </div>
+                    <div class="overlay-demo-body">
+                      <div class="overlay-demo-top">
+                        <span class="overlay-demo-tag">REGALO</span>
+                        <span class="overlay-demo-coins">100 monedas</span>
+                      </div>
+                      <strong class="overlay-demo-user">Viewer de prueba</strong>
+                      <span class="overlay-demo-detail">envió Galaxia</span>
+                    </div>
+                    <div class="overlay-demo-progress"></div>
+                  </div>
+                  <span class="overlay-demo-label">Así se ve una alerta en tu directo</span>
+                </div>
+
+                <ol class="overlay-steps">
+                  <li><span>1</span> En OBS, añade una fuente de <strong>Navegador</strong>.</li>
+                  <li><span>2</span> Pega la URL y pon 800 × 600.</li>
+                  <li><span>3</span> Prueba con un regalo desde la columna de actividad.</li>
+                </ol>
+
+                <div class="block-actions">
+                  <button id="btnOpenOverlay" class="btn btn-ghost" type="button">Vista previa</button>
+                  <button id="btnOverlaySettings" class="btn btn-ghost" type="button">Personalizar</button>
+                </div>
+              </section>
+
+              <section id="jarCard" class="block step-jar">
+                <div class="block-head">
+                  <div>
+                    <h2>Frasco de donaciones (Pro)</h2>
+                    <p>Física 2D con Matter.js, leaderboard rotativo y alertas.</p>
+                  </div>
+                  <span id="jarPercent" class="chip">0%</span>
+                </div>
+
+                <div class="jar-row">
+                  <div class="jar-mini" aria-hidden="true">
+                    <div class="jar-mini-lid"></div>
+                    <div class="jar-mini-glass">
+                      <div id="jarFill" class="jar-mini-fill"></div>
+                      <span class="jar-mini-shine"></span>
+                    </div>
+                  </div>
+                  <div class="jar-side">
+                    <div class="jar-summary">
+                      <strong id="jarAmount">0 / 1.000</strong>
+                      <span id="jarGifts">0 regalos</span>
+                    </div>
+                    <label class="field">
+                      <span>Meta de monedas</span>
+                      <input id="jarGoal" type="number" min="1" step="1" value="1000" />
+                    </label>
+                  </div>
+                </div>
+
+                <div class="url-row">
+                  <input id="jarUrl" readonly aria-label="URL del frasco para OBS" />
+                  <button id="btnCopyJar" class="btn btn-primary" type="button">Copiar URL</button>
+                </div>
+
+                <div class="block-actions">
+                  <button id="btnOpenJar" class="btn btn-ghost" type="button">Vista previa</button>
+                  <button id="btnJarSettings" class="btn btn-ghost" type="button">Personalizar</button>
+                  <button id="btnResetJar" class="btn btn-ghost btn-danger" type="button">Vaciar frasco</button>
+                </div>
+              </section>
+
+              <section id="jarTestCard" class="block">
+                <div class="block-head">
+                  <div>
+                    <h2>Frasco de prueba (Demo)</h2>
+                    <p>Simulación continua de regalos para calibrar y probar en OBS.</p>
+                  </div>
+                  <span class="chip">DEMO / OBS</span>
+                </div>
+
+                <div class="quick-tests" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
+                  <button id="btnTestGiftRose" class="btn btn-ghost" type="button">Probar Rosa (1)</button>
+                  <button id="btnTestGiftCombo" class="btn btn-ghost" type="button">Probar Combo x10</button>
+                  <button id="btnTestGiftGalaxy" class="btn btn-ghost" type="button">Probar Galaxia (1.000)</button>
+                </div>
+
+                <div class="url-row">
+                  <input id="jarTestUrl" readonly aria-label="URL del frasco de prueba para OBS" />
+                  <button id="btnCopyJarTest" class="btn btn-primary" type="button">Copiar URL</button>
+                </div>
+
+                <div class="block-actions">
+                  <button id="btnOpenJarTest" class="btn btn-ghost" type="button">Vista previa de prueba</button>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <!-- Voz -->
+          <section id="panel-voice" class="panel" role="tabpanel" aria-labelledby="tab-voice" hidden>
+            <header class="panel-head">
+              <div>
+                <h1>Voz</h1>
+                <p>Lee en voz alta el chat y los regalos mientras transmites.</p>
+              </div>
+              <span id="ttsQueueBadge" class="chip">INACTIVO</span>
+            </header>
+
+            <div class="voice-grid">
+              <section class="block">
+                <div class="block-head">
+                  <div>
+                    <h2>Qué se lee</h2>
+                  </div>
+                </div>
+                <div class="toggle-list">
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
+                      <strong>Mensajes del chat</strong>
+                      <small>Lee lo que escriben los espectadores.</small>
+                    </span>
+                    <span class="switch"><input id="ttsChatEnabled" type="checkbox" /><span></span></span>
+                  </label>
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
+                      <strong>Regalos</strong>
+                      <small>Anuncia quién envió qué regalo.</small>
+                    </span>
+                    <span class="switch"><input id="ttsGiftsEnabled" type="checkbox" /><span></span></span>
+                  </label>
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
+                      <strong>Filtro anti-spam</strong>
+                      <small>Acorta letras repetidas e ignora comandos como !help.</small>
+                    </span>
+                    <span class="switch"><input id="ttsAntiSpam" type="checkbox" checked /><span></span></span>
+                  </label>
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
+                      <strong>Bajar alertas mientras habla</strong>
+                      <small>Los sonidos se atenúan para que la voz se entienda.</small>
+                    </span>
+                    <span class="switch"><input id="ttsDucking" type="checkbox" checked /><span></span></span>
+                  </label>
+                </div>
+              </section>
+
+              <section class="block">
+                <div class="block-head">
+                  <div>
+                    <h2>Cómo suena</h2>
+                  </div>
+                </div>
+                <div class="field-stack">
+                  <label class="field">
+                    <span>Voz</span>
+                    <select id="ttsVoiceProvider" aria-label="Elegir voz">
+                      <optgroup label="Voces de Google (Streaming)">
+                        <option value="google:es-ES">Google Español (España)</option>
+                        <option value="google:es-US">Google Español (Latinoamérica)</option>
+                        <option value="google:es-MX">Google Español (México)</option>
+                        <option value="google:es-AR">Google Español (Argentina)</option>
+                        <option value="google:en-US">Google English (US)</option>
+                      </optgroup>
+                      <optgroup id="ttsLocalVoicesGroup" label="Voces de Windows / Microsoft">
+                        <option value="local">Voz predeterminada del sistema</option>
+                      </optgroup>
+                    </select>
+                    <small class="field-hint">Puedes elegir voces de Google o cualquiera instalada en Windows.</small>
+                  </label>
+
+                  <label class="field">
+                    <span class="field-row">Volumen de la voz <strong id="ttsVolumeValue">80%</strong></span>
+                    <input id="ttsVolume" type="range" min="0" max="100" step="5" value="80" />
+                  </label>
+
+                  <label class="field">
+                    <span class="field-row">Leer regalos desde <strong id="ttsMinCoinsValue">1</strong></span>
+                    <input id="ttsMinCoins" type="range" min="0" max="100" step="1" value="1" />
+                    <small class="field-hint">Monedas mínimas para anunciar un regalo.</small>
+                  </label>
+                </div>
+
+                <div class="block-actions">
+                  <button id="btnTestTTS" class="btn btn-primary" type="button">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7z"></path></svg>
+                    Probar voz
+                  </button>
+                  <button id="btnSkipTTS" class="btn btn-ghost" type="button" title="Saltar el mensaje actual">Saltar</button>
+                  <button id="btnClearTTS" class="btn btn-ghost" type="button" title="Silenciar y vaciar la cola de voz">Silenciar / Vaciar cola</button>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <footer class="footer">
+            <span>Tiktato no está afiliado a TikTok. Úsalo con cuentas que tengas derecho a analizar.</span>
+            <span class="footer-version">v0.4.0</span>
+          </footer>
+        </main>
+
+        <!-- Columna en vivo -->
+        <aside class="live-rail" aria-label="Tu LIVE">
+          <section class="rail-connect">
+            <div class="rail-connect-head">
+              <h2>Tu LIVE</h2>
+              <div id="statusPill" class="status-pill status-disconnected">
+                <span class="status-dot"></span>
+                <span id="statusLabel">Desconectado</span>
+              </div>
+              <span id="liveBadge" class="visually-hidden">OFFLINE</span>
             </div>
 
             <form id="connectForm" class="connect-row">
               <label class="input-prefix" for="username">
                 <span>@</span>
-                <input id="username" name="username" autocomplete="off" placeholder="tu_usuario" maxlength="80" />
+                <input id="username" name="username" autocomplete="off" placeholder="tu.usuario" maxlength="80" />
               </label>
               <button id="btnConnect" class="btn btn-primary" type="submit">Conectar</button>
             </form>
@@ -69,241 +343,44 @@
             <div id="connectionMessage" class="connection-message">Sin conexión</div>
 
             <div class="connect-meta">
-              <button id="btnHelp" class="link-button" type="button">¿No conecta? Iniciar sesión o room ID</button>
+              <button id="btnHelp" class="link-button" type="button">¿No conecta?</button>
               <button id="btnDisconnect" class="link-button" type="button" disabled>Desconectar</button>
             </div>
 
-            <div class="stats">
-              <div class="stat">
-                <span>Regalos</span>
-                <strong id="statGifts">0</strong>
-              </div>
-              <div class="stat">
-                <span>Monedas</span>
-                <strong id="statCoins">0</strong>
-              </div>
-              <div class="stat">
-                <span>Follows</span>
-                <strong id="statFollows">0</strong>
-              </div>
-              <div class="stat">
-                <span>Espectadores</span>
-                <strong id="statViewers">0</strong>
-              </div>
-            </div>
-          </article>
+            <dl class="stats">
+              <div class="stat"><dt>Regalos</dt><dd id="statGifts">0</dd></div>
+              <div class="stat"><dt>Monedas</dt><dd id="statCoins">0</dd></div>
+              <div class="stat"><dt>Follows</dt><dd id="statFollows">0</dd></div>
+              <div class="stat"><dt>Viendo</dt><dd id="statViewers">0</dd></div>
+            </dl>
+          </section>
 
-          <article class="step-card step-sounds">
-            <div class="step-head">
-              <span class="step-index">02</span>
-              <div>
-                <h2>Elige tus sonidos</h2>
-                <p>Asigna un sonido a cada regalo o usa los eventos generales.</p>
-              </div>
-            </div>
-
-            <div class="gift-quick-section">
-              <div class="gift-quick-header">
-                <span class="gift-quick-title">Sonidos por regalo</span>
-                <button id="btnPickGift" class="btn btn-tiny btn-secondary" type="button">+ Elegir regalo</button>
-              </div>
-              <div id="giftPresets" class="gift-presets" aria-label="Regalos rápidos"></div>
-              <div id="giftQuickList" class="quick-rules gift-quick-list"></div>
-            </div>
-
-            <div class="gift-quick-header general-rules-header">
-              <span class="gift-quick-title">Eventos generales</span>
-            </div>
-            <div id="quickRules" class="quick-rules"></div>
-
-            <div class="step-actions">
-              <button id="btnAdvancedRules" class="btn btn-ghost" type="button">Reglas avanzadas</button>
-              <button id="btnSounds" class="btn btn-ghost" type="button">Biblioteca de sonidos</button>
-            </div>
-          </article>
-
-          <article class="step-card step-overlay">
-            <div class="step-head">
-              <span class="step-index">03</span>
-              <div>
-                <h2>Pega el overlay en OBS</h2>
-                <p>Copia la URL en una fuente de navegador de 800 × 600.</p>
-              </div>
-            </div>
-
-            <div class="url-row">
-              <input id="overlayUrl" readonly aria-label="URL del overlay para OBS" />
-              <button id="btnCopyOverlay" class="btn btn-teal" type="button">Copiar</button>
-            </div>
-
-            <ol class="overlay-steps">
-              <li><span>1</span> Añade una fuente de navegador en OBS.</li>
-              <li><span>2</span> Pega la URL y pon 800 × 600.</li>
-              <li><span>3</span> Listo: aparece sobre tu directo.</li>
-            </ol>
-
-            <div class="overlay-demo" aria-hidden="true">
-              <span class="overlay-demo-label">Así se ve una alerta</span>
-              <div class="overlay-demo-card">
-                <span class="overlay-demo-avatar"><img src="assets/logo.png" alt="" /></span>
-                <div>
-                  <strong>Viewer de prueba</strong>
-                  <span>envió Galaxy</span>
-                </div>
-                <b>100 <small>monedas</small></b>
-              </div>
-            </div>
-
-            <div class="step-actions">
-              <button id="btnOpenOverlay" class="btn btn-ghost" type="button">Vista previa</button>
-              <button id="btnOverlaySettings" class="btn btn-ghost" type="button">Personalizar</button>
-            </div>
-          </article>
-
-          <article id="jarCard" class="step-card step-jar">
-            <div class="step-head">
-              <span class="step-index">04</span>
-              <div>
-                <h2>Frasco de donaciones</h2>
-                <p>Se llena con las monedas de los regalos del LIVE.</p>
-              </div>
-              <span id="jarPercent" class="chip">0%</span>
-            </div>
-
-            <div class="jar-mini" aria-hidden="true">
-              <div class="jar-mini-lid"></div>
-              <div class="jar-mini-glass">
-                <div id="jarFill" class="jar-mini-fill"></div>
-                <span class="jar-mini-shine"></span>
-              </div>
-            </div>
-
-            <div class="jar-summary">
-              <strong id="jarAmount">0 / 1.000</strong>
-              <span id="jarGifts">0 regalos</span>
-            </div>
-
-            <label class="field">
-              <span>Meta de monedas</span>
-              <input id="jarGoal" type="number" min="1" step="1" value="1000" />
-            </label>
-
-            <div class="url-row">
-              <input id="jarUrl" readonly aria-label="URL del frasco para OBS" />
-              <button id="btnCopyJar" class="btn btn-teal" type="button">Copiar</button>
-            </div>
-
-            <div class="step-actions">
-              <button id="btnOpenJar" class="btn btn-ghost" type="button">Vista previa</button>
-              <button id="btnResetJar" class="btn btn-ghost" type="button">Reiniciar</button>
-            </div>
-          </article>
-
-          <article id="ttsCard" class="step-card step-tts">
-            <div class="step-head">
-              <span class="step-index">05</span>
-              <div>
-                <h2>Voz y texto a voz (TTS)</h2>
-                <p>Lee comentarios y regalos con voz en directo.</p>
-              </div>
-              <span id="ttsQueueBadge" class="chip">INACTIVO</span>
-            </div>
-
-            <div class="tts-settings-group">
-              <div class="tts-section-label">Disparadores de voz</div>
-              <div class="tts-toggles-grid">
-                <label class="checkline tts-checkline">
-                  <input id="ttsChatEnabled" type="checkbox" />
-                  <span><strong>Leer chat</strong> <small>Mensajes de espectadores</small></span>
-                </label>
-
-                <label class="checkline tts-checkline">
-                  <input id="ttsGiftsEnabled" type="checkbox" />
-                  <span><strong>Anunciar regalos</strong> <small>Quién envió y qué regalo</small></span>
-                </label>
-
-                <label class="checkline tts-checkline">
-                  <input id="ttsDucking" type="checkbox" checked />
-                  <span><strong>Bajar volumen al hablar</strong> <small>Atenúa alertas durante el TTS</small></span>
-                </label>
-              </div>
-
-              <div class="tts-section-label">Combos y anti-spam</div>
-              <div class="tts-toggles-grid">
-                <label class="checkline tts-checkline">
-                  <input id="ttsPlayEveryStreak" type="checkbox" checked />
-                  <span><strong>Repetir sonido en combos</strong> <small>Suena cada impacto de la racha</small></span>
-                </label>
-
-                <label class="checkline tts-checkline">
-                  <input id="ttsAntiSpam" type="checkbox" />
-                  <span><strong>Filtro anti-spam (opcional)</strong> <small>Evita letras repetidas y comandos</small></span>
-                </label>
-              </div>
-
-              <div class="tts-sliders-grid">
-                <label class="field">
-                  <span>Proveedor de voz</span>
-                  <select id="ttsVoiceProvider">
-                    <option value="google">Google Cloud Voice (gratuita)</option>
-                    <option value="local">Voz del sistema (Web Speech API)</option>
-                  </select>
-                </label>
-
-                <label class="field">
-                  <span>Volumen de voz <strong id="ttsVolumeValue">80%</strong></span>
-                  <input id="ttsVolume" type="range" min="0" max="100" step="5" value="80" />
-                </label>
-
-                <label class="field">
-                  <span>Mínimo monedas para regalo <strong id="ttsMinCoinsValue">1</strong></span>
-                  <input id="ttsMinCoins" type="range" min="0" max="100" step="1" value="1" />
-                </label>
-              </div>
-            </div>
-
-            <div class="step-actions tts-actions">
-              <button id="btnTestTTS" class="btn btn-secondary" type="button">Probar voz</button>
-              <button id="btnSkipTTS" class="btn btn-ghost" type="button" title="Saltar mensaje actual">Saltar</button>
-              <button id="btnClearTTS" class="btn btn-ghost" type="button" title="Silenciar y vaciar la cola de voz">Silenciar / Vaciar cola</button>
-            </div>
-          </article>
-        </section>
-
-        <section class="activity-section">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">En vivo</p>
+          <section class="rail-activity">
+            <div class="rail-activity-head">
               <h2>Actividad</h2>
             </div>
-            <div class="test-actions">
-              <span>Probar:</span>
-              <button class="btn btn-tiny" data-test="chat" type="button">Chat</button>
+            <div class="test-actions" role="group" aria-label="Enviar evento de prueba">
+              <span>Probar</span>
               <button class="btn btn-tiny" data-test="gift" type="button">Regalo</button>
               <button class="btn btn-tiny" data-test="follow" type="button">Follow</button>
               <button class="btn btn-tiny" data-test="share" type="button">Share</button>
               <button class="btn btn-tiny" data-test="like" type="button">Like</button>
+              <button class="btn btn-tiny" data-test="chat" type="button">Chat</button>
             </div>
-          </div>
 
-          <div id="activityList" class="activity-list"></div>
-          <div id="activityEmpty" class="empty-state" hidden>
-            <strong>Todavía no hay eventos.</strong>
-            <span>Conecta tu LIVE o usa los botones de prueba.</span>
-          </div>
-        </section>
-      </main>
-
-      <footer class="footer">
-        <span>Tiktato no está afiliado a TikTok. Úsalo con contenido y cuentas que tengas derecho a analizar.</span>
-        <span class="footer-version">v0.2.1</span>
-      </footer>
+            <div id="activityList" class="activity-list"></div>
+            <div id="activityEmpty" class="empty-state" hidden>
+              <strong>Todavía no hay eventos</strong>
+              <span>Cuando conectes tu LIVE vas a ver aquí cada regalo, follow y mensaje. Usa los botones de prueba para escuchar cómo suena.</span>
+            </div>
+          </section>
+        </aside>
+      </div>
     </div>
 
     <dialog id="helpDialog" class="dialog dialog-small">
       <div class="dialog-head">
         <div>
-          <p class="eyebrow">Conexión</p>
           <h2>Ayuda para conectar</h2>
         </div>
         <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
@@ -353,7 +430,6 @@
     <dialog id="rulesDialog" class="dialog dialog-wide">
       <div class="dialog-head">
         <div>
-          <p class="eyebrow">Automatización</p>
           <h2>Sonidos por regalo y reglas</h2>
         </div>
         <div class="dialog-head-actions">
@@ -439,7 +515,6 @@
     <dialog id="soundsDialog" class="dialog">
       <div class="dialog-head">
         <div>
-          <p class="eyebrow">Biblioteca</p>
           <h2>Sonidos</h2>
         </div>
         <div class="dialog-head-actions">
@@ -461,7 +536,6 @@
     <dialog id="overlayDialog" class="dialog dialog-small">
       <div class="dialog-head">
         <div>
-          <p class="eyebrow">OBS / LIVE Studio</p>
           <h2>Personalizar overlay</h2>
         </div>
         <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
@@ -498,10 +572,112 @@
       </div>
     </dialog>
 
+    <dialog id="jarDialog" class="dialog dialog-small">
+      <div class="dialog-head">
+        <div>
+          <h2>Personalizar frasco Pro</h2>
+        </div>
+        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+      </div>
+
+      <div class="settings-grid">
+        <label class="field span-2">
+          <span>Título del frasco</span>
+          <input id="jarTitleInput" maxlength="40" />
+        </label>
+
+        <label class="field">
+          <span>Escala general (0.5 - 2.5)</span>
+          <input id="jarScaleInput" type="number" min="0.2" max="3" step="0.05" value="1.0" />
+        </label>
+
+        <label class="field">
+          <span>Escala de monedas (0.5 - 2.5)</span>
+          <input id="jarGiftScaleInput" type="number" min="0.2" max="3" step="0.05" value="1.0" />
+        </label>
+
+        <label class="field">
+          <span>Desplazamiento horizontal X (px)</span>
+          <input id="jarXOffsetInput" type="number" step="5" value="0" />
+        </label>
+
+        <label class="field">
+          <span>Desplazamiento vertical Y (px)</span>
+          <input id="jarYOffsetInput" type="number" step="5" value="0" />
+        </label>
+
+        <label class="field">
+          <span>Aceptación de regalos</span>
+          <select id="jarGiftType">
+            <option value="allGifts">Todos los regalos</option>
+            <option value="minimumValue">Solo con valor mínimo</option>
+            <option value="selectedGifts">Solo regalos específicos</option>
+          </select>
+        </label>
+
+        <label class="field" id="jarMinValWrap">
+          <span>Valor mínimo (monedas)</span>
+          <input id="jarMinimumValue" type="number" min="1" step="1" value="1" />
+        </label>
+
+        <label class="field span-2" id="jarSelectedGiftsWrap" hidden>
+          <span>Regalos permitidos (nombres o IDs separados por coma)</span>
+          <input id="jarSelectedGiftsInput" placeholder="Ej: Rosa, Galaxia, 5655" />
+        </label>
+
+        <label class="field">
+          <span>Puestos en ranking</span>
+          <select id="jarNumberOfRanks">
+            <option value="top3">Top 3</option>
+            <option value="top5">Top 5</option>
+            <option value="top10">Top 10</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Rotación ranking (seg)</span>
+          <input id="jarLeaderboardDuration" type="number" min="2" max="60" step="1" value="5" />
+        </label>
+
+        <label class="field">
+          <span>Duración alerta regalo (seg)</span>
+          <input id="jarAlertDuration" type="number" min="2" max="60" step="1" value="5" />
+        </label>
+
+        <label class="field">
+          <span>Color de acento</span>
+          <input id="jarAccentInput" type="color" value="#e83e5f" />
+        </label>
+
+        <label class="checkline span-2">
+          <input id="jarShowTotalCoins" type="checkbox" />
+          <span>Mostrar contador de monedas totales acumuladas</span>
+        </label>
+
+        <label class="checkline span-2">
+          <input id="jarDisplayLeaderboard" type="checkbox" />
+          <span>Mostrar barra rotativa de Donantes Destacados (Leaderboard)</span>
+        </label>
+
+        <label class="checkline span-2">
+          <input id="jarDisplayAlert" type="checkbox" />
+          <span>Mostrar burbuja de alerta emergente al caer cada regalo</span>
+        </label>
+
+        <label class="checkline span-2">
+          <input id="jarDisplayRankBadges" type="checkbox" />
+          <span>Mostrar medallas de posición (oro, plata, bronce)</span>
+        </label>
+      </div>
+
+      <div class="dialog-foot">
+        <button class="btn btn-ghost" data-close type="button">Cerrar</button>
+      </div>
+    </dialog>
+
     <dialog id="settingsDialog" class="dialog dialog-small">
       <div class="dialog-head">
         <div>
-          <p class="eyebrow">Ajustes</p>
           <h2>Audio y app</h2>
         </div>
         <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>

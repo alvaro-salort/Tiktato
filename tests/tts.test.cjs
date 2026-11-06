@@ -9,14 +9,13 @@ test('normaliza configuración de TTS y combos por defecto', () => {
   const config = createDefaultConfig();
   assert.equal(config.tts.enabled, true);
   assert.equal(config.tts.chatEnabled, true);
-  assert.equal(config.tts.giftsEnabled, true);
+  assert.equal(config.tts.giftsEnabled, false);
   assert.equal(config.tts.minCoins, 1);
   assert.equal(config.tts.volume, 0.8);
   assert.equal(config.tts.voiceProvider, 'google');
   assert.equal(config.tts.ducking, true);
   assert.equal(config.tts.duckingLevel, 0.25);
-  // Por requerimiento del usuario: antiSpam es falso por defecto y los combos se repiten por defecto
-  assert.equal(config.tts.antiSpam, false);
+  assert.equal(config.tts.antiSpam, true);
   assert.equal(config.tts.playEveryStreak, true);
   assert.equal(config.tts.maxChars, 120);
 });

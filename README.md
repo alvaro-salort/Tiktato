@@ -1,15 +1,21 @@
 # Tiktato
 
-Sound alerts y overlays para **TikTok LIVE**, sin cuenta, sin suscripción y sin paywall.
+[![Versión](https://img.shields.io/github/v/release/alvaro-salort/Tiktato?color=teal&label=versi%C3%B3n)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+[![Licencia](https://img.shields.io/github/license/alvaro-salort/Tiktato?color=orange)](LICENSE)
+[![Plataforma](https://img.shields.io/badge/plataforma-Windows-blue)](https://github.com/alvaro-salort/Tiktato/releases)
+[![Pruebas](https://img.shields.io/badge/tests-50%20passing-brightgreen)](https://github.com/alvaro-salort/Tiktato)
+[![TikTok LIVE](https://img.shields.io/badge/TikTok%20LIVE-sin%20costo-pink)](https://github.com/alvaro-salort/Tiktato)
 
-Tiktato es una reimplementación local y acotada de la función principal de TikFinity: escuchar eventos de un directo de TikTok y reproducir un sonido cuando alguien envía un regalo, sigue el canal, comparte el directo o da likes. Incluye un overlay para OBS / TikTok LIVE Studio.
+Sound alerts, voz TTS y frasco de donaciones 2D para **TikTok LIVE**, sin cuenta, sin suscripción y sin paywall.
+
+Tiktato es una aplicación de escritorio local para streamers de TikTok: escucha eventos de tu directo en tiempo real y reproduce alertas sonoras personalizadas, lee comentarios y donaciones mediante síntesis de voz (TTS) y ofrece overlays animados para OBS Studio o TikTok LIVE Studio (incluyendo el nuevo **Frasco Pro** con motor de física 2D).
 
 > Proyecto independiente. No está afiliado a TikTok ni a TikFinity. Úsalo solo con directos y cuentas que tengas derecho a analizar.
 
 ## Descargar
 
-- [Instalador de Windows v0.3.0](https://github.com/alvaro-salort/Tiktato/releases/download/v0.3.0/Tiktato.Setup.0.3.0.exe)
-- [Versión portable v0.3.0](https://github.com/alvaro-salort/Tiktato/releases/download/v0.3.0/Tiktato.0.3.0.exe)
+- [Instalador de Windows v0.4.0](https://github.com/alvaro-salort/Tiktato/releases/download/v0.4.0/Tiktato.Setup.0.4.0.exe)
+- [Versión portable v0.4.0](https://github.com/alvaro-salort/Tiktato/releases/download/v0.4.0/Tiktato.0.4.0.exe)
 
 También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 
@@ -17,23 +23,29 @@ También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 
 ## Qué incluye
 
-- Conexión directa a un TikTok LIVE por nombre de usuario.
-- Reglas por **regalo**, **follow**, **share** y **like**.
-- Sonidos individuales por regalo (**Rosa**, **Eres increíble**, **GG**, **Maracas**, etc.) con catálogo integrado, tarjetas de acceso rápido y coincidencia por ID oficial (`giftId`).
-- Coincidencia bilingüe de regalos (español e inglés: *Rosa* / *Rose*, *Eres increíble* / *You're awesome*, etc.), comodines (`*rosa*`) y mínimo de monedas sin caer por error en el sonido por defecto.
-- Cooldown por regla y usuario para evitar spam.
-- Sonidos incluidos sintetizados (moneda, campanilla, pop, destello, fanfarria, redoble).
-- Subida de sonidos propios (MP3, WAV, OGG, M4A, AAC, FLAC, WEBM; máximo 30 MB) con preescucha instantánea.
-- Overlay transparente para OBS con animación, avatar, imagen del regalo, monedas y nombre del sonido.
-- **Frasco de donaciones** que se llena con las monedas de los regalos, con meta configurable, porcentaje y regalos recientes.
-- **Voz para el chat y regalos (TTS)**: Síntesis de voz en tiempo real con Google Natural Voices y soporte para voces locales de Windows, plantillas personalizables (`{user}: {message}` y `{user} envió {count} {gift}`), cola inteligente con auto-ducking (baja el volumen de los efectos mientras habla la voz) y selector de volumen/velocidad.
-- **Filtro anti-spam y rachas de combos opcionales**: Control de spam para acortar letras repetidas o comandos de chat, con opción para mantener el sonido rápido de racha en cada impacto si quieres que se escuche repetidas veces.
-- URL de overlay y frasco protegidas con token aleatorio.
-- Estadísticas básicas, feed de actividad y pruebas individuales por cada regla o evento.
-- Inicio de sesión por **código QR** dentro de la app, para salas privadas, +18 o LIVE de prueba.
-- Sesión de TikTok guardada cifrada con el llavero de Windows.
-- Campo de **roomId manual** para conectar una sala que TikTok no publica en su API.
-- Conexión sin Euler Stream, sin claves de API y sin servidor de firma de pago.
+- **Diseño de panel limpio y accesible**: Distribución por pestañas (*Sonidos*, *OBS y frasco*, *Voz*) con columna lateral persistente de conexión, estadísticas y feed de actividad en vivo.
+- **Conexión directa**: Conéctate a tu TikTok LIVE simplemente con tu nombre de usuario, sin Euler Stream ni servidores de pago.
+- **Reglas de sonido personalizables**: Asigna sonidos específicos a **regalos**, **follows**, **shares** y **likes**.
+- **Catálogo de regalos integrado**: Tarjetas rápidas y detección por `giftId` oficial (Rosa, Eres increíble, GG, Maracas, Galaxia, TikTok Universe, etc.) con coincidencia bilingüe (español/inglés) y comodines.
+- **Biblioteca y sonidos propios**: Incluye sonidos sintetizados de fábrica (moneda, campanilla, pop, destello, fanfarria, redoble) y permite importar tus propios archivos de audio (MP3, WAV, OGG, M4A, AAC, FLAC, WEBM hasta 30 MB).
+- **Overlay de alertas para OBS**: Notificación animada transparente con avatar centrado, badge de monedas, etiqueta y barra de progreso.
+- **Frasco de Donaciones Pro (Física 2D con Matter.js)**:
+  - Botella de vidrio multicapa SVG con efectos de transparencia y reflejos.
+  - Simulación física 2D en tiempo real: los regalos caen y rebotan dentro de la botella.
+  - Escala logarítmica de radio según el valor del regalo ($R \in [11, 100]\text{ px}$).
+  - Embudos de rebote superiores para impedir expulsión accidental.
+  - Carrusel rotativo de máximos donantes (Leaderboard) con medallas e insignias.
+  - Alerta emergente cómic en cada donación y partículas de celebración al alcanzar la meta.
+  - Modo de calibración/prueba con HUD interactivo (`/jar?test=1`).
+  - Optimización de rendimiento que suspende la física si la fuente de OBS está oculta.
+- **Voz para Chat y Regalos (TTS)**:
+  - Selector de dialectos naturales de Google (España, LatAm, México, Argentina, EE.UU.) y compatibilidad automática con todas las voces del sistema instaladas en Windows (Microsoft Sabina, Helena, etc.).
+  - Plantillas configurables (`{user}: {message}` y `{user} envió {count} {gift}`).
+  - Cola inteligente con **auto-ducking** (atenúa los efectos sonoros mientras se reproduce la voz).
+  - Filtro anti-spam activado por defecto (recorta caracteres repetidos y descarta comandos como `!help`).
+  - Rachas de combos fluidas para escuchar repeticiones cómicas cuando los espectadores envían ráfagas.
+- **Seguridad y privacidad**: URLs de OBS protegidas mediante tokens únicos. Credenciales de sesión cifradas localmente con el llavero seguro de Windows (`safeStorage`).
+- **Soporte para salas privadas / QR**: Generación de código QR directo en la app para conectar salas que TikTok no expone de forma pública.
 
 ![Overlay para OBS](docs/overlay.png)
 
@@ -42,121 +54,54 @@ También puedes ejecutarlo desde el código con `npm install` y `npm start`.
 ## Stack
 
 - Electron 45
+- Matter.js 0.20 (Física 2D offline para el frasco)
 - Node.js 22.19+ (recomendado 24 LTS o 26)
-- [`piratetok-live-js`](https://github.com/PirateTok/live-js) para los eventos del LIVE, con firma local y sin servidor externo
-- `ws` para el canal local entre Electron y el overlay
-- HTML, CSS y JavaScript sin framework en la interfaz
+- [`piratetok-live-js`](https://github.com/PirateTok/live-js) para eventos de TikTok LIVE con firma local
+- `ws` para comunicación WebSocket bidireccional entre Electron y los overlays
+- HTML5, CSS3 moderno y JavaScript vanilla en la interfaz
 
-## Instalación
+## Instalación y desarrollo
 
 ```bash
 npm install
 npm start
 ```
 
-Para desarrollo con DevTools:
+Para abrir con herramientas de desarrollo (DevTools):
 
 ```bash
 npm run dev
 ```
 
-Para ejecutar las pruebas:
+Para ejecutar las pruebas automatizadas (50 tests unitarios y de integración):
 
 ```bash
 npm test
 ```
 
-Para generar instaladores de Windows:
+Para empaquetar instaladores de Windows:
 
 ```bash
 npm run dist
 ```
 
-Los artefactos quedan en `dist/`.
+Los ejecutables generados se guardan en la carpeta `dist/`.
 
-## Uso rápido
+## Configuración rápida en OBS
 
-1. Inicia un directo en TikTok desde el móvil o desde LIVE Studio.
-2. Abre Tiktato y escribe tu usuario de TikTok, sin la `@`.
-3. Pulsa **Conectar LIVE**.
-4. Configura tus sonidos en **Reglas de sonido**:
-   - Por defecto: Cualquier regalo → Moneda, Follow → Campanilla, Share → Pop.
-   - Pulsa en los regalos destacados (**Rosa**, **Eres increíble**, **GG**, **Maracas**, etc.) o en **Añadir regla de regalo** para asignarles su propio sonido (incluido o MP3 propio).
-   - Puedes probar cada regla individualmente con su botón de **Probar**.
-5. En OBS, añade una **Fuente de navegador** de `800 × 600` y pega la URL que aparece en **Overlay**.
-6. Usa los botones **Regalo / Follow / Share / Like** de la sección **Actividad** para comprobar que el overlay y el audio funcionan.
-
-### Si TikTok rechaza la conexión
-
-La conexión es anónima y no usa Euler ni claves de API. Si TikTok no encuentra la sala:
-
-1. Comprueba que el LIVE está iniciado y que han pasado 1–2 minutos.
-2. Usa el **uniqueId** exacto de la URL de tu perfil (`tiktok.com/@tu_usuario`), no el nombre visible. Si TikTok responde `user_not_found`, el nombre no coincide.
-3. Si es el **LIVE de prueba de Live Studio**, pulsa **Iniciar sesión con TikTok (QR)** en **Sesión opcional**, escanea el código con tu móvil y vuelve a conectar. TikTok no publica esas salas en la API anónima.
-4. Si ya tienes el `roomId` de la sala de prueba, pégalo en **Room ID manual** y conecta.
-5. Como alternativa manual, copia `sessionid` y `tt-target-idc` de las cookies de una sesión iniciada en el navegador y pégalas en **Sesión opcional**.
-6. Desactiva VPN/proxy si TikTok bloquea la región.
-
-> TikTok puede pedir captcha o verificación adicional durante el login QR. Tiktato no recibe ni guarda tu contraseña; solo conserva las cookies de sesión cifradas.
-
-![Login QR de TikTok dentro de Tiktato](docs/tiktok-login.png)
-
-> Las cookies son credenciales. Tiktato las guarda cifradas con `safeStorage` de Electron y no las envía a ningún servidor propio.
-
-## Overlay en OBS
-
-- Fuente: **Navegador**.
-- Resolución: `800 × 600` o la que use tu escena.
-- URL: la que muestra el panel, con su token.
-- Audio: el overlay reproduce el sonido desde el navegador. Activa la salida de audio de la fuente o usa **Controlar audio vía OBS**.
-- Si también quieres escuchar los sonidos en el panel, deja activada **Reproducir también en esta ventana**. Si no, desactívala para no duplicar el audio.
-
-El overlay se sirve solo en `127.0.0.1` y el token impide que otra página local se conecte al flujo de eventos.
-
-## Frasco de donaciones
-
-El paso **04** del panel tiene su propia URL de OBS. El frasco se llena con las monedas de los regalos y muestra los últimos regalos recibidos.
-
-- Cambia la **meta de monedas** en el panel.
-- Pulsa **Reiniciar** para volver a cero.
-- Usa **Vista previa** para abrirlo en el navegador.
-- La URL del frasco también está protegida por token.
+1. Inicia tu directo en TikTok.
+2. Abre Tiktato, escribe tu usuario en el panel lateral y pulsa **Conectar**.
+3. En la pestaña **OBS y frasco**, copia la URL que desees:
+   - **Overlay de alertas**: Fuente de navegador de `800 × 600`.
+   - **Frasco de donaciones Pro**: Fuente de navegador de `800 × 800` (o resolución preferida).
+   - **Frasco de prueba**: URL con parámetro `?test=1` para calibrar la escena y probar botones de regalos.
+4. En las propiedades de la fuente de navegador en OBS, activa **Controlar audio vía OBS** para gestionar el volumen desde el mezclador.
 
 ## Datos y privacidad
 
-- Configuración, sonidos y logs: `%APPDATA%\tiktato` en Windows.
-- No hay telemetría ni cuenta propia.
-- La app se conecta únicamente a TikTok; no usa un servicio de firma externo.
-- El servidor del overlay escucha únicamente en localhost.
-
-Puedes abrir la carpeta desde el pie del panel o borrar `%APPDATA%\tiktato` para empezar de cero.
-
-## Estructura
-
-```text
-electron/
-  main.cjs             Proceso principal de Electron e IPC
-  config.cjs           Configuración, sonidos y validación
-  gifts-catalog.cjs    Catálogo bilingüe de regalos y sinónimos
-  alert-matcher.cjs    Motor de reglas, giftId y cooldown
-  events.cjs           Normalización de eventos de TikTok
-  tiktok-service.cjs   Conexión y eventos del LIVE
-  overlay-server.cjs   HTTP + WebSocket local para OBS
-  preload.cjs          Puente seguro con la interfaz
-renderer/              Panel de control
-overlay/               Página transparente para OBS
-shared/                Motor de audio compartido
-tests/                 Pruebas de reglas, configuración y overlay
-```
-
-## Qué no incluye (por ahora)
-
-TikFinity tiene muchas más funciones. Este MVP se centra en lo que pediste:
-
-- No hay TTS, Spotify, chatbot, puntos, niveles, metas, ruletas ni integraciones con Minecraft/GTA.
-- No hay login propio ni sincronización en la nube.
-- No hay editor visual avanzado de overlays: la personalización actual es título, color, posición, duración e imagen del regalo.
-- La conexión real se validó contra un LIVE público. TikTok puede cambiar su API interna; si eso pasa, habrá que actualizar `piratetok-live-js`.
+- Configuración, sonidos y logs se almacenan localmente en `%APPDATA%\tiktato`.
+- No hay servidores intermedios, cuentas externas ni telemetría.
+- El servidor de overlays escucha únicamente en localhost (`127.0.0.1`).
 
 ## Licencia
 

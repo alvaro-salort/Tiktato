@@ -232,7 +232,13 @@ class OverlayServer {
       return;
     }
 
-    if (pathname === '/jar' || pathname === '/jar/') {
+    if (
+      pathname === '/jar' ||
+      pathname === '/jar/' ||
+      pathname === '/jar/test' ||
+      pathname === '/jar/test/' ||
+      pathname === '/jar-test'
+    ) {
       response.setHeader(
         'Content-Security-Policy',
         "default-src 'self' https: data:; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* https: data: blob:; media-src 'self' http://127.0.0.1:* https: data: blob:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*;"
@@ -249,6 +255,19 @@ class OverlayServer {
     if (pathname === '/jar.css') {
       serveFile(request, response, path.join(this.overlayDir, 'jar.css'));
       return;
+    }
+
+    if (pathname === '/matter.min.js' || pathname === '/matter.js') {
+      serveFile(request, response, path.join(this.overlayDir, 'matter.min.js'));
+      return;
+    }
+
+    if (pathname.startsWith('/assets/')) {
+      const assetFile = safeChild(path.join(this.overlayDir, 'assets'), pathname.slice('/assets/'.length));
+      if (assetFile) {
+        serveFile(request, response, assetFile, { cache: true });
+        return;
+      }
     }
 
     if (pathname === '/shared/audio-engine.js') {
@@ -344,6 +363,10 @@ class OverlayServer {
 
   getJarUrl() {
     return `http://127.0.0.1:${this.port}/jar?token=${this.token}`;
+  }
+
+  getJarTestUrl() {
+    return `http://127.0.0.1:${this.port}/jar?token=${this.token}&test=1`;
   }
 
   async stop() {

@@ -284,6 +284,12 @@ function setInputValue(selector, value) {
   input.value = value ?? '';
 }
 
+function setInputChecked(selector, checked) {
+  const input = $(selector);
+  if (!input || document.activeElement === input) return;
+  input.checked = Boolean(checked);
+}
+
 function render(nextState) {
   if (!nextState) return;
   state = nextState;
@@ -573,6 +579,7 @@ function renderJar() {
   const percent = Math.max(0, Math.min(100, Number(jar.percent) || 0));
   setInputValue('#jarGoal', jar.goalCoins);
   setInputValue('#jarUrl', state.jarUrl || '');
+  setInputValue('#jarTestUrl', state.jarTestUrl || '');
   const fill = $('#jarFill');
   const percentLabel = $('#jarPercent');
   const amount = $('#jarAmount');
@@ -583,6 +590,55 @@ function renderJar() {
   if (gifts) gifts.textContent = `${formatNumber(jar.currentGifts)} regalos`;
   const card = $('#jarCard');
   if (card) card.classList.toggle('is-complete', percent >= 100);
+
+  // Sincronizar campos del diálogo de personalización del frasco
+  setInputValue('#jarTitleInput', jar.title || 'Frasco de donaciones');
+  setInputValue('#jarScaleInput', jar.scale ?? 1.0);
+  setInputValue('#jarGiftScaleInput', jar.giftScale ?? 1.0);
+  setInputValue('#jarGiftType', jar.giftType || 'allGifts');
+  setInputValue('#jarMinimumValue', jar.minimumValue ?? 1);
+  setInputValue('#jarNumberOfRanks', jar.numberOfRanks || 'top5');
+  setInputValue('#jarLeaderboardDuration', jar.leaderboardDuration || 5);
+  setInputValue('#jarAlertDuration', jar.alertDuration || 5);
+  setInputValue('#jarAccentInput', jar.accent || '#e83e5f');
+  setInputChecked('#jarShowTotalCoins', jar.showTotalCoins !== false);
+  setInputChecked('#jarDisplayLeaderboard', jar.displayLeaderboard !== false);
+  setInputChecked('#jarDisplayAlert', jar.displayAlert !== false);
+  setInputChecked('#jarDisplayRankBadges', jar.displayRankBadges !== false);
+
+  setInputValue('#jarXOffsetInput', jar.xOffset || 0);
+  setInputValue('#jarYOffsetInput', jar.yOffset || 0);
+  const selectedStr = Array.isArray(jar.selectedGifts) ? jar.selectedGifts.join(', ') : '';
+  setInputValue('#jarSelectedGiftsInput', selectedStr);
+
+  const minValWrap = $('#jarMinValWrap');
+  if (minValWrap) minValWrap.hidden = jar.giftType !== 'minimumValue';
+  const selWrap = $('#jarSelectedGiftsWrap');
+  if (selWrap) selWrap.hidden = jar.giftType !== 'selectedGifts';
+}
+
+function populateVoiceOptions(selectedVoiceId) {
+  const select = $('#ttsVoiceProvider');
+  const localGroup = $('#ttsLocalVoicesGroup');
+  if (!select || !localGroup) return;
+
+  if (typeof window !== 'undefined' && window.speechSynthesis) {
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (voices.length > 0) {
+      localGroup.innerHTML = voices
+        .map((v) => {
+          const val = `local:${v.name}`;
+          const isSelected = selectedVoiceId === val || (selectedVoiceId === 'local' && v.default);
+          const langLabel = v.lang ? ` (${v.lang})` : '';
+          return `<option value="${escapeHtml(val)}" ${isSelected ? 'selected' : ''}>${escapeHtml(v.name)}${langLabel}</option>`;
+        })
+        .join('');
+    }
+  }
+
+  if (selectedVoiceId && select) {
+    select.value = selectedVoiceId;
+  }
 }
 
 function renderTTS() {
@@ -604,7 +660,10 @@ function renderTTS() {
   if (duckingCheckbox) duckingCheckbox.checked = tts.ducking !== false;
   if (streaksCheckbox) streaksCheckbox.checked = tts.playEveryStreak !== false;
   if (antiSpamCheckbox) antiSpamCheckbox.checked = Boolean(tts.antiSpam);
-  if (providerSelect) providerSelect.value = tts.voiceProvider || 'google';
+  
+  const currentVoiceId = tts.voiceId || (tts.voiceProvider === 'google' ? `google:${tts.voiceLanguage || 'es-ES'}` : 'local');
+  populateVoiceOptions(currentVoiceId);
+  if (providerSelect) providerSelect.value = currentVoiceId;
 
   const volPercent = Math.round((tts.volume ?? 0.8) * 100);
   if (volumeSlider) volumeSlider.value = volPercent;
@@ -673,6 +732,7 @@ function handleIncomingEventForTTS(event) {
       text,
       username,
       type: 'chat',
+      voiceId: ttsSettings.voiceId,
       voiceProvider: ttsSettings.voiceProvider || 'google',
       voiceLanguage: ttsSettings.voiceLanguage || 'es-ES',
       volume: (state.masterVolume ?? 0.8) * (ttsSettings.volume ?? 0.8),
@@ -692,6 +752,7 @@ function handleIncomingEventForTTS(event) {
       text,
       username,
       type: 'gift',
+      voiceId: ttsSettings.voiceId,
       voiceProvider: ttsSettings.voiceProvider || 'google',
       voiceLanguage: ttsSettings.voiceLanguage || 'es-ES',
       volume: (state.masterVolume ?? 0.8) * (ttsSettings.volume ?? 0.8),
@@ -994,6 +1055,7 @@ function wireEvents() {
   $('#btnAdvancedRules').addEventListener('click', () => openDialog('#rulesDialog'));
   $('#btnSounds').addEventListener('click', () => openDialog('#soundsDialog'));
   $('#btnOverlaySettings').addEventListener('click', () => openDialog('#overlayDialog'));
+  $('#btnJarSettings')?.addEventListener('click', () => openDialog('#jarDialog'));
   $('#btnHelpConnect').addEventListener('click', () => {
     $('#helpDialog').close();
     $('#connectForm').requestSubmit();
@@ -1260,6 +1322,32 @@ function wireEvents() {
 
   $('#btnOpenJar').addEventListener('click', () => api.openJar());
 
+  $('#btnCopyJarTest')?.addEventListener('click', async () => {
+    try {
+      await api.copyJarTestUrl();
+      showToast('URL del frasco de prueba copiada');
+    } catch {
+      showToast('No se pudo copiar la URL', 'error');
+    }
+  });
+
+  $('#btnOpenJarTest')?.addEventListener('click', () => api.openJarTest());
+
+  $('#btnTestGiftRose')?.addEventListener('click', async () => {
+    await api.testJarGift({ giftName: 'Rosa', coins: 1, repeatCount: 1 });
+    showToast('Rosa de prueba enviada al frasco');
+  });
+
+  $('#btnTestGiftCombo')?.addEventListener('click', async () => {
+    await api.testJarGift({ giftName: 'Rosa', coins: 1, repeatCount: 10 });
+    showToast('Combo Rosa x10 enviado al frasco');
+  });
+
+  $('#btnTestGiftGalaxy')?.addEventListener('click', async () => {
+    await api.testJarGift({ giftName: 'Galaxia', coins: 1000, repeatCount: 1 });
+    showToast('Galaxia de prueba enviada al frasco');
+  });
+
   $('#btnResetJar').addEventListener('click', async () => {
     if (!confirm('¿Reiniciar el frasco a cero?')) return;
     state = await api.resetJar();
@@ -1270,6 +1358,38 @@ function wireEvents() {
   $('#jarGoal').addEventListener('change', (event) => {
     updateSettings({ jar: { goalCoins: Number(event.target.value) } }, 'Meta del frasco actualizada');
   });
+
+  const jarField = (selector, patch) => {
+    $(selector)?.addEventListener('change', (event) => updateSettings({ jar: patch(event.target) }));
+  };
+  jarField('#jarTitleInput', (input) => ({ title: input.value }));
+  jarField('#jarScaleInput', (input) => ({ scale: Number(input.value) }));
+  jarField('#jarGiftScaleInput', (input) => ({ giftScale: Number(input.value) }));
+  jarField('#jarXOffsetInput', (input) => ({ xOffset: Number(input.value) || 0 }));
+  jarField('#jarYOffsetInput', (input) => ({ yOffset: Number(input.value) || 0 }));
+  jarField('#jarGiftType', (input) => {
+    const minValWrap = $('#jarMinValWrap');
+    if (minValWrap) minValWrap.hidden = input.value !== 'minimumValue';
+    const selWrap = $('#jarSelectedGiftsWrap');
+    if (selWrap) selWrap.hidden = input.value !== 'selectedGifts';
+    return { giftType: input.value };
+  });
+  jarField('#jarSelectedGiftsInput', (input) => {
+    const list = input.value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return { selectedGifts: list };
+  });
+  jarField('#jarMinimumValue', (input) => ({ minimumValue: Number(input.value) }));
+  jarField('#jarNumberOfRanks', (input) => ({ numberOfRanks: input.value }));
+  jarField('#jarLeaderboardDuration', (input) => ({ leaderboardDuration: Number(input.value) }));
+  jarField('#jarAlertDuration', (input) => ({ alertDuration: Number(input.value) }));
+  jarField('#jarAccentInput', (input) => ({ accent: input.value }));
+  jarField('#jarShowTotalCoins', (input) => ({ showTotalCoins: input.checked }));
+  jarField('#jarDisplayLeaderboard', (input) => ({ displayLeaderboard: input.checked }));
+  jarField('#jarDisplayAlert', (input) => ({ displayAlert: input.checked }));
+  jarField('#jarDisplayRankBadges', (input) => ({ displayRankBadges: input.checked }));
 
   const overlayField = (selector, patch) => {
     $(selector).addEventListener('change', (event) => updateSettings({ overlay: patch(event.target) }));
@@ -1521,7 +1641,15 @@ function wireEvents() {
   });
 
   $('#ttsVoiceProvider')?.addEventListener('change', (e) => {
-    saveTtsPatch({ voiceProvider: e.target.value });
+    const val = e.target.value;
+    if (val.startsWith('google:')) {
+      const lang = val.split(':')[1] || 'es-ES';
+      saveTtsPatch({ voiceProvider: 'google', voiceLanguage: lang, voiceId: val });
+    } else if (val.startsWith('local:')) {
+      saveTtsPatch({ voiceProvider: 'local', voiceLanguage: 'es-ES', voiceId: val });
+    } else {
+      saveTtsPatch({ voiceProvider: val, voiceId: val });
+    }
   });
 
   $('#ttsVolume')?.addEventListener('input', (e) => {
@@ -1544,10 +1672,12 @@ function wireEvents() {
 
   $('#btnTestTTS')?.addEventListener('click', async () => {
     await audio.unlock();
+    const currentVoiceId = state?.tts?.voiceId || (state?.tts?.voiceProvider === 'google' ? `google:${state?.tts?.voiceLanguage || 'es-ES'}` : 'local');
     ttsQueue.enqueue({
       text: '¡Hola! La voz y el texto a voz de Tiktato están funcionando en directo.',
       username: 'Tiktato',
       type: 'test',
+      voiceId: currentVoiceId,
       voiceProvider: state?.tts?.voiceProvider || 'google',
       voiceLanguage: state?.tts?.voiceLanguage || 'es-ES',
       volume: (state?.masterVolume ?? 0.8) * (state?.tts?.volume ?? 0.8),
@@ -1598,7 +1728,60 @@ function wireEvents() {
   );
 }
 
+function setupTabs() {
+  const tabs = $$('[role="tab"][data-tab]');
+  if (tabs.length === 0) return;
+
+  const select = (name, { focus = false } = {}) => {
+    const target = tabs.find((tab) => tab.dataset.tab === name) || tabs[0];
+    for (const tab of tabs) {
+      const active = tab === target;
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+      const panel = document.getElementById(tab.getAttribute('aria-controls'));
+      if (panel) panel.hidden = !active;
+    }
+    if (focus) target.focus();
+    try {
+      localStorage.setItem('tiktato.tab', target.dataset.tab);
+    } catch {
+      // localStorage no disponible: la pestaña simplemente no se recuerda.
+    }
+  };
+
+  for (const tab of tabs) {
+    tab.addEventListener('click', () => select(tab.dataset.tab));
+    tab.addEventListener('keydown', (event) => {
+      const index = tabs.indexOf(tab);
+      let next = null;
+      if (event.key === 'ArrowRight') next = tabs[(index + 1) % tabs.length];
+      if (event.key === 'ArrowLeft') next = tabs[(index - 1 + tabs.length) % tabs.length];
+      if (event.key === 'Home') next = tabs[0];
+      if (event.key === 'End') next = tabs[tabs.length - 1];
+      if (next) {
+        event.preventDefault();
+        select(next.dataset.tab, { focus: true });
+      }
+    });
+  }
+
+  let saved = '';
+  try {
+    saved = localStorage.getItem('tiktato.tab') || '';
+  } catch {
+    saved = '';
+  }
+  select(saved || tabs[0].dataset.tab);
+}
+
 async function init() {
+  setupTabs();
+  if (typeof window !== 'undefined' && window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      const currentVoiceId = state?.tts?.voiceId || (state?.tts?.voiceProvider === 'google' ? `google:${state?.tts?.voiceLanguage || 'es-ES'}` : 'local');
+      populateVoiceOptions(currentVoiceId);
+    };
+  }
   if (!api) {
     setError('Esta interfaz debe abrirse dentro de Tiktato (Electron).');
     return;

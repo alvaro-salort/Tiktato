@@ -1,6 +1,6 @@
 {
   "name": "tiktato",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Alertas de sonido y overlays para donaciones y eventos de TikTok LIVE, sin suscripciones.",
   "main": "electron/main.cjs",
   "author": "Alvaro Salort",
@@ -15,6 +15,7 @@
     "dist": "electron-builder --win nsis portable"
   },
   "dependencies": {
+    "matter-js": "^0.20.0",
     "piratetok-live-js": "^0.3.0",
     "ws": "^8.22.1"
   },

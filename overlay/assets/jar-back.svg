@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 440" width="340" height="440" fill="none">
+  <defs>
+    <linearGradient id="backGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.14)" />
+      <stop offset="40%" stop-color="rgba(190, 220, 255, 0.08)" />
+      <stop offset="100%" stop-color="rgba(160, 200, 240, 0.16)" />
+    </linearGradient>
+    <linearGradient id="backBaseGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(220, 235, 255, 0.22)" />
+      <stop offset="100%" stop-color="rgba(140, 180, 225, 0.35)" />
+    </linearGradient>
+    <radialGradient id="backDepth" cx="50%" cy="60%" r="55%">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.03)" />
+      <stop offset="85%" stop-color="rgba(100, 150, 210, 0.12)" />
+      <stop offset="100%" stop-color="rgba(40, 70, 120, 0.22)" />
+    </radialGradient>
+    <filter id="softBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="6" />
+    </filter>
+  </defs>
+
+  <g transform="translate(0, 10)">
+    <!-- Sombra exterior difuminada de la base -->
+    <ellipse cx="170" cy="412" rx="135" ry="14" fill="rgba(0, 0, 0, 0.35)" filter="url(#softBlur)" />
+
+    <!-- Cuerpo interior trasero del frasco -->
+    <path d="M 55,20 L 285,20 L 285,70 L 315,100 L 315,370 L 290,395 L 50,395 L 25,370 L 25,100 L 55,70 Z"
+          fill="url(#backGrad)" />
+
+    <path d="M 55,20 L 285,20 L 285,70 L 315,100 L 315,370 L 290,395 L 50,395 L 25,370 L 25,100 L 55,70 Z"
+          fill="url(#backDepth)" />
+
+    <!-- Base trasera reforzada de vidrio -->
+    <path d="M 45,375 L 295,375 L 290,400 L 50,400 Z"
+          fill="url(#backBaseGrad)" opacity="0.6" />
+
+    <!-- Borde posterior suave -->
+    <path d="M 55,20 L 285,20 L 285,70 L 315,100 L 315,370 L 290,395 L 50,395 L 25,370 L 25,100 L 55,70 Z"
+          stroke="rgba(255, 255, 255, 0.18)" stroke-width="2" fill="none" />
+  </g>
+</svg>

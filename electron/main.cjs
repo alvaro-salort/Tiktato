@@ -8,11 +8,14 @@ const {
   deleteSoundFile,
   importSound,
   loadConfig,
+  normalizeJar,
   normalizeRule,
   normalizeTts,
   publicConfig,
   publicJar,
-  saveConfig
+  saveConfig,
+  shouldPassJarFilter,
+  updateTopDonorsList
 } = require('./config.cjs');
 const { buildAlert, markPlayed, selectRule } = require('./alert-matcher.cjs');
 const { makeTestEvent } = require('./events.cjs');
@@ -189,6 +192,10 @@ function jarUrl() {
   return overlayServer ? overlayServer.getJarUrl() : '';
 }
 
+function jarTestUrl() {
+  return overlayServer ? overlayServer.getJarTestUrl() : '';
+}
+
 function updateJarOverlay() {
   overlayServer?.setJar(publicJar(config));
 }
@@ -209,6 +216,7 @@ function publicState() {
       port: overlayServer?.port || base.overlay.port
     },
     jarUrl: jarUrl(),
+    jarTestUrl: jarTestUrl(),
     gifts: getActiveCatalog(),
     sounds: config.sounds.map((sound) => ({ ...sound, url: soundUrl(sound) })),
     status: tiktok ? tiktok.getStatus() : { state: 'disconnected', message: 'Sin conexión' },
@@ -338,13 +346,24 @@ function registerActivity(event, alert) {
 function addToJar(event) {
   if (event.type !== 'gift') return;
   if (event.repeatEnd === false) return;
+  if (!shouldPassJarFilter(config.jar, event)) return;
+
+  const coinsAdded = Math.max(0, Number(event.coins) || 0);
   config.jar.currentGifts += 1;
-  config.jar.currentCoins += Math.max(0, Number(event.coins) || 0);
+  config.jar.currentCoins += coinsAdded;
+
+  config.jar.topDonors = updateTopDonorsList(config.jar.topDonors, {
+    username: event.username,
+    displayName: event.displayName,
+    avatarUrl: event.avatarUrl,
+    coins: coinsAdded
+  });
+
   if (config.jar.showRecentGifts) {
     config.jar.recentGifts.unshift({
       name: event.giftName || 'Regalo',
       imageUrl: event.giftImageUrl || '',
-      coins: Number(event.coins) || 0,
+      coins: coinsAdded,
       username: event.username || '',
       at: new Date().toISOString()
     });
@@ -352,6 +371,24 @@ function addToJar(event) {
   }
   config = saveConfig(app.getPath('userData'), config);
   updateJarOverlay();
+
+  const value =
+    event.coinsPerGift ||
+    (event.repeatCount ? Math.round(coinsAdded / event.repeatCount) : coinsAdded) ||
+    1;
+  const jarPayload = {
+    value,
+    giftPictureUrl: event.giftImageUrl || '',
+    giftName: event.giftName || 'Regalo',
+    repeatCount: Math.max(1, Number(event.repeatCount) || 1),
+    username: event.username || 'alguien',
+    displayName: event.displayName || event.username || 'Alguien',
+    profilePictureUrl: event.avatarUrl || '',
+    coins: coinsAdded,
+    test: Boolean(event.test)
+  };
+
+  overlayServer?.broadcast({ type: 'coin-jar:gift', ...jarPayload });
 }
 
 function processEvent(event) {
@@ -422,15 +459,11 @@ function applySettings(patch) {
   }
 
   if (patch.jar && typeof patch.jar === 'object') {
-    const jar = patch.jar;
-    if (typeof jar.title === 'string') config.jar.title = jar.title.trim().slice(0, 40) || 'Frasco de donaciones';
-    if (jar.goalCoins !== undefined) {
-      config.jar.goalCoins = Math.max(1, Math.min(1_000_000_000, Number(jar.goalCoins) || 1000));
-    }
-    if (typeof jar.accent === 'string' && /^#[0-9a-f]{6}$/i.test(jar.accent)) {
-      config.jar.accent = jar.accent;
-    }
-    if (typeof jar.showRecentGifts === 'boolean') config.jar.showRecentGifts = jar.showRecentGifts;
+    config.jar = normalizeJar({
+      ...config.jar,
+      ...patch.jar
+    });
+    updateJarOverlay();
   }
 
   if (patch.tts && typeof patch.tts === 'object') {
@@ -785,12 +818,31 @@ function registerIpc() {
     return { ok: true };
   });
 
+  ipcMain.handle('jar:copy-test', () => {
+    clipboard.writeText(jarTestUrl());
+    return { ok: true, url: jarTestUrl() };
+  });
+
+  ipcMain.handle('jar:open-test', async () => {
+    if (jarTestUrl()) await shell.openExternal(jarTestUrl());
+    return { ok: true };
+  });
+
+  ipcMain.handle('jar:test-gift', (_event, sample) => {
+    const testEvt = makeTestEvent(sample || { giftName: 'Rosa', coins: 1, repeatCount: 1 });
+    addToJar(testEvt);
+    sendState();
+    return { ok: true, state: publicState() };
+  });
+
   ipcMain.handle('jar:reset', () => {
     config.jar.currentCoins = 0;
     config.jar.currentGifts = 0;
     config.jar.recentGifts = [];
+    config.jar.topDonors = [];
     config = saveConfig(app.getPath('userData'), config);
     updateJarOverlay();
+    overlayServer?.broadcast({ type: 'coin-jar:reset' });
     sendState();
     return publicState();
   });

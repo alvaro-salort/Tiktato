@@ -143,6 +143,20 @@ test('sirve el frasco y su estado protegido', async () => {
     assert.equal(page.status, 200);
     assert.match(await page.text(), /Frasco de donaciones/);
 
+    const testPage = await fetch(`http://127.0.0.1:${server.port}/jar/test`);
+    assert.equal(testPage.status, 200);
+    assert.match(await testPage.text(), /Frasco de donaciones/);
+
+    const matterJs = await fetch(`http://127.0.0.1:${server.port}/matter.min.js`);
+    assert.equal(matterJs.status, 200);
+
+    const jarBackSvg = await fetch(`http://127.0.0.1:${server.port}/assets/jar-back.svg`);
+    assert.equal(jarBackSvg.status, 200);
+    assert.match(await jarBackSvg.text(), /<svg/);
+
+    assert.equal(server.getJarUrl(), `http://127.0.0.1:${server.port}/jar?token=${token}`);
+    assert.equal(server.getJarTestUrl(), `http://127.0.0.1:${server.port}/jar?token=${token}&test=1`);
+
     const denied = await fetch(`http://127.0.0.1:${server.port}/api/jar`);
     assert.equal(denied.status, 401);
 

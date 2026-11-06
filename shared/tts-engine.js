@@ -137,10 +137,14 @@ export class TTSQueue {
       this.soundEngine.restore();
     }
 
+    const voiceId = item.voiceId || (item.voiceProvider === 'google' ? 'google:es-ES' : 'local');
+    const isGoogle = voiceId.startsWith('google:') || (!voiceId.startsWith('local:') && item.voiceProvider === 'google');
+
     try {
-      if (item.voiceProvider === 'google') {
+      if (isGoogle) {
         try {
-          await this.#speakGoogle(item);
+          const googleLang = voiceId.startsWith('google:') ? voiceId.slice(7) : (item.voiceLanguage || 'es-ES');
+          await this.#speakGoogle({ ...item, voiceLanguage: googleLang });
         } catch (googleError) {
           console.warn('[tts] Google Speech API v2 falló, intentando voz local', googleError);
           await this.#speakLocal(item);
@@ -255,7 +259,21 @@ export class TTSQueue {
       };
 
       const utterance = new SpeechSynthesisUtterance(item.text);
-      utterance.lang = item.voiceLanguage || 'es-ES';
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        const voices = window.speechSynthesis.getVoices() || [];
+        const voiceName = item.voiceId?.startsWith('local:')
+          ? item.voiceId.slice(6)
+          : item.voiceName || '';
+        const match = voices.find((v) => v.name === voiceName || v.voiceURI === voiceName);
+        if (match) {
+          utterance.voice = match;
+          utterance.lang = match.lang;
+        } else {
+          utterance.lang = item.voiceLanguage || 'es-ES';
+        }
+      } else {
+        utterance.lang = item.voiceLanguage || 'es-ES';
+      }
       utterance.volume = Math.max(0, Math.min(1, Number(item.volume ?? 0.8)));
       this.currentUtterance = utterance;
 
