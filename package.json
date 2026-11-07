@@ -32,7 +32,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "postinstall": "patch-package",
+    "postinstall": "node scripts/apply-patches.cjs",
     "test": "node --test \"tests/*.test.cjs\"",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win nsis portable",
@@ -45,8 +45,7 @@
   },
   "devDependencies": {
     "electron": "^45.2.1",
-    "electron-builder": "^26.18.0",
-    "patch-package": "^8.0.1"
+    "electron-builder": "^26.18.0"
   },
   "build": {
     "appId": "com.alvarosalort.tiktato",

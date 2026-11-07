@@ -35,7 +35,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci --loglevel=error
+        run: npm ci
 
       - name: Run unit tests
         run: npm test
