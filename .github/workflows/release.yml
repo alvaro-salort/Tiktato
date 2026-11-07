@@ -5,9 +5,19 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publicar automáticamente en GitHub Releases'
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  NODE_NO_WARNINGS: '1'
 
 jobs:
   build-windows:
@@ -25,22 +35,40 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --loglevel=error
 
       - name: Run unit tests
         run: npm test
 
-      - name: Build Windows installer (tag push -> publish release)
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win nsis portable --publish always
-
-      - name: Build Windows installer (manual run -> artifact only)
-        if: "!startsWith(github.ref, 'refs/tags/v')"
+      - name: Build Windows installer (NSIS & Portable)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win nsis portable --publish never
+
+      - name: Publish to GitHub Releases
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release != false
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $pkg = Get-Content -Raw -Path package.json | ConvertFrom-Json
+          $tag = if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $env:GITHUB_REF -replace '^refs/tags/', ''
+          } else {
+            "v$($pkg.version)"
+          }
+          Write-Host "Publicando release $tag..."
+          $files = Get-ChildItem -Path "dist\*.exe", "dist\*.blockmap", "dist\latest.yml" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+          if (-not $files -or $files.Count -eq 0) {
+            throw "No se encontraron instaladores en dist/"
+          }
+          gh release view $tag > $null 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag @files --clobber
+            gh release edit $tag --draft=false --latest
+          } else {
+            gh release create $tag @files --title "Tiktato $tag" --generate-notes --latest
+          }
 
       - name: Upload Windows installers as workflow artifacts
         uses: actions/upload-artifact@v4

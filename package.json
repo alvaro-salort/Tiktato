@@ -57,7 +57,8 @@
       {
         "provider": "github",
         "owner": "alvaro-salort",
-        "repo": "Tiktato"
+        "repo": "Tiktato",
+        "releaseType": "release"
       }
     ],
     "directories": {
