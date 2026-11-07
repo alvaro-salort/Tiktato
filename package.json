@@ -33,7 +33,7 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "postinstall": "patch-package",
-    "test": "node --test tests",
+    "test": "node --test \"tests/*.test.cjs\"",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win nsis portable",
     "release": "electron-builder --win nsis portable --publish always"
