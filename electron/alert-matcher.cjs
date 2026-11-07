@@ -119,7 +119,11 @@ function markPlayed(rule, event, cooldowns = new Map(), now = Date.now()) {
   return cooldowns;
 }
 
-function buildAlert(event, rule, { sound, now = Date.now(), test = false } = {}) {
+function buildAlert(event, rule, { sound, now = Date.now(), test = false, playEveryStreak = false } = {}) {
+  const repeat =
+    event.type === 'gift' && playEveryStreak
+      ? Math.max(1, Number(event.streakDelta ?? event.repeatCount ?? 1))
+      : 1;
   return {
     id: `alert_${now}_${Math.random().toString(36).slice(2, 8)}`,
     type: event.type,
@@ -131,6 +135,7 @@ function buildAlert(event, rule, { sound, now = Date.now(), test = false } = {})
     giftImageUrl: event.giftImageUrl || rule.giftImageUrl || '',
     coins: Number(event.coins || 0),
     repeatCount: Number(event.repeatCount || 1),
+    streakDelta: Number(event.streakDelta ?? event.repeatCount ?? 1),
     message: event.message || '',
     createdAt: new Date(now).toISOString(),
     test: Boolean(test || event.test),
@@ -142,7 +147,8 @@ function buildAlert(event, rule, { sound, now = Date.now(), test = false } = {})
           kind: sound.kind || (String(rule.soundId).startsWith('builtin:') ? 'builtin' : 'file'),
           key: sound.key || String(rule.soundId).replace('builtin:', ''),
           url: sound.url || '',
-          volume: Number(rule.volume ?? 1)
+          volume: Number(rule.volume ?? 1),
+          repeat
         }
       : null
   };

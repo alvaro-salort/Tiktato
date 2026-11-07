@@ -1,18 +1,42 @@
 {
   "name": "tiktato",
-  "version": "0.4.0",
-  "description": "Alertas de sonido y overlays para donaciones y eventos de TikTok LIVE, sin suscripciones.",
+  "version": "0.4.5",
+  "description": "TikTato es una aplicación de escritorio de código abierto para streamers de TikTok LIVE que permite automatizar y configurar alertas de sonido, overlays para OBS y TikTok LIVE Studio, leer los mensajes del chat con voz (TTS), interactuar con la audiencia y crear salas de juego interactivas.",
   "main": "electron/main.cjs",
-  "author": "Alvaro Salort",
-  "license": "MIT",
-  "private": true,
+  "author": {
+    "name": "Alvaro Salort",
+    "email": "alvarosalort9@gmail.com",
+    "url": "https://github.com/alvaro-salort"
+  },
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/alvaro-salort/Tiktato",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alvaro-salort/Tiktato.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alvaro-salort/Tiktato/issues"
+  },
+  "keywords": [
+    "tiktok",
+    "tiktok-live",
+    "streamer",
+    "alerts",
+    "tts",
+    "overlay",
+    "obs",
+    "tiktok-live-studio",
+    "electron"
+  ],
+  "private": false,
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
     "postinstall": "patch-package",
     "test": "node --test tests/*.test.cjs",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder --win nsis portable"
+    "dist": "electron-builder --win nsis portable",
+    "release": "electron-builder --win nsis portable --publish always"
   },
   "dependencies": {
     "matter-js": "^0.20.0",
@@ -25,9 +49,17 @@
     "patch-package": "^8.0.1"
   },
   "build": {
-    "appId": "com.tiktato.app",
+    "appId": "com.alvarosalort.tiktato",
     "productName": "Tiktato",
+    "copyright": "Copyright © 2026 Alvaro Salort",
     "asar": true,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "alvaro-salort",
+        "repo": "Tiktato"
+      }
+    ],
     "directories": {
       "output": "dist"
     },
@@ -37,20 +69,44 @@
       "overlay/**/*",
       "shared/**/*",
       "build/icon.png",
+      "LICENSE",
       "package.json",
       "!**/*.map",
       "!tests/**/*"
     ],
     "win": {
       "icon": "build/icon.ico",
+      "executableName": "Tiktato",
+      "legalTrademarks": "Alvaro Salort",
+      "requestedExecutionLevel": "asInvoker",
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Tiktato",
+      "uninstallDisplayName": "Tiktato",
+      "license": "LICENSE",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
     }
   }
 }

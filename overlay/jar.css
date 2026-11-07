@@ -452,3 +452,79 @@ body {
 .test-btn-danger:hover {
   background: rgba(255, 107, 129, 0.2);
 }
+
+/* ───────── MODO TIKTOK LIVE STUDIO (CAPTURA DE VENTANA) ───────── */
+body.studio-bg-green {
+  background: #00ff00 !important;
+}
+
+body.studio-bg-dark {
+  background: #141218 !important;
+}
+
+body.studio-bg-blue {
+  background: #0033ff !important;
+}
+
+body.studio-bg-magenta {
+  background: #ff00ff !important;
+}
+
+.studio-hud {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  background: rgba(20, 18, 24, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(12px);
+  z-index: 120;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+
+body:hover .studio-hud,
+.studio-hud:focus-within {
+  opacity: 1;
+}
+
+.studio-hud-badge {
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  background: rgba(16, 165, 151, 0.35);
+  color: #fff;
+}
+
+.studio-hud-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.studio-bg-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.studio-bg-btn.is-active,
+.studio-bg-btn:hover {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.45);
+}

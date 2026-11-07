@@ -24,7 +24,9 @@ const LABELS = {
   gift: 'REGALO',
   follow: 'NUEVO FOLLOW',
   share: 'COMPARTIDO',
-  like: 'LIKES'
+  like: 'LIKES',
+  subscribe: 'SUSCRIPCIÓN',
+  join: 'ENTRÓ AL LIVE'
 };
 
 function applyConfig(nextConfig) {
@@ -72,6 +74,8 @@ function detailFor(alert) {
   }
   if (alert.type === 'follow') return 'empezó a seguirte';
   if (alert.type === 'share') return 'compartió el directo';
+  if (alert.type === 'subscribe') return 'se suscribió al canal';
+  if (alert.type === 'join') return 'entró al directo';
   return `envió ${Number(alert.repeatCount || 1)} likes`;
 }
 

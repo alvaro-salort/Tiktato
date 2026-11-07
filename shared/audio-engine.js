@@ -87,9 +87,14 @@ export class SoundEngine {
   }
 
   play(sound, volume = 1) {
-    const item = { sound, volume: Math.max(0, Math.min(2, Number(volume) || 0)) };
+    const repeat = Math.max(1, Math.min(50, Math.round(Number(sound?.repeat) || 1)));
+    const item = { sound, volume: Math.max(0, Math.min(2, Number(volume) || 0)), repeat };
     this.queue = this.queue
-      .then(() => this.#playOne(item.sound, item.volume))
+      .then(async () => {
+        for (let i = 0; i < item.repeat; i += 1) {
+          await this.#playOne(item.sound, item.volume);
+        }
+      })
       .catch((error) => console.warn('[audio] no se pudo reproducir', error));
     return this.queue;
   }

@@ -11,3 +11,8 @@ Thumbs.db
 .idea/
 coverage/
 *.asar
+*.pfx
+*.p12
+*.blockmap
+builder-effective-config.yaml
+Desktop.ini

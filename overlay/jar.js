@@ -5,6 +5,8 @@ const isTestMode =
   params.get('test') === '1' ||
   params.get('preview') === '1' ||
   location.pathname.includes('/test');
+const isStudioMode = params.get('studio') === '1';
+const initialBg = params.get('bg') || '';
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -31,6 +33,37 @@ const leaderboardUsername = $('#leaderboardUsername');
 const leaderboardCoins = $('#leaderboardCoins');
 const leaderboardProgressBar = $('#leaderboardProgressBar');
 const testHud = $('#testHud');
+const studioHud = $('#studioHud');
+
+function applyStudioBackground(bg) {
+  const mode = String(bg || 'transparent').toLowerCase();
+  document.body.classList.remove(
+    'studio-bg-green',
+    'studio-bg-dark',
+    'studio-bg-blue',
+    'studio-bg-magenta'
+  );
+  if (['green', 'dark', 'blue', 'magenta'].includes(mode)) {
+    document.body.classList.add(`studio-bg-${mode}`);
+  }
+  document.querySelectorAll('[data-bg]').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.bg === mode);
+  });
+}
+
+function setupStudioMode() {
+  if (initialBg) {
+    applyStudioBackground(initialBg);
+  }
+  if (!isStudioMode) return;
+  if (studioHud) studioHud.hidden = false;
+  applyStudioBackground(initialBg || 'green');
+  studioHud?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-bg]');
+    if (!btn) return;
+    applyStudioBackground(btn.dataset.bg);
+  });
+}
 
 // Configuration State
 let currentConfig = {
@@ -824,5 +857,6 @@ function setupTestMode() {
   // Tick de la cola de regalos (200ms - Sección 8.1)
   queueInterval = setInterval(processQueueTick, 200);
 
+  setupStudioMode();
   setupTestMode();
 })();

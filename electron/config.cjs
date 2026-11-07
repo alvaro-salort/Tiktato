@@ -2,7 +2,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const EVENT_TYPES = ['gift', 'follow', 'share', 'like', 'chat'];
+const EVENT_TYPES = ['gift', 'follow', 'share', 'like', 'chat', 'subscribe', 'join'];
 const BUILTIN_IDS = [
   'builtin:coin',
   'builtin:chime',
@@ -99,6 +99,7 @@ function createDefaultConfig() {
     tts: {
       enabled: true,
       chatEnabled: true,
+      readUsername: true,
       giftsEnabled: false,
       minCoins: 1,
       volume: 0.8,
@@ -109,7 +110,17 @@ function createDefaultConfig() {
       duckingLevel: 0.25,
       antiSpam: true,
       playEveryStreak: true,
-      maxChars: 120
+      maxChars: 120,
+      filterChatByRole: false,
+      allowModerators: true,
+      allowSubscribers: true,
+      allowHighlighted: true,
+      allowFriends: false,
+      allowFollowers: false,
+      allowGifter: false,
+      minGifterLevel: 1,
+      allowMember: false,
+      minMemberLevel: 1
     },
     rules: defaultRules(),
     sounds: []
@@ -296,6 +307,7 @@ function normalizeTts(input) {
   return {
     enabled: tts.enabled !== false,
     chatEnabled: tts.chatEnabled !== false,
+    readUsername: tts.readUsername !== false,
     giftsEnabled: tts.giftsEnabled === true,
     minCoins: Math.round(clampNumber(tts.minCoins, defaults.minCoins, 0, 1_000_000)),
     volume: clampNumber(tts.volume, defaults.volume, 0, 1),
@@ -306,7 +318,17 @@ function normalizeTts(input) {
     duckingLevel: clampNumber(tts.duckingLevel, defaults.duckingLevel, 0, 1),
     antiSpam: tts.antiSpam !== undefined ? Boolean(tts.antiSpam) : true,
     playEveryStreak: tts.playEveryStreak !== false,
-    maxChars: Math.round(clampNumber(tts.maxChars, defaults.maxChars, 20, 500))
+    maxChars: Math.round(clampNumber(tts.maxChars, defaults.maxChars, 20, 500)),
+    filterChatByRole: tts.filterChatByRole === true,
+    allowModerators: tts.allowModerators !== false,
+    allowSubscribers: tts.allowSubscribers !== false,
+    allowHighlighted: tts.allowHighlighted !== false,
+    allowFriends: tts.allowFriends === true,
+    allowFollowers: tts.allowFollowers === true,
+    allowGifter: tts.allowGifter === true,
+    minGifterLevel: Math.round(clampNumber(tts.minGifterLevel, defaults.minGifterLevel, 1, 100)),
+    allowMember: tts.allowMember === true,
+    minMemberLevel: Math.round(clampNumber(tts.minMemberLevel, defaults.minMemberLevel, 1, 100))
   };
 }
 

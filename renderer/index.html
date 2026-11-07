@@ -179,11 +179,18 @@
                 </div>
 
                 <div class="url-row">
-                  <input id="jarUrl" readonly aria-label="URL del frasco para OBS" />
-                  <button id="btnCopyJar" class="btn btn-primary" type="button">Copiar URL</button>
+                  <input id="jarUrl" readonly aria-label="URL del frasco para OBS o TikTok LIVE Studio" />
+                  <button id="btnCopyJar" class="btn btn-primary" type="button">Copiar enlace</button>
                 </div>
 
+                <ol class="overlay-steps">
+                  <li><span>1</span> <strong>TikTok LIVE Studio (Fuente Enlace):</strong> Pulsa <em>Añadir fuente → Enlace (Link)</em>, pega la URL y usa 800 × 800.</li>
+                  <li><span>2</span> <strong>TikTok LIVE Studio (Sin enlace):</strong> Pulsa <strong>Abrir ventana para LIVE Studio</strong> abajo y agrégala con <em>Captura de ventana</em> (elige <code>Tiktato - Frasco Pro</code> y activa Clave de color si usas fondo verde).</li>
+                  <li><span>3</span> <strong>En OBS Studio:</strong> Añade una fuente de <em>Navegador</em> con la URL a 800 × 800.</li>
+                </ol>
+
                 <div class="block-actions">
+                  <button id="btnOpenJarStudio" class="btn btn-secondary" type="button">Abrir ventana para LIVE Studio</button>
                   <button id="btnOpenJar" class="btn btn-ghost" type="button">Vista previa</button>
                   <button id="btnJarSettings" class="btn btn-ghost" type="button">Personalizar</button>
                   <button id="btnResetJar" class="btn btn-ghost btn-danger" type="button">Vaciar frasco</button>
@@ -244,6 +251,13 @@
                   </label>
                   <label class="toggle-row">
                     <span class="toggle-copy">
+                      <strong>Leer nombre del usuario</strong>
+                      <small>Ej: "Alvaro: hola amigo". Si lo desactivas, lee directo el mensaje.</small>
+                    </span>
+                    <span class="switch"><input id="ttsReadUsername" type="checkbox" checked /><span></span></span>
+                  </label>
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
                       <strong>Regalos</strong>
                       <small>Anuncia quién envió qué regalo.</small>
                     </span>
@@ -263,6 +277,51 @@
                     </span>
                     <span class="switch"><input id="ttsDucking" type="checkbox" checked /><span></span></span>
                   </label>
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
+                      <strong>Filtrar chat por rol o nivel (opcional)</strong>
+                      <small>Desactivado por defecto (lee todos los mensajes). Actívalo si tu chat va muy rápido.</small>
+                    </span>
+                    <span class="switch"><input id="ttsFilterChatByRole" type="checkbox" /><span></span></span>
+                  </label>
+                </div>
+
+                <div id="ttsRoleFiltersBox" class="field-stack" style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line-strong);" hidden>
+                  <small class="field-hint">Cuando el filtro está activo, el TTS solo leerá mensajes de quienes cumplan al menos una de estas condiciones:</small>
+                  <label class="checkline">
+                    <input id="ttsAllowModerators" type="checkbox" checked />
+                    <span>Moderadores del canal</span>
+                  </label>
+                  <label class="checkline">
+                    <input id="ttsAllowSubscribers" type="checkbox" checked />
+                    <span>Suscriptores y Superfans</span>
+                  </label>
+                  <label class="checkline">
+                    <input id="ttsAllowHighlighted" type="checkbox" checked />
+                    <span>Mensajes destacados / fijados</span>
+                  </label>
+                  <label class="checkline">
+                    <input id="ttsAllowFriends" type="checkbox" />
+                    <span>Amigos (seguidores mutuos)</span>
+                  </label>
+                  <label class="checkline">
+                    <input id="ttsAllowFollowers" type="checkbox" />
+                    <span>Seguidores</span>
+                  </label>
+                  <div style="display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px;">
+                    <label class="checkline">
+                      <input id="ttsAllowGifter" type="checkbox" />
+                      <span>Donadores desde nivel</span>
+                    </label>
+                    <input id="ttsMinGifterLevel" type="number" min="1" max="100" step="1" value="1" style="width: 72px; min-height: 32px;" aria-label="Nivel mínimo de donador" />
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px;">
+                    <label class="checkline">
+                      <input id="ttsAllowMember" type="checkbox" />
+                      <span>Miembros del club desde nivel</span>
+                    </label>
+                    <input id="ttsMinMemberLevel" type="number" min="1" max="100" step="1" value="1" style="width: 72px; min-height: 32px;" aria-label="Nivel mínimo del club" />
+                  </div>
                 </div>
               </section>
 
@@ -316,7 +375,7 @@
 
           <footer class="footer">
             <span>Tiktato no está afiliado a TikTok. Úsalo con cuentas que tengas derecho a analizar.</span>
-            <span class="footer-version">v0.4.0</span>
+            <span class="footer-version">v0.4.5</span>
           </footer>
         </main>
 
@@ -470,6 +529,8 @@
               <option value="follow">Follow</option>
               <option value="share">Share</option>
               <option value="like">Like</option>
+              <option value="subscribe">Suscripción</option>
+              <option value="join">Entrada (Join)</option>
             </select>
           </label>
           <label class="field gift-only">

@@ -1,5 +1,5 @@
 import { BUILTIN_SOUNDS, SoundEngine } from '../shared/audio-engine.js';
-import { TTSQueue, formatChatTTS, formatGiftTTS } from '../shared/tts-engine.js';
+import { TTSQueue, formatChatTTS, formatGiftTTS, shouldReadChatMessage } from '../shared/tts-engine.js';
 
 const api = window.tiktato;
 const audio = new SoundEngine();
@@ -20,7 +20,9 @@ const EVENT_LABELS = {
   follow: 'Follow',
   share: 'Share',
   like: 'Like',
-  chat: 'Chat'
+  chat: 'Chat',
+  subscribe: 'Suscripción',
+  join: 'Entrada'
 };
 
 const EVENT_ICONS = {
@@ -28,7 +30,9 @@ const EVENT_ICONS = {
   follow: 'follow',
   share: 'share',
   like: 'like',
-  chat: 'chat'
+  chat: 'chat',
+  subscribe: 'follow',
+  join: 'follow'
 };
 
 const QUICK_RULES = [
@@ -645,10 +649,13 @@ function renderTTS() {
   const tts = state?.tts;
   if (!tts) return;
   const chatCheckbox = $('#ttsChatEnabled');
+  const readUsernameCheckbox = $('#ttsReadUsername');
   const giftsCheckbox = $('#ttsGiftsEnabled');
   const duckingCheckbox = $('#ttsDucking');
   const streaksCheckbox = $('#ttsPlayEveryStreak');
   const antiSpamCheckbox = $('#ttsAntiSpam');
+  const filterChatCheckbox = $('#ttsFilterChatByRole');
+  const roleFiltersBox = $('#ttsRoleFiltersBox');
   const providerSelect = $('#ttsVoiceProvider');
   const volumeSlider = $('#ttsVolume');
   const volumeLabel = $('#ttsVolumeValue');
@@ -656,11 +663,24 @@ function renderTTS() {
   const minCoinsLabel = $('#ttsMinCoinsValue');
 
   if (chatCheckbox) chatCheckbox.checked = tts.chatEnabled !== false;
+  if (readUsernameCheckbox) readUsernameCheckbox.checked = tts.readUsername !== false;
   if (giftsCheckbox) giftsCheckbox.checked = tts.giftsEnabled !== false;
   if (duckingCheckbox) duckingCheckbox.checked = tts.ducking !== false;
   if (streaksCheckbox) streaksCheckbox.checked = tts.playEveryStreak !== false;
   if (antiSpamCheckbox) antiSpamCheckbox.checked = Boolean(tts.antiSpam);
-  
+  if (filterChatCheckbox) filterChatCheckbox.checked = Boolean(tts.filterChatByRole);
+  if (roleFiltersBox) roleFiltersBox.hidden = !tts.filterChatByRole;
+
+  setInputChecked('#ttsAllowModerators', tts.allowModerators !== false);
+  setInputChecked('#ttsAllowSubscribers', tts.allowSubscribers !== false);
+  setInputChecked('#ttsAllowHighlighted', tts.allowHighlighted !== false);
+  setInputChecked('#ttsAllowFriends', Boolean(tts.allowFriends));
+  setInputChecked('#ttsAllowFollowers', Boolean(tts.allowFollowers));
+  setInputChecked('#ttsAllowGifter', Boolean(tts.allowGifter));
+  setInputValue('#ttsMinGifterLevel', tts.minGifterLevel ?? 1);
+  setInputChecked('#ttsAllowMember', Boolean(tts.allowMember));
+  setInputValue('#ttsMinMemberLevel', tts.minMemberLevel ?? 1);
+
   const currentVoiceId = tts.voiceId || (tts.voiceProvider === 'google' ? `google:${tts.voiceLanguage || 'es-ES'}` : 'local');
   populateVoiceOptions(currentVoiceId);
   if (providerSelect) providerSelect.value = currentVoiceId;
@@ -719,18 +739,31 @@ async function saveTtsPatch(patch) {
 }
 
 function handleIncomingEventForTTS(event) {
-  if (!event || !state?.tts?.enabled) return;
+  if (!event) return;
+  if (event.type === 'imDelete') {
+    ttsQueue.removeByModeration({
+      deleteMsgIds: event.deleteMsgIds,
+      deleteUserIds: event.deleteUserIds
+    });
+    return;
+  }
+
+  if (!state?.tts?.enabled) return;
   const ttsSettings = state.tts;
   const username = event.displayName || event.username || 'Alguien';
 
   if (event.type === 'chat') {
-    if (!ttsSettings.chatEnabled) return;
+    if (!shouldReadChatMessage(event, ttsSettings)) return;
     const comment = event.comment || event.message || '';
     if (!comment) return;
-    const text = formatChatTTS(username, comment);
+    const text = formatChatTTS(username, comment, {
+      readUsername: ttsSettings.readUsername !== false
+    });
     ttsQueue.enqueue({
       text,
       username,
+      msgId: event.msgId || '',
+      userId: event.userId || '',
       type: 'chat',
       voiceId: ttsSettings.voiceId,
       voiceProvider: ttsSettings.voiceProvider || 'google',
@@ -751,6 +784,8 @@ function handleIncomingEventForTTS(event) {
     ttsQueue.enqueue({
       text,
       username,
+      msgId: event.msgId || '',
+      userId: event.userId || '',
       type: 'gift',
       voiceId: ttsSettings.voiceId,
       voiceProvider: ttsSettings.voiceProvider || 'google',
@@ -808,9 +843,13 @@ function renderActivity() {
             ? 'empezó a seguirte'
             : item.type === 'share'
               ? 'compartió el directo'
-              : item.type === 'chat'
-                ? `dice: <em>${escapeHtml(item.comment || item.message || '')}</em>`
-                : `envió ${formatNumber(item.repeatCount)} likes`;
+              : item.type === 'subscribe'
+                ? 'se suscribió al canal'
+                : item.type === 'join'
+                  ? 'entró al directo'
+                  : item.type === 'chat'
+                    ? `<em>${escapeHtml(item.comment || item.message || '')}</em>`
+                    : `envió ${formatNumber(item.repeatCount)} likes`;
       return `
         <div class="activity-row ${item.test ? 'is-test' : ''}">
           <span class="activity-icon">${
@@ -1322,6 +1361,11 @@ function wireEvents() {
 
   $('#btnOpenJar').addEventListener('click', () => api.openJar());
 
+  $('#btnOpenJarStudio')?.addEventListener('click', async () => {
+    await api.openJarStudio?.({ bg: 'green' });
+    showToast('Ventana de Frasco Pro abierta para TikTok LIVE Studio');
+  });
+
   $('#btnCopyJarTest')?.addEventListener('click', async () => {
     try {
       await api.copyJarTestUrl();
@@ -1624,6 +1668,10 @@ function wireEvents() {
     saveTtsPatch({ chatEnabled: e.target.checked });
   });
 
+  $('#ttsReadUsername')?.addEventListener('change', (e) => {
+    saveTtsPatch({ readUsername: e.target.checked });
+  });
+
   $('#ttsGiftsEnabled')?.addEventListener('change', (e) => {
     saveTtsPatch({ giftsEnabled: e.target.checked });
   });
@@ -1638,6 +1686,49 @@ function wireEvents() {
 
   $('#ttsAntiSpam')?.addEventListener('change', (e) => {
     saveTtsPatch({ antiSpam: e.target.checked });
+  });
+
+  $('#ttsFilterChatByRole')?.addEventListener('change', (e) => {
+    const enabled = e.target.checked;
+    const box = $('#ttsRoleFiltersBox');
+    if (box) box.hidden = !enabled;
+    saveTtsPatch({ filterChatByRole: enabled });
+  });
+
+  $('#ttsAllowModerators')?.addEventListener('change', (e) => {
+    saveTtsPatch({ allowModerators: e.target.checked });
+  });
+
+  $('#ttsAllowSubscribers')?.addEventListener('change', (e) => {
+    saveTtsPatch({ allowSubscribers: e.target.checked });
+  });
+
+  $('#ttsAllowHighlighted')?.addEventListener('change', (e) => {
+    saveTtsPatch({ allowHighlighted: e.target.checked });
+  });
+
+  $('#ttsAllowFriends')?.addEventListener('change', (e) => {
+    saveTtsPatch({ allowFriends: e.target.checked });
+  });
+
+  $('#ttsAllowFollowers')?.addEventListener('change', (e) => {
+    saveTtsPatch({ allowFollowers: e.target.checked });
+  });
+
+  $('#ttsAllowGifter')?.addEventListener('change', (e) => {
+    saveTtsPatch({ allowGifter: e.target.checked });
+  });
+
+  $('#ttsMinGifterLevel')?.addEventListener('change', (e) => {
+    saveTtsPatch({ minGifterLevel: Math.max(1, Number(e.target.value) || 1) });
+  });
+
+  $('#ttsAllowMember')?.addEventListener('change', (e) => {
+    saveTtsPatch({ allowMember: e.target.checked });
+  });
+
+  $('#ttsMinMemberLevel')?.addEventListener('change', (e) => {
+    saveTtsPatch({ minMemberLevel: Math.max(1, Number(e.target.value) || 1) });
   });
 
   $('#ttsVoiceProvider')?.addEventListener('change', (e) => {

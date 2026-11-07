@@ -32,6 +32,7 @@ if (process.env.TIKTATO_USER_DATA) {
 
 let mainWindow = null;
 let loginWindow = null;
+let jarStudioWindow = null;
 let config = null;
 let overlayServer = null;
 let tiktok = null;
@@ -323,6 +324,8 @@ function registerActivity(event, alert) {
 
   const record = {
     id: `event_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    msgId: String(event.msgId || ''),
+    userId: String(event.userId || ''),
     type: event.type,
     username: event.username || 'alguien',
     displayName: event.displayName || event.username || 'Alguien',
@@ -392,14 +395,47 @@ function addToJar(event) {
 }
 
 function processEvent(event) {
+  if (!event) return null;
+
+  if (event.type === 'imDelete') {
+    const msgSet = new Set((event.deleteMsgIds || []).map(String));
+    const userSet = new Set((event.deleteUserIds || []).map(String));
+    if (msgSet.size > 0 || userSet.size > 0) {
+      for (let i = recentActivity.length - 1; i >= 0; i -= 1) {
+        const item = recentActivity[i];
+        if (
+          item.type === 'chat' &&
+          ((item.msgId && msgSet.has(String(item.msgId))) ||
+            (item.userId && userSet.has(String(item.userId))))
+        ) {
+          recentActivity.splice(i, 1);
+        }
+      }
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('event:incoming', event);
+    }
+    sendState();
+    return null;
+  }
+
   const now = Date.now();
   const rule = selectRule(config.rules, event, cooldowns, now);
+  const suppressAlert = Boolean(
+    event.suppressAlert || (event.type === 'gift' && event.streakDelta === 0)
+  );
   let alert = null;
   if (rule) {
-    const sound = resolveSound(rule.soundId);
-    alert = buildAlert(event, rule, { sound, now });
     markPlayed(rule, event, cooldowns, now);
-    sendAlert(alert);
+    if (!suppressAlert) {
+      const sound = resolveSound(rule.soundId);
+      alert = buildAlert(event, rule, {
+        sound,
+        now,
+        playEveryStreak: config.tts?.playEveryStreak !== false
+      });
+      sendAlert(alert);
+    }
   }
   registerActivity(event, alert);
   addToJar(event);
@@ -815,6 +851,34 @@ function registerIpc() {
 
   ipcMain.handle('jar:open', async () => {
     if (jarUrl()) await shell.openExternal(`${jarUrl()}&preview=1`);
+    return { ok: true };
+  });
+
+  ipcMain.handle('jar:open-studio', (_event, opts = {}) => {
+    const bg = String(opts?.bg || 'green');
+    if (jarStudioWindow && !jarStudioWindow.isDestroyed()) {
+      jarStudioWindow.focus();
+      return { ok: true };
+    }
+    jarStudioWindow = new BrowserWindow({
+      width: 560,
+      height: 720,
+      minWidth: 420,
+      minHeight: 540,
+      autoHideMenuBar: true,
+      backgroundColor: bg === 'green' ? '#00ff00' : '#141218',
+      title: 'Tiktato - Frasco Pro',
+      icon: path.join(__dirname, '..', 'build', 'icon.png'),
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true
+      }
+    });
+    jarStudioWindow.loadURL(`${jarUrl()}&studio=1&bg=${encodeURIComponent(bg)}`);
+    jarStudioWindow.on('closed', () => {
+      jarStudioWindow = null;
+    });
     return { ok: true };
   });
 

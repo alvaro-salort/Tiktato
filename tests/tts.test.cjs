@@ -57,18 +57,90 @@ test('filtro anti-spam opcional en tts-engine', async () => {
   assert.equal(filterTtsText('???!!!', { antiSpam: true }), '');
 });
 
-test('formateadores de texto para chat y regalos', async () => {
-  const { formatChatTTS, formatGiftTTS, buildGoogleTTSUrl } = await import('../shared/tts-engine.js');
+test('formateadores de texto para chat y regalos (sin "dice" y con readUsername opcional)', async () => {
+  const { formatChatTTS, formatGiftTTS, buildGoogleTTSUrl, shouldReadChatMessage } = await import('../shared/tts-engine.js');
 
-  assert.equal(formatChatTTS('Pepe', 'hola directo'), 'Pepe dice: hola directo');
+  assert.equal(formatChatTTS('Pepe', 'hola directo'), 'Pepe: hola directo');
+  assert.equal(formatChatTTS('Pepe', 'hola directo', { readUsername: true }), 'Pepe: hola directo');
+  assert.equal(formatChatTTS('Pepe', 'hola directo', { readUsername: false }), 'hola directo');
   assert.equal(formatChatTTS('', 'hola directo'), 'hola directo');
   assert.equal(formatGiftTTS('Ana', 'Rosa', 1), 'Ana envió Rosa');
   assert.equal(formatGiftTTS('Leo', 'Galaxy', 5), 'Leo envió 5 Galaxy');
+
+  // Por defecto lee todos los mensajes cuando filterChatByRole está desactivado
+  const normalUserMsg = { type: 'chat', username: 'viewer1', comment: 'hola' };
+  assert.equal(shouldReadChatMessage(normalUserMsg, { chatEnabled: true, filterChatByRole: false }), true);
+
+  // Cuando filterChatByRole está activo, solo lee los roles habilitados
+  const roleFilterCfg = {
+    chatEnabled: true,
+    filterChatByRole: true,
+    allowModerators: true,
+    allowSubscribers: true,
+    allowHighlighted: true,
+    allowFriends: false,
+    allowFollowers: false,
+    allowGifter: true,
+    minGifterLevel: 10,
+    allowMember: true,
+    minMemberLevel: 5
+  };
+
+  assert.equal(shouldReadChatMessage(normalUserMsg, roleFilterCfg), false);
+  assert.equal(shouldReadChatMessage({ ...normalUserMsg, isModerator: true }, roleFilterCfg), true);
+  assert.equal(shouldReadChatMessage({ ...normalUserMsg, isSuperFan: true }, roleFilterCfg), true);
+  assert.equal(shouldReadChatMessage({ ...normalUserMsg, isHighlighted: true }, roleFilterCfg), true);
+  assert.equal(shouldReadChatMessage({ ...normalUserMsg, gifterLevel: 5 }, roleFilterCfg), false);
+  assert.equal(shouldReadChatMessage({ ...normalUserMsg, gifterLevel: 12 }, roleFilterCfg), true);
+  assert.equal(shouldReadChatMessage({ ...normalUserMsg, memberLevel: 3 }, roleFilterCfg), false);
+  assert.equal(shouldReadChatMessage({ ...normalUserMsg, memberLevel: 6 }, roleFilterCfg), true);
 
   const url = buildGoogleTTSUrl('prueba de voz', 'es-ES');
   assert.match(url, /google\.com\/speech-api\/v2\/synthesize/);
   assert.match(url, /lang=es-ES/);
   assert.match(url, /text=prueba%20de%20voz/);
+});
+
+test('cola TTSQueue limita a 5 mensajes, deduplica msgId y cancela por moderación (imDelete)', async () => {
+  const { TTSQueue } = await import('../shared/tts-engine.js');
+
+  const queue = new TTSQueue({ maxQueueSize: 5 });
+  // Evitar que processNext consuma la cola durante la prueba unitaria de estructura
+  queue.isSpeaking = true;
+  queue.currentItem = { text: 'Actual', msgId: 'm_0', userId: 'u_banned' };
+
+  for (let i = 1; i <= 7; i++) {
+    queue.enqueue({
+      text: `Mensaje ${i}`,
+      msgId: `m_${i}`,
+      userId: i === 5 ? 'u_banned' : `u_${i}`,
+      antiSpam: false
+    });
+  }
+
+  // Solo conserva los últimos 5 en cola (m_3 a m_7)
+  assert.equal(queue.queue.length, 5);
+  assert.deepEqual(
+    queue.queue.map((item) => item.msgId),
+    ['m_3', 'm_4', 'm_5', 'm_6', 'm_7']
+  );
+
+  // Deduplicación por msgId: intentar volver a encolar m_6 no lo duplica
+  queue.enqueue({ text: 'Mensaje 6 repetido', msgId: 'm_6', userId: 'u_6', antiSpam: false });
+  assert.equal(queue.queue.length, 5);
+
+  // Moderación: borrar m_4 y banear a u_banned (que tenía m_5 en cola)
+  queue.isSpeaking = false;
+  queue.currentItem = null;
+  const removed = queue.removeByModeration({
+    deleteMsgIds: ['m_4'],
+    deleteUserIds: ['u_banned']
+  });
+  assert.equal(removed, 2);
+  assert.deepEqual(
+    queue.queue.map((item) => item.msgId),
+    ['m_3', 'm_6', 'm_7']
+  );
 });
 
 test('cola TTSQueue gestiona encolado, saltos y vaciado de cola', async () => {

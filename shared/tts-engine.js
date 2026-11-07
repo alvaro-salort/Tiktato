@@ -35,12 +35,45 @@ export function filterTtsText(rawText, { antiSpam = false, maxChars = 120 } = {}
   return clean;
 }
 
-export function formatChatTTS(username, message) {
+export function formatChatTTS(username, message, options = {}) {
   const name = String(username || '').trim();
   const text = String(message || '').trim();
   if (!text) return '';
-  if (!name) return text;
-  return `${name} dice: ${text}`;
+  const readUsername =
+    typeof options === 'boolean'
+      ? options
+      : options && typeof options === 'object'
+        ? options.readUsername !== false
+        : true;
+  if (!readUsername || !name) return text;
+  return `${name}: ${text}`;
+}
+
+export function shouldReadChatMessage(event, ttsConfig = {}) {
+  if (!event || event.type !== 'chat') return false;
+  if (ttsConfig.chatEnabled === false) return false;
+  if (event.test) return true;
+  if (!ttsConfig.filterChatByRole) return true;
+
+  if (ttsConfig.allowModerators !== false && event.isModerator) return true;
+  if (ttsConfig.allowSubscribers !== false && (event.isSubscriber || event.isSuperFan)) return true;
+  if (ttsConfig.allowHighlighted !== false && event.isHighlighted) return true;
+  if (ttsConfig.allowFriends === true && event.isFriend) return true;
+  if (ttsConfig.allowFollowers === true && event.isFollower) return true;
+  if (
+    ttsConfig.allowGifter === true &&
+    Number(event.gifterLevel || 0) >= Math.max(1, Number(ttsConfig.minGifterLevel || 1))
+  ) {
+    return true;
+  }
+  if (
+    ttsConfig.allowMember === true &&
+    Number(event.memberLevel || 0) >= Math.max(1, Number(ttsConfig.minMemberLevel || 1))
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export function formatGiftTTS(username, giftName, count = 1) {
@@ -54,10 +87,12 @@ export function formatGiftTTS(username, giftName, count = 1) {
 }
 
 export class TTSQueue {
-  constructor({ soundEngine = null, onStateChange = null } = {}) {
+  constructor({ soundEngine = null, onStateChange = null, maxQueueSize = 5 } = {}) {
     this.soundEngine = soundEngine;
     this.onStateChange = onStateChange || (() => {});
+    this.maxQueueSize = Math.max(1, Number(maxQueueSize) || 5);
     this.queue = [];
+    this.seenMsgIds = new Set();
     this.isSpeaking = false;
     this.currentItem = null;
     this.currentAbort = null;
@@ -67,6 +102,15 @@ export class TTSQueue {
   enqueue(item) {
     if (this.isMuted) return;
     if (!item || !item.text) return;
+    const msgId = item.msgId ? String(item.msgId) : '';
+    if (msgId) {
+      if (this.seenMsgIds.has(msgId)) return;
+      this.seenMsgIds.add(msgId);
+      if (this.seenMsgIds.size > 2000) {
+        const oldest = this.seenMsgIds.values().next().value;
+        this.seenMsgIds.delete(oldest);
+      }
+    }
     const cleanText = filterTtsText(item.text, {
       antiSpam: Boolean(item.antiSpam),
       maxChars: item.maxChars || 120
@@ -75,12 +119,48 @@ export class TTSQueue {
 
     this.queue.push({
       ...item,
+      msgId,
+      userId: item.userId ? String(item.userId) : '',
       text: cleanText,
       id: item.id || `tts_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
     });
 
+    if (this.queue.length > this.maxQueueSize) {
+      this.queue = this.queue.slice(-this.maxQueueSize);
+    }
+
     this.#notify();
     this.#process();
+  }
+
+  removeByModeration({ deleteMsgIds = [], deleteUserIds = [] } = {}) {
+    const msgSet = new Set((Array.isArray(deleteMsgIds) ? deleteMsgIds : []).map((id) => String(id)).filter(Boolean));
+    const userSet = new Set((Array.isArray(deleteUserIds) ? deleteUserIds : []).map((id) => String(id)).filter(Boolean));
+    if (msgSet.size === 0 && userSet.size === 0) return 0;
+
+    for (const id of msgSet) {
+      this.seenMsgIds.add(id);
+    }
+
+    const matches = (entry) => {
+      if (!entry) return false;
+      if (entry.msgId && msgSet.has(String(entry.msgId))) return true;
+      if (entry.userId && userSet.has(String(entry.userId))) return true;
+      return false;
+    };
+
+    const before = this.queue.length;
+    this.queue = this.queue.filter((entry) => !matches(entry));
+    let removed = before - this.queue.length;
+
+    if (this.currentItem && matches(this.currentItem)) {
+      removed += 1;
+      this.skip();
+    } else if (removed > 0) {
+      this.#notify();
+    }
+
+    return removed;
   }
 
   skip() {

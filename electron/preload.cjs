@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('tiktato', {
   openOverlay: () => ipcRenderer.invoke('overlay:open'),
   copyJarUrl: () => ipcRenderer.invoke('jar:copy'),
   openJar: () => ipcRenderer.invoke('jar:open'),
+  openJarStudio: (opts) => ipcRenderer.invoke('jar:open-studio', opts),
   copyJarTestUrl: () => ipcRenderer.invoke('jar:copy-test'),
   openJarTest: () => ipcRenderer.invoke('jar:open-test'),
   testJarGift: (sample) => ipcRenderer.invoke('jar:test-gift', sample),
