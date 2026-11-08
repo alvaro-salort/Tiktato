@@ -695,6 +695,8 @@ async function logoutTikTok() {
   return { ok: true };
 }
 
+let whenReadyTimestamp = 0;
+
 function createWindow() {
   const smokeScreenshot = process.env.TIKTATO_SMOKE_SCREENSHOT || '';
   mainWindow = new BrowserWindow({
@@ -711,7 +713,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      v8CacheOptions: 'code'
     }
   });
 
@@ -829,6 +832,18 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   mainWindow.once('ready-to-show', () => {
+    if (whenReadyTimestamp > 0) {
+      const startupMs = Date.now() - whenReadyTimestamp;
+      logger.info(`[startup] app.whenReady -> ready-to-show: ${startupMs} ms`);
+      if (process.env.TIKTATO_BENCHMARK) {
+        const mainRss = Math.round(process.memoryUsage().rss / 1024 / 1024);
+        const rendererPid = mainWindow.webContents.getOSProcessId ? mainWindow.webContents.getOSProcessId() : 0;
+        console.log(`BENCHMARK_RESULT:startup=${startupMs},mainRss=${mainRss},rendererPid=${rendererPid}`);
+        setTimeout(() => {
+          app.quit();
+        }, process.env.TIKTATO_BENCHMARK_WAIT ? parseInt(process.env.TIKTATO_BENCHMARK_WAIT, 10) : 500);
+      }
+    }
     if (!smokeScreenshot) showWindow();
   });
   mainWindow.webContents.once('did-finish-load', () => {
@@ -1010,7 +1025,8 @@ function registerIpc() {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
-        backgroundThrottling: false
+        backgroundThrottling: false,
+        v8CacheOptions: 'code'
       }
     });
     const isAllowedStudioUrl = (targetUrl) => {
@@ -1129,7 +1145,10 @@ if (!singleInstance) {
     }
   });
 
-  app.whenReady().then(bootstrap).catch((error) => {
+  app.whenReady().then(() => {
+    whenReadyTimestamp = Date.now();
+    return bootstrap();
+  }).catch((error) => {
     logger.error('[app] error fatal al iniciar', error);
     dialog.showErrorBox('Tiktato no pudo iniciar', String(error?.stack || error));
     app.quit();
