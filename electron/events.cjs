@@ -34,18 +34,13 @@ function createStreakTracker() {
       evictStale(now);
       const actor = String(userId || username || 'anon');
       const giftKey = String(giftId || giftName || 'gift');
-      const groupKey = String(groupId || '0');
-      const key = `${actor}:${giftKey}:${groupKey}`;
+      const key = `${actor}:${giftKey}`;
 
       const prev = streaks.get(key);
       const prevCount = prev ? prev.lastRepeatCount : 0;
       const delta = Math.max(0, count - prevCount);
 
-      if (isFinal) {
-        streaks.delete(key);
-      } else {
-        streaks.set(key, { lastRepeatCount: count, lastSeen: now });
-      }
+      streaks.set(key, { lastRepeatCount: isFinal ? 0 : count, lastSeen: now });
 
       const suppressAlert = isFinal && prev !== undefined && delta === 0;
       return {

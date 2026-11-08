@@ -27,7 +27,7 @@ function defaultRules() {
       minCoins: 1,
       soundId: 'builtin:coin',
       volume: 1,
-      cooldownSeconds: 2,
+      cooldownSeconds: 5,
       enabled: true
     },
     {

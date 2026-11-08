@@ -63,6 +63,64 @@ test('corrige el bug de doble sonido al enviar un único regalo (repeatEnd 0 y l
   assert.equal(closeEvent.suppressAlert, true);
 });
 
+test('no suena dos veces cuando el paquete final trae un groupId distinto al intermedio', () => {
+  const streakTracker = createStreakTracker();
+  const base = {
+    user: { uniqueId: 'ana', userId: '42' },
+    giftId: 5655,
+    repeatCount: 1,
+    gift: { type: 1, name: 'Rosa', diamondCount: 1 }
+  };
+
+  const a = normalizeTikTokEvent(
+    'gift',
+    { ...base, repeatEnd: 0, groupId: 'abc123' },
+    1000,
+    { playEveryStreak: true, streakTracker }
+  );
+  const b = normalizeTikTokEvent(
+    'gift',
+    { ...base, repeatEnd: 1, groupId: 'xyz789' },
+    4000,
+    { playEveryStreak: true, streakTracker }
+  );
+
+  assert.equal(a.streakDelta, 1);
+  assert.equal(a.suppressAlert, false);
+  assert.equal(b.streakDelta, 0);
+  assert.equal(b.suppressAlert, true);
+});
+
+test('combo tras combo en la misma sesión dispara de nuevo en el primer golpe del segundo combo', () => {
+  const streakTracker = createStreakTracker();
+  const base = {
+    user: { uniqueId: 'ana', userId: '42' },
+    giftId: 5655,
+    gift: { type: 1, name: 'Rosa', diamondCount: 1 }
+  };
+
+  // Primer combo de 2 rosas: A1, A2, Cierre
+  const c1_a1 = normalizeTikTokEvent('gift', { ...base, repeatCount: 1, repeatEnd: 0, groupId: 'g1' }, 1000, { playEveryStreak: true, streakTracker });
+  const c1_a2 = normalizeTikTokEvent('gift', { ...base, repeatCount: 2, repeatEnd: 0, groupId: 'g1' }, 1500, { playEveryStreak: true, streakTracker });
+  const c1_end = normalizeTikTokEvent('gift', { ...base, repeatCount: 2, repeatEnd: 1, groupId: 'g1' }, 4000, { playEveryStreak: true, streakTracker });
+
+  assert.equal(c1_a1.streakDelta, 1);
+  assert.equal(c1_a1.suppressAlert, false);
+  assert.equal(c1_a2.streakDelta, 1);
+  assert.equal(c1_a2.suppressAlert, false);
+  assert.equal(c1_end.streakDelta, 0);
+  assert.equal(c1_end.suppressAlert, true);
+
+  // Segundo combo del mismo usuario y regalo ~10s después: A1, Cierre
+  const c2_a1 = normalizeTikTokEvent('gift', { ...base, repeatCount: 1, repeatEnd: 0, groupId: 'g2' }, 15000, { playEveryStreak: true, streakTracker });
+  const c2_end = normalizeTikTokEvent('gift', { ...base, repeatCount: 1, repeatEnd: 1, groupId: '' }, 18000, { playEveryStreak: true, streakTracker });
+
+  assert.equal(c2_a1.streakDelta, 1);
+  assert.equal(c2_a1.suppressAlert, false);
+  assert.equal(c2_end.streakDelta, 0);
+  assert.equal(c2_end.suppressAlert, true);
+});
+
 test('una racha de 5 rosas calcula streakDelta incremental y reproduce 5 veces en total', () => {
   const streakTracker = createStreakTracker();
   const rule = {

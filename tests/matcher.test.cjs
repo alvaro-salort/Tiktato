@@ -289,4 +289,23 @@ test('markPlayed acota el mapa de cooldowns para evitar fugas de memoria en dire
   assert.equal(cooldowns.has('rule_any:user_150'), true);
 });
 
+test('buildAlert retorna null como salvaguarda en un cierre de regalo con streakDelta 0', () => {
+  const rule = rules[0];
+  const sound = { id: 'builtin:coin', name: 'Moneda', kind: 'builtin', key: 'coin' };
+  const closingEvent = {
+    type: 'gift',
+    userId: 'u1',
+    username: 'viewer',
+    giftName: 'Rosa',
+    coins: 1,
+    repeatCount: 1,
+    repeatEnd: true,
+    streakDelta: 0
+  };
+
+  const alert = buildAlert(closingEvent, rule, { sound, playEveryStreak: true });
+  assert.equal(alert, null);
+});
+
+
 

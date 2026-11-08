@@ -466,7 +466,9 @@ function processEvent(event) {
         now,
         playEveryStreak: config.tts?.playEveryStreak !== false
       });
-      sendAlert(alert);
+      if (alert) {
+        sendAlert(alert);
+      }
     }
   }
   registerActivity(event, alert);
