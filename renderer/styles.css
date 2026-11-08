@@ -262,16 +262,258 @@ p {
   white-space: nowrap;
 }
 
-/* ───────── Contenedor Bento ───────── */
+/* ───────── Layout Principal con Menú Lateral (Sidebar) ───────── */
 
-.app {
+.app,
+.app.app-layout {
+  display: flex;
+  flex-direction: row;
+  min-height: 100vh;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  background: var(--bg);
+}
+
+.app-sidebar {
+  width: 250px;
+  flex: 0 0 250px;
+  height: 100vh;
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 18px 22px 28px;
+  padding: 16px 12px;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  box-sizing: border-box;
+  z-index: 20;
+  overflow-y: auto;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 14px;
+}
+
+.sidebar-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.sidebar-brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sidebar-brand-name {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+  margin: 0;
+}
+
+.sidebar-badge-version {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.sidebar-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  margin-bottom: 14px;
+  transition: all 180ms var(--ease-out);
+}
+
+.sidebar-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 750;
+  color: var(--ink-soft);
+  min-width: 0;
+}
+
+.sidebar-status-pill span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-status-card.status-connected {
+  background: var(--green-soft);
+  border-color: rgba(23, 137, 92, 0.35);
+}
+
+.sidebar-status-card.status-connected .sidebar-status-pill {
+  color: var(--green);
+}
+
+.sidebar-status-card.status-connected .status-dot {
+  background: var(--green);
+  animation: live-pulse 1.8s var(--ease-out) infinite;
+}
+
+.sidebar-status-card.status-connecting {
+  background: var(--amber-soft);
+  border-color: rgba(133, 83, 0, 0.3);
+}
+
+.sidebar-status-card.status-connecting .sidebar-status-pill {
+  color: var(--amber-ink);
+}
+
+.sidebar-status-card.status-error {
+  background: var(--red-soft);
+  border-color: rgba(186, 26, 26, 0.3);
+}
+
+.sidebar-status-card.status-error .sidebar-status-pill {
+  color: var(--red);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms var(--ease-out), color 140ms var(--ease-out), border-color 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
+}
+
+.nav-tab:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.nav-tab.is-active,
+.nav-tab[aria-selected="true"] {
+  background: var(--md-primary-fixed);
+  color: var(--md-on-primary-fixed);
+  font-weight: 800;
+  border-color: rgba(144, 63, 0, 0.22);
+  box-shadow: 0 1px 3px rgba(144, 63, 0, 0.08);
+}
+
+.nav-tab-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.nav-tab-icon .icon {
+  width: 19px;
+  height: 19px;
+  color: currentColor;
+}
+
+.nav-tab-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  margin-top: auto;
+}
+
+.btn-sidebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms var(--ease-out), color 140ms var(--ease-out);
+}
+
+.btn-sidebar:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.btn-sidebar .icon {
+  width: 17px;
+  height: 17px;
+  color: currentColor;
+}
+
+.app-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 28px 36px;
   gap: 16px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  animation: panelFadeIn 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes panelFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ───────── Tarjeta Banner Superior ───────── */
@@ -585,21 +827,228 @@ p {
   box-shadow: var(--shadow-card-hover);
 }
 
-/* Fila 1: Sonidos (col 8) y Actividad (col 4) con alturas uniformes */
+/* ───────── Espacios de Trabajo por Pestaña ───────── */
+
+/* Pestaña 1: Sonidos y Alertas */
+.sounds-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+}
+
+.sounds-workspace-grid .card-sounds {
+  height: auto;
+  min-height: 580px;
+}
+
+.sounds-workspace-grid .card-activity {
+  height: 640px;
+  position: sticky;
+  top: 18px;
+}
+
+/* Pestaña 2: Overlay de Alertas */
+.overlay-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.card-overlay-config,
+.card-overlay-preview {
+  min-height: 480px;
+  height: auto;
+}
+
+.obs-guide-box {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.obs-guide-title {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+.obs-guide-steps {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.overlay-preview-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 380px;
+  background: #0f0e13;
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  overflow: hidden;
+}
+
+/* Pestaña 3: Frasco de Donaciones */
+.jar-full-card {
+  min-height: 520px;
+  height: auto;
+}
+
+.jar-body-layout {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 24px;
+  align-items: center;
+  padding: 24px 28px;
+}
+
+.jar-controls-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.jar-stats-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.3fr;
+  gap: 12px;
+  align-items: end;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.jar-stat-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.jar-stat-label {
+  font-size: 11px;
+  font-weight: 750;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.jar-stat-val {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.jar-stat-sub {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.jar-goal-field span {
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.jar-tests-box,
+.jar-url-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.jar-tip {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.jar-visual-col {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+}
+
+.jar-visual-large {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.jar-visual-large .jar-mini {
+  width: 140px;
+  height: 220px;
+}
+
+.jar-visual-large .jar-mini-glass {
+  height: 190px;
+}
+
+/* Pestaña 4: Voz del chat (TTS) */
+.card-tts-main {
+  min-height: 520px;
+  height: auto;
+}
+
+.tts-body-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  align-items: start;
+  padding: 24px 28px;
+}
+
+.tts-left-col,
+.tts-right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tts-toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tts-obs-notice {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+/* Compatibilidad con diseño anterior */
 .card-sounds {
   grid-column: span 8;
-  height: 520px;
+  height: auto;
 }
 
 .card-activity {
   grid-column: span 4;
-  height: 520px;
+  height: auto;
 }
 
-/* Fila 2: Overlay + Frasco + TTS (3 columnas iguales de span 4 con alturas uniformes) */
 .card-feature {
   grid-column: span 4;
-  height: 400px;
+  height: auto;
 }
 
 /* Encabezado uniforme de tarjeta */
@@ -1132,39 +1581,160 @@ select {
   border-top: 0;
 }
 
-/* ───────── Sección Sonidos ───────── */
+/* ───────── Sección Sonidos y Barra de Regalos ───────── */
+
+.gift-presets-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+
+.gift-presets-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gift-presets-title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+}
+
+.gift-presets-hint {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
 
 .gift-presets {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 8px;
 }
 
 .gift-preset-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 12px 0 6px;
-  border: 1px solid var(--line-strong);
+  gap: 8px;
+  min-height: 42px;
+  padding: 4px 12px 4px 6px;
+  border: 1.5px solid var(--line-strong);
   border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
-  transition: border-color 140ms var(--ease-out), background 140ms var(--ease-out);
+  cursor: pointer;
+  transition: all 140ms var(--ease-out);
+  box-shadow: 0 1px 2px rgba(144, 63, 0, 0.04);
 }
 
 .gift-preset-chip:hover {
   border-color: var(--md-primary);
   background: var(--md-primary-fixed);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(144, 63, 0, 0.1);
+}
+
+.preset-thumb-wrap {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.preset-thumb-wrap img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.preset-fallback-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.preset-check {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.preset-text-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+
+.preset-name {
+  font-size: 12.5px;
+  font-weight: 750;
+  color: var(--ink);
+}
+
+.preset-meta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.preset-sound {
+  color: var(--green);
+  font-weight: 750;
+}
+
+.preset-add {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+/* Estado configurado */
+.gift-preset-chip.is-configured {
+  border-color: rgba(23, 137, 92, 0.5);
+  background: var(--green-soft);
+  color: var(--green);
+  box-shadow: 0 1px 3px rgba(23, 137, 92, 0.1);
+}
+
+.gift-preset-chip.is-configured:hover {
+  border-color: var(--green);
+  background: #d4ede1;
+  box-shadow: 0 3px 8px rgba(23, 137, 92, 0.18);
+}
+
+.gift-preset-chip.is-configured .preset-name {
+  color: #0b5035;
 }
 
 .gift-preset-chip img {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
 }
 
@@ -1172,16 +1742,6 @@ select {
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 800;
-}
-
-.gift-preset-chip.is-configured {
-  border-color: rgba(144, 63, 0, 0.35);
-  background: var(--md-primary-fixed);
-  color: var(--md-on-primary-fixed-variant);
-}
-
-.gift-preset-chip.is-configured small {
-  color: var(--md-on-primary-fixed-variant);
 }
 
 .quick-rules {
@@ -2384,6 +2944,58 @@ select {
   width: 15px;
   height: 15px;
   cursor: pointer;
+}
+
+@media (max-width: 1180px) {
+  .sounds-workspace-grid,
+  .overlay-layout,
+  .jar-body-layout,
+  .tts-body-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sounds-workspace-grid .card-activity {
+    position: static;
+    height: 480px;
+  }
+}
+
+@media (max-width: 860px) {
+  .app.app-layout {
+    flex-direction: column;
+  }
+
+  .app-sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .nav-tab {
+    width: auto;
+    flex: 1 1 auto;
+  }
+
+  .sidebar-foot {
+    flex-direction: row;
+  }
+
+  .card.card-banner {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .banner-stats {
+    justify-self: stretch;
+    justify-content: space-between;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

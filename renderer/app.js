@@ -281,6 +281,20 @@ function updateStatus(status) {
   message.textContent = status.state === 'connected' ? '' : (status.message || 'Sin conexión');
   message.classList.toggle('is-error', status.state === 'error');
   $('#statViewers').textContent = formatNumber(status.viewerCount || 0);
+
+  const sideCard = $('#sidebarStatusCard');
+  const sideText = $('#sidebarStatusText');
+  const sideLive = $('#sidebarLiveTag');
+  if (sideCard) {
+    sideCard.className = `sidebar-status-card status-${status.state || 'disconnected'}`;
+  }
+  if (sideText) {
+    sideText.textContent = labels[status.state] || 'Desconectado';
+  }
+  if (sideLive) {
+    sideLive.textContent = status.state === 'connected' ? 'LIVE' : 'OFFLINE';
+    sideLive.classList.toggle('is-live', status.state === 'connected');
+  }
 }
 
 function setInputValue(selector, value) {
@@ -330,6 +344,8 @@ function render(nextState) {
   if (state.appVersion) {
     const verEl = $('#appVersion') || document.querySelector('.footer-version');
     if (verEl) verEl.textContent = `v${state.appVersion}`;
+    const sideVer = $('#sidebarVersion');
+    if (sideVer) sideVer.textContent = `v${state.appVersion}`;
   }
 
   updateStatus(state.status);
@@ -384,22 +400,54 @@ function renderGiftPresets() {
   const container = $('#giftPresets');
   if (!container) return;
   const gifts = state?.gifts || [];
-  const featured = FEATURED_GIFT_IDS.map((id) => gifts.find((item) => String(item.id) === id)).filter(Boolean);
 
-  container.innerHTML = featured
+  // 1. Regalos destacados por defecto (Rosa, Eres increíble, GG, Maracas, Corazón, Quiéreme, Corazón coreano, Galaxia)
+  const list = FEATURED_GIFT_IDS.map((id) => gifts.find((item) => String(item.id) === id)).filter(Boolean);
+
+  // 2. Todos los regalos que han sido personalizados aparecen arriba marcados
+  const specificRules = getSpecificGiftRules();
+  for (const rule of specificRules) {
+    let gift = null;
+    if (rule.giftId) {
+      gift = gifts.find((item) => String(item.id) === String(rule.giftId));
+    }
+    if (!gift && rule.giftName) {
+      gift = findCatalogGift({ giftName: rule.giftName });
+    }
+    if (!gift) {
+      gift = {
+        id: rule.giftId || `custom_${rule.id}`,
+        name: rule.giftName || 'Regalo',
+        imageUrl: rule.giftImageUrl || '',
+        coins: rule.minCoins || 1
+      };
+    }
+    const already = list.some((item) => String(item.id) === String(gift.id) || item.name === gift.name);
+    if (!already) {
+      list.push(gift);
+    }
+  }
+
+  container.innerHTML = list
     .map((gift) => {
       const existing = findRuleForCatalogGift(gift);
       const displayName = String(gift.name).replace(/\s*\(\d+\)\s*$/, '');
+      const soundTitle = existing ? soundName(existing.soundId) : '';
       return `
         <button
           class="gift-preset-chip ${existing ? 'is-configured' : ''}"
           data-preset-gift-id="${escapeHtml(gift.id)}"
           type="button"
-          title="${existing ? `${displayName}: ${soundName(existing.soundId)}` : `Asignar sonido a ${displayName}`}"
+          title="${existing ? `${displayName}: ${soundTitle} · Toca para personalizar` : `Asignar sonido a ${displayName}`}"
         >
-          ${gift.imageUrl ? `<img src="${escapeHtml(gift.imageUrl)}" alt="" loading="lazy" />` : ''}
-          <span>${escapeHtml(displayName)}</span>
-          <small>${existing ? '✓' : '+'}</small>
+          <div class="preset-thumb-wrap">
+            ${gift.imageUrl ? `<img src="${escapeHtml(gift.imageUrl)}" alt="${escapeHtml(displayName)}" loading="lazy" />` : '<span class="preset-fallback-icon">🎁</span>'}
+            ${existing ? '<span class="preset-check" aria-hidden="true">✓</span>' : ''}
+          </div>
+          <div class="preset-text-wrap">
+            <span class="preset-name">${escapeHtml(displayName)}</span>
+            <span class="preset-meta">${existing ? `<span class="preset-sound">${escapeHtml(soundTitle)}</span>` : '<span class="preset-add">+ Personalizar</span>'}</span>
+          </div>
         </button>
       `;
     })
@@ -414,7 +462,7 @@ function renderGiftQuickList() {
   if (giftRules.length === 0) {
     container.innerHTML = `
       <div class="gift-quick-empty">
-        Pulsa en <strong>Rosa</strong>, <strong>Eres increíble</strong>, <strong>GG</strong>, <strong>Maracas</strong> o en <strong>+ Elegir regalo</strong> para ponerle un MP3 a cada donación.
+        Toca en <strong>Rosa</strong>, <strong>Eres increíble</strong>, <strong>GG</strong>, <strong>Maracas</strong> arriba o en <strong>Elegir otro regalo</strong> para asignarle un sonido a cada donación.
       </div>
     `;
     return;
@@ -427,18 +475,19 @@ function renderGiftQuickList() {
       const title = rule.giftName || catalogGift?.name || 'Regalo';
       const coins = catalogGift?.coins || rule.minCoins || 1;
       const enabled = rule.enabled !== false;
+      const volumePct = Math.round((rule.volume ?? 1) * 100);
       return `
         <div class="quick-rule gift-rule-item ${enabled ? '' : 'is-disabled'}" data-gift-rule-id="${escapeHtml(rule.id)}">
           <span class="quick-rule-icon gift-rule-thumb">
             ${
               imageUrl
-                ? `<img src="${escapeHtml(imageUrl)}" alt="" loading="lazy" />`
+                ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" loading="lazy" />`
                 : iconSvg('gift')
             }
           </span>
           <div class="quick-rule-copy">
             <strong>${escapeHtml(title)}</strong>
-            <span>${formatNumber(coins)} ${coins === 1 ? 'moneda' : 'monedas'} · ${escapeHtml(soundName(rule.soundId))}</span>
+            <span>${formatNumber(coins)} ${coins === 1 ? 'moneda' : 'monedas'} · ${escapeHtml(soundName(rule.soundId))} · ${volumePct}% vol</span>
           </div>
           <select data-gift-rule-sound aria-label="Sonido para ${escapeHtml(title)}">
             ${soundOptionsHtml(rule.soundId)}
@@ -446,6 +495,9 @@ function renderGiftQuickList() {
           <div class="gift-rule-actions">
             <button class="icon-btn" data-gift-rule-action="test" type="button" title="Probar alerta y sonido de ${escapeHtml(title)}">
               ${iconSvg('play')}
+            </button>
+            <button class="icon-btn" data-gift-rule-action="edit" type="button" title="Personalizar opciones y volumen de ${escapeHtml(title)}">
+              ${iconSvg('edit')}
             </button>
             <button class="icon-btn" data-gift-rule-action="delete" type="button" title="Quitar sonido de ${escapeHtml(title)}">
               ${iconSvg('trash')}
@@ -693,6 +745,8 @@ function renderTTS() {
   if (giftsCheckbox) giftsCheckbox.checked = tts.giftsEnabled !== false;
   if (duckingCheckbox) duckingCheckbox.checked = tts.ducking !== false;
   if (streaksCheckbox) streaksCheckbox.checked = tts.playEveryStreak !== false;
+  const soundsStreaks = $('#soundsPlayEveryStreak');
+  if (soundsStreaks) soundsStreaks.checked = tts.playEveryStreak !== false;
   if (antiSpamCheckbox) antiSpamCheckbox.checked = Boolean(tts.antiSpam);
   if (filterChatCheckbox) filterChatCheckbox.checked = Boolean(tts.filterChatByRole);
   if (roleFiltersBox) roleFiltersBox.hidden = !tts.filterChatByRole;
@@ -1127,7 +1181,6 @@ function wireEvents() {
   });
 
   $('#btnPickGift')?.addEventListener('click', () => {
-    openDialog('#rulesDialog');
     openRuleForm(null);
     $('#giftSearch')?.focus();
   });
@@ -1136,33 +1189,53 @@ function wireEvents() {
     const chip = event.target.closest('[data-preset-gift-id]');
     if (!chip) return;
     const giftId = chip.dataset.presetGiftId;
-    const gift = (state.gifts || []).find((item) => String(item.id) === String(giftId));
+    const gifts = state?.gifts || [];
+    let gift = gifts.find((item) => String(item.id) === String(giftId));
+    if (!gift) {
+      const specific = getSpecificGiftRules().find(
+        (r) => String(r.giftId) === String(giftId) || `custom_${r.id}` === giftId || r.id === giftId
+      );
+      if (specific) {
+        gift = {
+          id: specific.giftId || specific.id,
+          name: specific.giftName || 'Regalo',
+          imageUrl: specific.giftImageUrl || '',
+          coins: specific.minCoins || 1
+        };
+      }
+    }
     if (!gift) return;
 
     const existing = findRuleForCatalogGift(gift);
     if (existing) {
-      await triggerTestForRule(existing);
+      openRuleForm(existing);
+      await previewSoundById(existing.soundId, existing.volume ?? 1);
+      showToast(`Personalizando sonido de ${existing.giftName || gift.name}`);
       return;
     }
 
     const cleanName = String(gift.name).replace(/\s*\(\d+\)\s*$/, '');
     const soundId = defaultSoundForNewGiftRule();
+    const newRule = {
+      eventType: 'gift',
+      giftId: gift.id,
+      giftName: cleanName,
+      giftImageUrl: gift.imageUrl || '',
+      minCoins: gift.coins || 0,
+      soundId,
+      volume: 1,
+      cooldownSeconds: 0,
+      enabled: true,
+      order: state.rules.length
+    };
     const rules = [
       ...state.rules,
-      {
-        eventType: 'gift',
-        giftId: gift.id,
-        giftName: cleanName,
-        giftImageUrl: gift.imageUrl || '',
-        minCoins: 0,
-        soundId,
-        volume: 1,
-        cooldownSeconds: 0,
-        enabled: true,
-        order: state.rules.length
-      }
+      newRule
     ];
-    await saveRules(rules, `${cleanName} añadido: elige su sonido`);
+    await saveRules(rules, `${cleanName} configurado: personaliza su sonido`);
+    const savedRule = state.rules.find((r) => r.eventType === 'gift' && (String(r.giftId) === String(gift.id) || r.giftName === cleanName));
+    openRuleForm(savedRule || newRule);
+    await previewSoundById(soundId, 1);
   });
 
   $('#giftQuickList')?.addEventListener('change', async (event) => {
@@ -1199,6 +1272,11 @@ function wireEvents() {
 
     if (action === 'test') {
       await triggerTestForRule(rule);
+      return;
+    }
+    if (action === 'edit') {
+      openRuleForm(rule);
+      await previewSoundById(rule.soundId, rule.volume ?? 1);
       return;
     }
     if (action === 'delete') {
@@ -1825,6 +1903,12 @@ function wireEvents() {
     }
   });
 
+  $('#btnSidebarSettings')?.addEventListener('click', () => openDialog('#settingsDialog'));
+  $('#btnSidebarHelp')?.addEventListener('click', () => openDialog('#helpDialog'));
+  $('#soundsPlayEveryStreak')?.addEventListener('change', (e) => {
+    saveTtsPatch({ playEveryStreak: e.target.checked });
+  });
+
   api.onIncomingEvent?.((event) => {
     handleIncomingEventForTTS(event);
   });
@@ -1858,6 +1942,7 @@ function setupTabs() {
     for (const tab of tabs) {
       const active = tab === target;
       tab.setAttribute('aria-selected', String(active));
+      tab.classList.toggle('is-active', active);
       tab.tabIndex = active ? 0 : -1;
       const panel = document.getElementById(tab.getAttribute('aria-controls'));
       if (panel) panel.hidden = !active;
@@ -1875,8 +1960,8 @@ function setupTabs() {
     tab.addEventListener('keydown', (event) => {
       const index = tabs.indexOf(tab);
       let next = null;
-      if (event.key === 'ArrowRight') next = tabs[(index + 1) % tabs.length];
-      if (event.key === 'ArrowLeft') next = tabs[(index - 1 + tabs.length) % tabs.length];
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = tabs[(index + 1) % tabs.length];
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = tabs[(index - 1 + tabs.length) % tabs.length];
       if (event.key === 'Home') next = tabs[0];
       if (event.key === 'End') next = tabs[tabs.length - 1];
       if (next) {

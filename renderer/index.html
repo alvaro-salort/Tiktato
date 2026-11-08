@@ -11,424 +11,597 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app">
+    <div class="app app-layout">
+      <!-- TOAST GLOBAL DE NOTIFICACIONES -->
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-      <!-- BANNER SUPERIOR CON ESTADO, CONEXIÓN Y MÉTRICAS -->
-      <header id="bannerCard" class="card card-banner">
-        <div class="banner-brand">
-          <img class="brand-logo" src="assets/logo.png" alt="Logo de Tiktato" />
-          <div class="brand-copy">
-            <h1 class="brand-name">Tiktato</h1>
-            <p class="brand-tag">Sonidos y alertas para tu TikTok LIVE</p>
+      <!-- MENÚ LATERAL DE SECCIONES (SIDEBAR) -->
+      <aside class="app-sidebar" aria-label="Navegación principal">
+        <div class="sidebar-brand">
+          <img class="sidebar-logo" src="assets/logo.png" alt="Logo de Tiktato" />
+          <div class="sidebar-brand-text">
+            <h1 class="sidebar-brand-name">Tiktato</h1>
+            <span id="sidebarVersion" class="sidebar-badge-version">v0.2.2</span>
           </div>
         </div>
 
-        <div class="banner-connect">
-          <form id="connectForm" class="connect-form">
-            <div class="input-prefix">
-              <input id="username" name="username" autocomplete="off" placeholder="@usuario" maxlength="80" />
-            </div>
-            <button id="btnConnect" class="btn btn-primary" type="submit">Conectar</button>
-            <button id="btnDisconnect" class="btn btn-ghost" type="button" disabled>Desconectar</button>
-          </form>
-
-          <div class="status-strip">
-            <div id="statusPill" class="status-pill status-disconnected">
-              <span class="status-dot"></span>
-              <span id="statusLabel">Desconectado</span>
-            </div>
-            <span id="liveBadge" class="badge-live">LIVE</span>
-            <span id="connectionMessage" class="connection-message"></span>
+        <div id="sidebarStatusCard" class="sidebar-status-card status-disconnected">
+          <div class="sidebar-status-pill">
+            <span class="status-dot"></span>
+            <span id="sidebarStatusText">Desconectado</span>
           </div>
+          <span id="sidebarLiveTag" class="badge-live">OFFLINE</span>
         </div>
 
-        <div class="banner-stats">
-          <div class="metric-tile" title="Espectadores en vivo">
-            <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,56C48,56,16,128,16,128s32,72,112,72,112-72,112-72S208,56,128,56Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><circle cx="128" cy="128" r="40" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
-            <div class="metric-value">
-              <strong id="statViewers">0</strong>
-              <small>Viendo</small>
-            </div>
-          </div>
-          <div class="metric-tile" title="Regalos recibidos">
-            <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><rect x="40" y="80" width="176" height="48" rx="8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,80V208M192,128v80H64V128" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,80H92a28,28,0,1,1,28-28V80Zm0,0h36a28,28,0,1,0-28-28V80Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
-            <div class="metric-value">
-              <strong id="statGifts">0</strong>
-              <small>Regalos</small>
-            </div>
-          </div>
-          <div class="metric-tile" title="Monedas acumuladas">
-            <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><circle cx="96" cy="128" r="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,88.42A56,56,0,1,1,128,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M160,88.42A56,56,0,1,1,160,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
-            <div class="metric-value">
-              <strong id="statCoins">0</strong>
-              <small>Monedas</small>
-            </div>
-          </div>
-          <div class="metric-tile" title="Nuevos seguidores">
-            <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M104,136A56,56,0,1,0,48,80,56.06,56.06,0,0,0,104,136Zm0,32c-39.76,0-72,21.49-72,48a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8C176,189.49,143.76,168,104,168Zm96-56v32m16-16H184" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
-            <div class="metric-value">
-              <strong id="statFollows">0</strong>
-              <small>Follows</small>
-            </div>
-          </div>
-          <div class="banner-quick-actions">
-            <button id="btnSettings" class="btn btn-icon" type="button" title="Ajustes de audio y app" aria-label="Ajustes de audio">
-              <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,80a48,48,0,1,0,48,48A48,48,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z" fill="currentColor"/><path d="M232,120H214.28a86.69,86.69,0,0,0-8.31-20l12.56-12.56a8,8,0,0,0,0-11.31l-17-17a8,8,0,0,0-11.31,0L177.66,71.69a86.69,86.69,0,0,0-20-8.31V45.65A8,8,0,0,0,150,37.66H126a8,8,0,0,0-7.66,8v17.73a86.69,86.69,0,0,0-20,8.31L85.78,59.14a8,8,0,0,0-11.31,0l-17,17a8,8,0,0,0,0,11.31L70,99.98a86.69,86.69,0,0,0-8.31,20H44a8,8,0,0,0-8,8v24a8,8,0,0,0,8,8H61.69a86.69,86.69,0,0,0,8.31,20L57.44,192.54a8,8,0,0,0,0,11.31l17,17a8,8,0,0,0,11.31,0L98.31,208.29a86.69,86.69,0,0,0,20,8.31v17.75a8,8,0,0,0,7.66,8h24a8,8,0,0,0,8-7.66V216.6a86.69,86.69,0,0,0,20-8.31l12.56,12.56a8,8,0,0,0,11.31,0l17-17a8,8,0,0,0,0-11.31l-12.56-12.56a86.69,86.69,0,0,0,8.31-20H232a8,8,0,0,0,8-8V128A8,8,0,0,0,232,120Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
-            </button>
-            <button id="btnHelp" class="btn btn-icon" type="button" title="Ayuda y conexión QR" aria-label="Ayuda para conectar">
-              <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><circle cx="128" cy="128" r="96" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><circle cx="128" cy="180" r="12" fill="currentColor"/><path d="M128,144v-8a28,28,0,1,0-28-28" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
-            </button>
-          </div>
+        <nav class="sidebar-nav" role="tablist" aria-label="Secciones de la aplicación">
+          <button
+            id="tab-sounds"
+            class="nav-tab is-active"
+            role="tab"
+            data-tab="sounds"
+            aria-controls="panel-sounds"
+            aria-selected="true"
+            type="button"
+          >
+            <span class="nav-tab-icon">
+              <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,168a32,32,0,1,1-32-32h32V40l88,24V144a32,32,0,1,1-32-32h32V79.27L128,55.27Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            </span>
+            <span class="nav-tab-label">Sonidos y Alertas</span>
+          </button>
+
+          <button
+            id="tab-overlay"
+            class="nav-tab"
+            role="tab"
+            data-tab="overlay"
+            aria-controls="panel-overlay"
+            aria-selected="false"
+            tabindex="-1"
+            type="button"
+          >
+            <span class="nav-tab-icon">
+              <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><rect x="32" y="48" width="192" height="144" rx="16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="160" y1="224" x2="96" y2="224" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="128" y1="192" x2="128" y2="224" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            </span>
+            <span class="nav-tab-label">Overlay de Alertas</span>
+          </button>
+
+          <button
+            id="tab-jar"
+            class="nav-tab"
+            role="tab"
+            data-tab="jar"
+            aria-controls="panel-jar"
+            aria-selected="false"
+            tabindex="-1"
+            type="button"
+          >
+            <span class="nav-tab-icon">
+              <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><circle cx="96" cy="128" r="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,88.42A56,56,0,1,1,128,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M160,88.42A56,56,0,1,1,160,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            </span>
+            <span class="nav-tab-label">Frasco de Donaciones</span>
+          </button>
+
+          <button
+            id="tab-tts"
+            class="nav-tab"
+            role="tab"
+            data-tab="tts"
+            aria-controls="panel-tts"
+            aria-selected="false"
+            tabindex="-1"
+            type="button"
+          >
+            <span class="nav-tab-icon">
+              <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M152,40V216L80,160H32a8,8,0,0,1-8-8V104a8,8,0,0,1,8-8H80L152,40Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M192,104a40,40,0,0,1,0,48M216,80a80,80,0,0,1,0,96" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            </span>
+            <span class="nav-tab-label">Voz del Chat (TTS)</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <button id="btnSidebarSettings" class="btn-sidebar" type="button" title="Ajustes de audio y app">
+            <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,80a48,48,0,1,0,48,48A48,48,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z" fill="currentColor"/><path d="M232,120H214.28a86.69,86.69,0,0,0-8.31-20l12.56-12.56a8,8,0,0,0,0-11.31l-17-17a8,8,0,0,0-11.31,0L177.66,71.69a86.69,86.69,0,0,0-20-8.31V45.65A8,8,0,0,0,150,37.66H126a8,8,0,0,0-7.66,8v17.73a86.69,86.69,0,0,0-20,8.31L85.78,59.14a8,8,0,0,0-11.31,0l-17,17a8,8,0,0,0,0,11.31L70,99.98a86.69,86.69,0,0,0-8.31,20H44a8,8,0,0,0-8,8v24a8,8,0,0,0,8,8H61.69a86.69,86.69,0,0,0,8.31,20L57.44,192.54a8,8,0,0,0,0,11.31l17,17a8,8,0,0,0,11.31,0L98.31,208.29a86.69,86.69,0,0,0,20,8.31v17.75a8,8,0,0,0,7.66,8h24a8,8,0,0,0,8-7.66V216.6a86.69,86.69,0,0,0,20-8.31l12.56,12.56a8,8,0,0,0,11.31,0l17-17a8,8,0,0,0,0-11.31l-12.56-12.56a86.69,86.69,0,0,0,8.31-20H232a8,8,0,0,0,8-8V128A8,8,0,0,0,232,120Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            <span>Ajustes</span>
+          </button>
+          <button id="btnSidebarHelp" class="btn-sidebar" type="button" title="Ayuda y conexión QR">
+            <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><circle cx="128" cy="128" r="96" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><circle cx="128" cy="180" r="12" fill="currentColor"/><path d="M128,144v-8a28,28,0,1,0-28-28" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            <span>Ayuda</span>
+          </button>
         </div>
-      </header>
+      </aside>
 
-      <div id="errorBanner" class="error-banner" hidden></div>
+      <!-- ÁREA PRINCIPAL CON VISTAS POR PESTAÑA -->
+      <div class="app-content">
+        <div id="errorBanner" class="error-banner" hidden></div>
 
-      <!-- WORKSPACE EN BENTO GRID: ORDENADO Y CONSISTENTE -->
-      <main class="bento-grid">
-        <!-- FILA 1: SONIDOS (COL 8) Y ACTIVIDAD (COL 4) -->
-        <section class="card card-sounds">
-          <header class="card-head">
-            <div class="card-title-group">
-              <div class="card-icon-badge">
-                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,168a32,32,0,1,1-32-32h32V40l88,24V144a32,32,0,1,1-32-32h32V79.27L128,55.27Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+        <!-- ========================================== -->
+        <!-- PESTAÑA 1: SONIDOS Y ALERTAS (POR DEFECTO) -->
+        <!-- ========================================== -->
+        <div id="panel-sounds" class="tab-panel" role="tabpanel" aria-labelledby="tab-sounds">
+          <!-- BANNER SUPERIOR: ESTADO, CONEXIÓN Y MÉTRICAS -->
+          <header id="bannerCard" class="card card-banner">
+            <div class="banner-brand">
+              <img class="brand-logo" src="assets/logo.png" alt="Logo de Tiktato" />
+              <div class="brand-copy">
+                <h1 class="brand-name">Tiktato</h1>
+                <p class="brand-tag">Sonidos y alertas para tu TikTok LIVE</p>
               </div>
-              <div>
-                <h2>Sonidos por regalo y eventos</h2>
-                <p>Asigna qué sonido suena al recibir cada interacción.</p>
+            </div>
+
+            <div class="banner-connect">
+              <form id="connectForm" class="connect-form">
+                <div class="input-prefix">
+                  <input id="username" name="username" autocomplete="off" placeholder="@usuario" maxlength="80" />
+                </div>
+                <button id="btnConnect" class="btn btn-primary" type="submit">Conectar</button>
+                <button id="btnDisconnect" class="btn btn-ghost" type="button" disabled>Desconectar</button>
+              </form>
+
+              <div class="status-strip">
+                <div id="statusPill" class="status-pill status-disconnected">
+                  <span class="status-dot"></span>
+                  <span id="statusLabel">Desconectado</span>
+                </div>
+                <span id="liveBadge" class="badge-live">LIVE</span>
+                <span id="connectionMessage" class="connection-message"></span>
               </div>
             </div>
-            <div class="card-actions">
-              <button id="btnPickGift" class="btn btn-secondary btn-small" type="button">Elegir otro regalo</button>
-              <button id="btnAdvancedRules" class="btn btn-ghost btn-small" type="button">Reglas avanzadas</button>
+
+            <div class="banner-stats">
+              <div class="metric-tile" title="Espectadores en vivo">
+                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,56C48,56,16,128,16,128s32,72,112,72,112-72,112-72S208,56,128,56Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><circle cx="128" cy="128" r="40" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+                <div class="metric-value">
+                  <strong id="statViewers">0</strong>
+                  <small>Viendo</small>
+                </div>
+              </div>
+              <div class="metric-tile" title="Regalos recibidos">
+                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><rect x="40" y="80" width="176" height="48" rx="8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,80V208M192,128v80H64V128" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,80H92a28,28,0,1,1,28-28V80Zm0,0h36a28,28,0,1,0-28-28V80Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+                <div class="metric-value">
+                  <strong id="statGifts">0</strong>
+                  <small>Regalos</small>
+                </div>
+              </div>
+              <div class="metric-tile" title="Monedas acumuladas">
+                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><circle cx="96" cy="128" r="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,88.42A56,56,0,1,1,128,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M160,88.42A56,56,0,1,1,160,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+                <div class="metric-value">
+                  <strong id="statCoins">0</strong>
+                  <small>Monedas</small>
+                </div>
+              </div>
+              <div class="metric-tile" title="Nuevos seguidores">
+                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M104,136A56,56,0,1,0,48,80,56.06,56.06,0,0,0,104,136Zm0,32c-39.76,0-72,21.49-72,48a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8C176,189.49,143.76,168,104,168Zm96-56v32m16-16H184" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+                <div class="metric-value">
+                  <strong id="statFollows">0</strong>
+                  <small>Follows</small>
+                </div>
+              </div>
+              <div class="banner-quick-actions">
+                <button id="btnSettings" class="btn btn-icon" type="button" title="Ajustes de audio y app" aria-label="Ajustes de audio">
+                  <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,80a48,48,0,1,0,48,48A48,48,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z" fill="currentColor"/><path d="M232,120H214.28a86.69,86.69,0,0,0-8.31-20l12.56-12.56a8,8,0,0,0,0-11.31l-17-17a8,8,0,0,0-11.31,0L177.66,71.69a86.69,86.69,0,0,0-20-8.31V45.65A8,8,0,0,0,150,37.66H126a8,8,0,0,0-7.66,8v17.73a86.69,86.69,0,0,0-20,8.31L85.78,59.14a8,8,0,0,0-11.31,0l-17,17a8,8,0,0,0,0,11.31L70,99.98a86.69,86.69,0,0,0-8.31,20H44a8,8,0,0,0-8,8v24a8,8,0,0,0,8,8H61.69a86.69,86.69,0,0,0,8.31,20L57.44,192.54a8,8,0,0,0,0,11.31l17,17a8,8,0,0,0,11.31,0L98.31,208.29a86.69,86.69,0,0,0,20,8.31v17.75a8,8,0,0,0,7.66,8h24a8,8,0,0,0,8-7.66V216.6a86.69,86.69,0,0,0,20-8.31l12.56,12.56a8,8,0,0,0,11.31,0l17-17a8,8,0,0,0,0-11.31l-12.56-12.56a86.69,86.69,0,0,0,8.31-20H232a8,8,0,0,0,8-8V128A8,8,0,0,0,232,120Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+                </button>
+                <button id="btnHelp" class="btn btn-icon" type="button" title="Ayuda y conexión QR" aria-label="Ayuda para conectar">
+                  <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><circle cx="128" cy="128" r="96" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><circle cx="128" cy="180" r="12" fill="currentColor"/><path d="M128,144v-8a28,28,0,1,0-28-28" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+                </button>
+              </div>
             </div>
           </header>
 
-          <div class="card-body card-scrollable">
-            <div class="section-label">Regalos destacados</div>
-            <div id="giftPresets" class="gift-presets" aria-label="Regalos rápidos"></div>
+          <!-- ESPACIO DE TRABAJO: SONIDOS + ACTIVIDAD EN VIVO -->
+          <div class="sounds-workspace-grid">
+            <!-- COLUMNA PRINCIPAL: CONFIGURACIÓN DE SONIDOS -->
+            <section class="card card-sounds">
+              <header class="card-head">
+                <div class="card-title-group">
+                  <div class="card-icon-badge">
+                    <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,168a32,32,0,1,1-32-32h32V40l88,24V144a32,32,0,1,1-32-32h32V79.27L128,55.27Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+                  </div>
+                  <div>
+                    <h2>Sonidos por regalo y eventos</h2>
+                    <p>Asigna qué sonido suena al recibir cada interacción.</p>
+                  </div>
+                </div>
+                <div class="card-actions">
+                  <button id="btnPickGift" class="btn btn-secondary btn-small" type="button">Elegir otro regalo</button>
+                  <button id="btnAdvancedRules" class="btn btn-ghost btn-small" type="button">Reglas avanzadas</button>
+                </div>
+              </header>
 
-            <div class="section-label" style="margin-top: 12px;">Regalos configurados</div>
-            <div id="giftQuickList" class="quick-rules gift-quick-list"></div>
+              <div class="card-body card-scrollable">
+                <!-- BARRA DESTACADA DE PERSONALIZACIÓN DE REGALOS -->
+                <div class="gift-presets-wrap">
+                  <div class="gift-presets-header">
+                    <span class="gift-presets-title">Personalización rápida de regalos</span>
+                    <span class="gift-presets-hint">Toca cualquier regalo para personalizar su sonido y volumen. Los configurados aparecen con ✓</span>
+                  </div>
+                  <div id="giftPresets" class="gift-presets" aria-label="Regalos rápidos"></div>
+                </div>
 
-            <div class="section-label" style="margin-top: 12px;">Eventos generales</div>
-            <div id="quickRules" class="quick-rules"></div>
+                <div class="section-label">Regalos configurados</div>
+                <div id="giftQuickList" class="quick-rules gift-quick-list"></div>
 
-            <label class="toggle-row" style="margin-top: 10px;">
-              <span class="toggle-copy">
-                <strong>Repetir el sonido en cada combo</strong>
-                <small>Si envían 10 rosas seguidas, suena 10 veces de forma secuencial.</small>
-              </span>
-              <span class="switch"><input id="ttsPlayEveryStreak" type="checkbox" checked /><span></span></span>
-            </label>
+                <div class="section-label" style="margin-top: 14px;">Eventos generales</div>
+                <div id="quickRules" class="quick-rules"></div>
 
-            <!-- Formulario inline para añadir/editar regla -->
-            <div id="ruleFormWrap" class="rule-form-wrap" hidden>
-              <form id="ruleForm" class="rule-form">
-                <input id="ruleId" type="hidden" />
-                <input id="ruleGiftId" type="hidden" />
-                <input id="ruleGiftImageUrl" type="hidden" />
+                <label class="toggle-row" style="margin-top: 12px;">
+                  <span class="toggle-copy">
+                    <strong>Repetir el sonido en cada combo</strong>
+                    <small>Si envían 10 rosas seguidas, suena 10 veces de forma secuencial.</small>
+                  </span>
+                  <span class="switch"><input id="soundsPlayEveryStreak" type="checkbox" checked /><span></span></span>
+                </label>
 
-                <div class="gift-picker-box gift-only span-3">
-                  <div class="gift-picker-toolbar">
-                    <span class="gift-picker-label">Elige un regalo <small id="giftCatalogCount"></small></span>
-                    <div class="gift-picker-search-row">
-                      <input id="giftSearch" type="search" autocomplete="off" placeholder="Buscar regalo…" />
-                      <button id="btnClearGiftSelection" class="btn btn-tiny btn-ghost" type="button">Cualquiera</button>
+                <!-- Formulario inline para añadir/editar regla -->
+                <div id="ruleFormWrap" class="rule-form-wrap" hidden>
+                  <form id="ruleForm" class="rule-form">
+                    <input id="ruleId" type="hidden" />
+                    <input id="ruleGiftId" type="hidden" />
+                    <input id="ruleGiftImageUrl" type="hidden" />
+
+                    <div class="gift-picker-box gift-only span-3">
+                      <div class="gift-picker-toolbar">
+                        <span class="gift-picker-label">Elige un regalo <small id="giftCatalogCount"></small></span>
+                        <div class="gift-picker-search-row">
+                          <input id="giftSearch" type="search" autocomplete="off" placeholder="Buscar regalo…" />
+                          <button id="btnClearGiftSelection" class="btn btn-tiny btn-ghost" type="button">Cualquiera</button>
+                        </div>
+                      </div>
+                      <div id="giftCatalogGrid" class="gift-catalog-grid" role="listbox"></div>
+                    </div>
+
+                    <label class="field">
+                      <span>Evento</span>
+                      <select id="ruleEventType">
+                        <option value="gift">Regalo</option>
+                        <option value="follow">Follow</option>
+                        <option value="share">Share</option>
+                        <option value="like">Like</option>
+                        <option value="subscribe">Suscripción</option>
+                        <option value="join">Entrada (Join)</option>
+                      </select>
+                    </label>
+                    <label class="field gift-only">
+                      <span>Regalo</span>
+                      <select id="ruleGiftSelect"></select>
+                      <input id="ruleGiftName" placeholder="Nombre o comodín *" maxlength="80" hidden />
+                    </label>
+                    <label class="field gift-only">
+                      <span>Mínimo de monedas</span>
+                      <input id="ruleMinCoins" type="number" min="0" step="1" value="0" />
+                    </label>
+                    <label class="field">
+                      <span>Sonido</span>
+                      <div class="sound-select-row">
+                        <select id="ruleSound"></select>
+                        <button id="btnPreviewRuleSound" class="btn btn-icon btn-tiny" type="button" title="Probar sonido">
+                          <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><polygon points="80 40 200 128 80 216 80 40" fill="currentColor"/></svg>
+                        </button>
+                      </div>
+                    </label>
+                    <label class="field">
+                      <span>Volumen</span>
+                      <input id="ruleVolume" type="range" min="0" max="150" step="5" value="100" />
+                    </label>
+                    <label class="field">
+                      <span>Cooldown (segundos)</span>
+                      <input id="ruleCooldown" type="number" min="0" max="86400" step="1" value="0" />
+                    </label>
+                    <div class="rule-form-actions">
+                      <button id="btnSaveRule" class="btn btn-primary btn-small" type="submit">Guardar regla</button>
+                      <button id="btnCancelRule" class="btn btn-ghost btn-small" type="button">Cancelar</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <footer class="card-foot">
+                <button id="btnSounds" class="btn btn-ghost btn-small" type="button">Biblioteca de sonidos</button>
+                <button id="btnImportSound" class="btn btn-ghost btn-small" type="button">Añadir sonido</button>
+                <button id="btnAddRule" class="btn btn-primary btn-small" type="button">+ Nueva regla</button>
+              </footer>
+            </section>
+
+            <!-- COLUMNA LATERAL: ACTIVIDAD EN VIVO -->
+            <section class="card card-activity">
+              <header class="card-head">
+                <div class="card-title-group">
+                  <div class="card-icon-badge">
+                    <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><polygon points="160 16 48 144 120 144 96 240 208 112 136 112 160 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+                  </div>
+                  <div>
+                    <h2>Actividad en vivo</h2>
+                    <p>Historial de eventos en directo.</p>
+                  </div>
+                </div>
+              </header>
+
+              <div class="test-toolbar" role="group" aria-label="Enviar evento de prueba">
+                <span class="test-label">Probar:</span>
+                <button class="btn btn-tiny" data-test="gift" type="button">Regalo</button>
+                <button class="btn btn-tiny" data-test="follow" type="button">Follow</button>
+                <button class="btn btn-tiny" data-test="share" type="button">Share</button>
+                <button class="btn btn-tiny" data-test="like" type="button">Like</button>
+                <button class="btn btn-tiny" data-test="chat" type="button">Chat</button>
+              </div>
+
+              <div class="card-body card-scrollable">
+                <div id="activityList" class="activity-list"></div>
+                <div id="activityEmpty" class="empty-state" hidden>
+                  <strong>Todavía no hay eventos</strong>
+                  <span>Cuando inicies tu directo verás aquí cada regalo, follow y mensaje en tiempo real.</span>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- PESTAÑA 2: OVERLAY DE ALERTAS              -->
+        <!-- ========================================== -->
+        <div id="panel-overlay" class="tab-panel" role="tabpanel" aria-labelledby="tab-overlay" hidden>
+          <div class="overlay-layout">
+            <section class="card card-overlay-config">
+              <header class="card-head">
+                <div class="card-title-group">
+                  <div class="card-icon-badge">
+                    <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><rect x="32" y="48" width="192" height="144" rx="16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="160" y1="224" x2="96" y2="224" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="128" y1="192" x2="128" y2="224" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+                  </div>
+                  <div>
+                    <h2>Overlay de alertas en pantalla</h2>
+                    <p>Aparece automáticamente sobre tu directo al recibir regalos (800 × 600).</p>
+                  </div>
+                </div>
+              </header>
+
+              <div class="card-body">
+                <div class="field">
+                  <span class="field-label">Enlace para OBS Studio / TikTok LIVE Studio</span>
+                  <div class="url-input-group">
+                    <input id="overlayUrl" readonly aria-label="URL del overlay" />
+                    <button id="btnCopyOverlay" class="btn btn-primary btn-small" type="button">Copiar enlace</button>
+                  </div>
+                </div>
+
+                <div class="obs-guide-box">
+                  <strong class="obs-guide-title">Cómo configurarlo en OBS Studio en 3 pasos:</strong>
+                  <ol class="obs-guide-steps">
+                    <li>En OBS Studio, pulsa <strong>+</strong> en Fuentes y elige <strong>Navegador</strong>.</li>
+                    <li>Pega el enlace copiado y establece resolución <strong>800 × 600</strong>.</li>
+                    <li>Marca la casilla <em>«Actualizar el navegador cuando la escena se active»</em>.</li>
+                  </ol>
+                </div>
+
+                <div class="overlay-quick-test" style="margin-top: 14px;">
+                  <span class="field-label">Probar visualización de alerta:</span>
+                  <div class="test-toolbar" role="group" aria-label="Probar alerta de regalo">
+                    <button class="btn btn-secondary btn-small" data-test="gift" type="button">Enviar regalo de prueba</button>
+                  </div>
+                </div>
+              </div>
+
+              <footer class="card-foot">
+                <button id="btnOpenOverlay" class="btn btn-ghost btn-small" type="button">Vista previa en navegador</button>
+                <button id="btnOverlaySettings" class="btn btn-secondary btn-small" type="button">Personalizar aspecto</button>
+              </footer>
+            </section>
+
+            <section class="card card-overlay-preview">
+              <header class="card-head">
+                <div class="card-title-group">
+                  <div>
+                    <h2>Vista previa en pantalla</h2>
+                    <p>Así verán tus espectadores la alerta al llegar un regalo.</p>
+                  </div>
+                </div>
+              </header>
+
+              <div class="card-body overlay-preview-body">
+                <div class="overlay-demo-box" aria-hidden="true">
+                  <div class="overlay-demo-card">
+                    <div class="overlay-demo-avatar"><img src="assets/logo.png" alt="" /></div>
+                    <div class="overlay-demo-body">
+                      <div class="overlay-demo-top">
+                        <span class="overlay-demo-tag">REGALO</span>
+                        <span class="overlay-demo-coins">100 monedas</span>
+                      </div>
+                      <strong class="overlay-demo-user">Viewer de prueba</strong>
+                      <span class="overlay-demo-detail">envió Galaxia</span>
                     </div>
                   </div>
-                  <div id="giftCatalogGrid" class="gift-catalog-grid" role="listbox"></div>
                 </div>
+              </div>
+            </section>
+          </div>
+        </div>
 
-                <label class="field">
-                  <span>Evento</span>
-                  <select id="ruleEventType">
-                    <option value="gift">Regalo</option>
-                    <option value="follow">Follow</option>
-                    <option value="share">Share</option>
-                    <option value="like">Like</option>
-                    <option value="subscribe">Suscripción</option>
-                    <option value="join">Entrada (Join)</option>
-                  </select>
-                </label>
-                <label class="field gift-only">
-                  <span>Regalo</span>
-                  <select id="ruleGiftSelect"></select>
-                  <input id="ruleGiftName" placeholder="Nombre o comodín *" maxlength="80" hidden />
-                </label>
-                <label class="field gift-only">
-                  <span>Mínimo de monedas</span>
-                  <input id="ruleMinCoins" type="number" min="0" step="1" value="0" />
-                </label>
-                <label class="field">
-                  <span>Sonido</span>
-                  <div class="sound-select-row">
-                    <select id="ruleSound"></select>
-                    <button id="btnPreviewRuleSound" class="btn btn-icon btn-tiny" type="button" title="Probar sonido">
-                      <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><polygon points="80 40 200 128 80 216 80 40" fill="currentColor"/></svg>
-                    </button>
+        <!-- ========================================== -->
+        <!-- PESTAÑA 3: FRASCO DE DONACIONES            -->
+        <!-- ========================================== -->
+        <div id="panel-jar" class="tab-panel" role="tabpanel" aria-labelledby="tab-jar" hidden>
+          <section id="jarCard" class="card card-feature step-jar jar-full-card">
+            <header class="card-head">
+              <div class="card-title-group">
+                <div class="card-icon-badge">
+                  <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><circle cx="96" cy="128" r="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,88.42A56,56,0,1,1,128,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M160,88.42A56,56,0,1,1,160,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+                </div>
+                <div>
+                  <h2>Frasco de donaciones</h2>
+                  <p>Física interactiva de monedas y regalos cayendo en tiempo real.</p>
+                </div>
+              </div>
+              <span id="jarPercent" class="chip">0%</span>
+            </header>
+
+            <div class="card-body jar-body-layout">
+              <div class="jar-controls-col">
+                <div class="jar-stats-panel">
+                  <div class="jar-stat-item">
+                    <span class="jar-stat-label">Monedas acumuladas / Meta</span>
+                    <strong id="jarAmount" class="jar-stat-val">0 / 1.000</strong>
                   </div>
-                </label>
-                <label class="field">
-                  <span>Volumen</span>
-                  <input id="ruleVolume" type="range" min="0" max="150" step="5" value="100" />
-                </label>
-                <label class="field">
-                  <span>Cooldown (segundos)</span>
-                  <input id="ruleCooldown" type="number" min="0" max="86400" step="1" value="0" />
-                </label>
-                <div class="rule-form-actions">
-                  <button id="btnSaveRule" class="btn btn-primary btn-small" type="submit">Guardar regla</button>
-                  <button id="btnCancelRule" class="btn btn-ghost btn-small" type="button">Cancelar</button>
-                </div>
-              </form>
-            </div>
-
-            <div id="rulesList" class="rules-list" hidden></div>
-            <div id="rulesEmpty" class="rules-empty" hidden></div>
-          </div>
-
-          <footer class="card-foot">
-            <button id="btnSounds" class="btn btn-ghost btn-small" type="button">Biblioteca de sonidos</button>
-            <button id="btnImportSound" class="btn btn-ghost btn-small" type="button">Añadir sonido</button>
-            <button id="btnAddRule" class="btn btn-primary btn-small" type="button">+ Nueva regla</button>
-          </footer>
-        </section>
-
-        <!-- TARJETA ACTIVIDAD EN VIVO (COL 4) -->
-        <section class="card card-activity">
-          <header class="card-head">
-            <div class="card-title-group">
-              <div class="card-icon-badge">
-                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><polygon points="160 16 48 144 120 144 96 240 208 112 136 112 160 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
-              </div>
-              <div>
-                <h2>Actividad en vivo</h2>
-                <p>Historial de eventos en directo.</p>
-              </div>
-            </div>
-          </header>
-
-          <div class="test-toolbar" role="group" aria-label="Enviar evento de prueba">
-            <span class="test-label">Probar:</span>
-            <button class="btn btn-tiny" data-test="gift" type="button">Regalo</button>
-            <button class="btn btn-tiny" data-test="follow" type="button">Follow</button>
-            <button class="btn btn-tiny" data-test="share" type="button">Share</button>
-            <button class="btn btn-tiny" data-test="like" type="button">Like</button>
-            <button class="btn btn-tiny" data-test="chat" type="button">Chat</button>
-          </div>
-
-          <div class="card-body card-scrollable">
-            <div id="activityList" class="activity-list"></div>
-            <div id="activityEmpty" class="empty-state" hidden>
-              <strong>Todavía no hay eventos</strong>
-              <span>Cuando inicies tu directo verás aquí cada regalo, follow y mensaje en tiempo real.</span>
-            </div>
-          </div>
-        </section>
-
-        <!-- FILA 2: OVERLAY + FRASCO + VOZ (3 TARJETAS IDÉNTICAS EN ALTURA) -->
-        <!-- 1. OVERLAY DE ALERTAS -->
-        <section class="card card-feature">
-          <header class="card-head">
-            <div class="card-title-group">
-              <div class="card-icon-badge">
-                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><rect x="32" y="48" width="192" height="144" rx="16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="160" y1="224" x2="96" y2="224" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="128" y1="192" x2="128" y2="224" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
-              </div>
-              <div>
-                <h2>Overlay de alertas</h2>
-                <p>Aparece en pantalla al recibir regalos (800 × 600).</p>
-              </div>
-            </div>
-          </header>
-
-          <div class="card-body">
-            <div class="url-input-group">
-              <input id="overlayUrl" readonly aria-label="URL del overlay" />
-              <button id="btnCopyOverlay" class="btn btn-primary btn-small" type="button">Copiar enlace</button>
-            </div>
-
-            <div class="overlay-demo-box" aria-hidden="true">
-              <div class="overlay-demo-card">
-                <div class="overlay-demo-avatar"><img src="assets/logo.png" alt="" /></div>
-                <div class="overlay-demo-body">
-                  <div class="overlay-demo-top">
-                    <span class="overlay-demo-tag">REGALO</span>
-                    <span class="overlay-demo-coins">100 monedas</span>
+                  <div class="jar-stat-item">
+                    <span class="jar-stat-label">Total donaciones</span>
+                    <span id="jarGifts" class="jar-stat-sub">0 regalos</span>
                   </div>
-                  <strong class="overlay-demo-user">Viewer de prueba</strong>
-                  <span class="overlay-demo-detail">envió Galaxia</span>
+                  <label class="field jar-goal-field">
+                    <span>Meta de monedas</span>
+                    <input id="jarGoal" type="number" min="1" step="1" value="1000" />
+                  </label>
+                </div>
+
+                <div class="jar-tests-box">
+                  <span class="field-label">Lanzar regalo de prueba al frasco:</span>
+                  <div class="quick-tests">
+                    <button id="btnTestGiftRose" class="btn btn-secondary btn-small" type="button">+1 Rosa</button>
+                    <button id="btnTestGiftCombo" class="btn btn-secondary btn-small" type="button">x10 Combo</button>
+                    <button id="btnTestGiftGalaxy" class="btn btn-secondary btn-small" type="button">+1000 Galaxia</button>
+                  </div>
+                </div>
+
+                <div class="jar-url-box">
+                  <span class="field-label">Enlace para OBS Studio (Fuente Navegador)</span>
+                  <div class="url-input-group">
+                    <input id="jarUrl" readonly aria-label="URL del frasco" />
+                    <button id="btnCopyJar" class="btn btn-primary btn-small" type="button" title="Copiar URL para OBS Studio">Copiar enlace</button>
+                  </div>
+                  <p class="jar-tip">
+                    Para OBS Studio usa «Copiar enlace». Para TikTok LIVE Studio usa «Abrir ventana» con fondo chroma.
+                  </p>
+                </div>
+
+                <input id="jarTestUrl" readonly type="hidden" />
+                <button id="btnCopyJarTest" style="display: none;" type="button"></button>
+                <button id="btnOpenJarTest" style="display: none;" type="button"></button>
+              </div>
+
+              <div class="jar-visual-col">
+                <div class="jar-status-box jar-visual-large">
+                  <div class="jar-mini" aria-hidden="true">
+                    <div class="jar-mini-lid"></div>
+                    <div class="jar-mini-glass">
+                      <div id="jarFill" class="jar-mini-fill"></div>
+                      <span class="jar-mini-shine"></span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <footer class="card-foot">
-            <button id="btnOpenOverlay" class="btn btn-ghost btn-small" type="button">Vista previa</button>
-            <button id="btnOverlaySettings" class="btn btn-secondary btn-small" type="button">Personalizar</button>
-          </footer>
-        </section>
+            <footer class="card-foot">
+              <button id="btnOpenJarStudio" class="btn btn-secondary btn-small" type="button">Abrir ventana (Chroma)</button>
+              <button id="btnOpenJar" class="btn btn-ghost btn-small" type="button">Vista previa</button>
+              <button id="btnJarSettings" class="btn btn-ghost btn-small" type="button">Ajustes</button>
+              <button id="btnResetJar" class="btn btn-ghost btn-danger btn-small" type="button">Vaciar frasco</button>
+            </footer>
+          </section>
+        </div>
 
-        <!-- 2. FRASCO DE DONACIONES (SIN "PRO") -->
-        <section id="jarCard" class="card card-feature step-jar">
-          <header class="card-head">
-            <div class="card-title-group">
-              <div class="card-icon-badge">
-                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><circle cx="96" cy="128" r="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,88.42A56,56,0,1,1,128,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M160,88.42A56,56,0,1,1,160,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
-              </div>
-              <div>
-                <h2>Frasco de donaciones</h2>
-                <p>Física interactiva de monedas cayendo en vivo.</p>
-              </div>
-            </div>
-            <span id="jarPercent" class="chip">0%</span>
-          </header>
-
-          <div class="card-body">
-            <div class="jar-status-box">
-              <div class="jar-mini" aria-hidden="true">
-                <div class="jar-mini-lid"></div>
-                <div class="jar-mini-glass">
-                  <div id="jarFill" class="jar-mini-fill"></div>
-                  <span class="jar-mini-shine"></span>
+        <!-- ========================================== -->
+        <!-- PESTAÑA 4: VOZ DEL CHAT (TTS)              -->
+        <!-- ========================================== -->
+        <div id="panel-tts" class="tab-panel" role="tabpanel" aria-labelledby="tab-tts" hidden>
+          <section class="card card-tts-main">
+            <header class="card-head">
+              <div class="card-title-group">
+                <div class="card-icon-badge">
+                  <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M152,40V216L80,160H32a8,8,0,0,1-8-8V104a8,8,0,0,1,8-8H80L152,40Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M192,104a40,40,0,0,1,0,48M216,80a80,80,0,0,1,0,96" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+                </div>
+                <div>
+                  <h2>Voz del chat (Texto a voz TTS)</h2>
+                  <p>Lee comentarios y regalos mediante voz sintética en directo.</p>
                 </div>
               </div>
-              <div class="jar-stats-col">
-                <strong id="jarAmount">0 / 1.000</strong>
-                <span id="jarGifts">0 regalos</span>
-                <label class="field-compact">
-                  <span>Meta de monedas</span>
-                  <input id="jarGoal" type="number" min="1" step="1" value="1000" />
-                </label>
+              <span id="ttsQueueBadge" class="chip">EN ESPERA</span>
+            </header>
+
+            <div class="card-body tts-body-layout">
+              <div class="tts-left-col">
+                <div class="section-label">Activación de voz</div>
+                <div class="toggle-list-compact tts-toggle-list">
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
+                      <strong>Leer mensajes del chat</strong>
+                      <small>Lee en voz alta cada comentario nuevo de los espectadores.</small>
+                    </span>
+                    <span class="switch"><input id="ttsChatEnabled" type="checkbox" /><span></span></span>
+                  </label>
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
+                      <strong>Leer nombre del usuario</strong>
+                      <small>Menciona quién escribió antes de leer su comentario.</small>
+                    </span>
+                    <span class="switch"><input id="ttsReadUsername" type="checkbox" checked /><span></span></span>
+                  </label>
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
+                      <strong>Anunciar regalos recibidos</strong>
+                      <small>Dice en voz alta quién envió el regalo y la cantidad recibida.</small>
+                    </span>
+                    <span class="switch"><input id="ttsGiftsEnabled" type="checkbox" /><span></span></span>
+                  </label>
+                </div>
+
+                <div class="section-label" style="margin-top: 18px;">Voz y volumen</div>
+                <div class="field-compact-stack">
+                  <label class="field">
+                    <span>Proveedor y tipo de voz</span>
+                    <select id="ttsVoiceProvider" aria-label="Elegir voz">
+                      <optgroup label="Voces de Google">
+                        <option value="google:es-ES">Google Español (España)</option>
+                        <option value="google:es-US">Google Español (Latinoamérica)</option>
+                        <option value="google:es-MX">Google Español (México)</option>
+                        <option value="google:es-AR">Google Español (Argentina)</option>
+                        <option value="google:en-US">Google English (US)</option>
+                      </optgroup>
+                      <optgroup id="ttsLocalVoicesGroup" label="Voces del sistema (Windows)">
+                        <option value="local">Predeterminada del sistema</option>
+                      </optgroup>
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span class="field-row">Volumen de voz <strong id="ttsVolumeValue">80%</strong></span>
+                    <input id="ttsVolume" type="range" min="0" max="100" step="5" value="80" />
+                  </label>
+                </div>
               </div>
-            </div>
 
-            <div class="quick-tests" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px;">
-              <button id="btnTestGiftRose" class="btn btn-tiny" type="button">+1 Rosa</button>
-              <button id="btnTestGiftCombo" class="btn btn-tiny" type="button">x10 Combo</button>
-              <button id="btnTestGiftGalaxy" class="btn btn-tiny" type="button">+1000 Galaxia</button>
-            </div>
-
-            <div class="url-input-group" style="margin-top: 10px;">
-              <input id="jarUrl" readonly aria-label="URL del frasco" />
-              <button id="btnCopyJar" class="btn btn-primary btn-small" type="button" title="Copiar URL para OBS Studio">Copiar enlace</button>
-            </div>
-            <small style="display: block; margin-top: 5px; font-size: 11px; color: var(--md-on-surface-variant); opacity: 0.85; line-height: 1.4;">
-              Para OBS Studio usa «Copiar enlace». Para TikTok LIVE Studio usa «Abrir ventana» con fondo chroma.
-            </small>
-            <input id="jarTestUrl" readonly type="hidden" />
-            <button id="btnCopyJarTest" style="display: none;" type="button"></button>
-            <button id="btnOpenJarTest" style="display: none;" type="button"></button>
-          </div>
-
-          <footer class="card-foot">
-            <button id="btnOpenJarStudio" class="btn btn-secondary btn-small" type="button">Abrir ventana</button>
-            <button id="btnOpenJar" class="btn btn-ghost btn-small" type="button">Vista previa</button>
-            <button id="btnJarSettings" class="btn btn-ghost btn-small" type="button">Ajustes</button>
-            <button id="btnResetJar" class="btn btn-ghost btn-danger btn-small" type="button">Vaciar</button>
-          </footer>
-        </section>
-
-        <!-- 3. VOZ DEL CHAT (TTS) -->
-        <section class="card card-feature">
-          <header class="card-head">
-            <div class="card-title-group">
-              <div class="card-icon-badge">
-                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M152,40V216L80,160H32a8,8,0,0,1-8-8V104a8,8,0,0,1,8-8H80L152,40Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M192,104a40,40,0,0,1,0,48M216,80a80,80,0,0,1,0,96" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
-              </div>
-              <div>
-                <h2>Voz del chat</h2>
-                <p>Lee comentarios y regalos mediante voz sintética.</p>
-              </div>
-            </div>
-          </header>
-
-          <div class="card-body">
-            <div class="toggle-list-compact">
-              <label class="toggle-row">
-                <span class="toggle-copy">
-                  <strong>Leer mensajes del chat</strong>
-                </span>
-                <span class="switch"><input id="ttsChatEnabled" type="checkbox" /><span></span></span>
-              </label>
-              <label class="toggle-row">
-                <span class="toggle-copy">
-                  <strong>Leer nombre del usuario</strong>
-                </span>
-                <span class="switch"><input id="ttsReadUsername" type="checkbox" checked /><span></span></span>
-              </label>
-              <label class="toggle-row">
-                <span class="toggle-copy">
-                  <strong>Anunciar regalos recibidos</strong>
-                </span>
-                <span class="switch"><input id="ttsGiftsEnabled" type="checkbox" /><span></span></span>
-              </label>
-            </div>
-
-            <div class="field-compact-stack" style="margin-top: 10px;">
-              <label class="field">
-                <span>Voz</span>
-                <select id="ttsVoiceProvider" aria-label="Elegir voz">
-                  <optgroup label="Voces de Google">
-                    <option value="google:es-ES">Google Español (España)</option>
-                    <option value="google:es-US">Google Español (Latinoamérica)</option>
-                    <option value="google:es-MX">Google Español (México)</option>
-                    <option value="google:es-AR">Google Español (Argentina)</option>
-                    <option value="google:en-US">Google English (US)</option>
-                  </optgroup>
-                  <optgroup id="ttsLocalVoicesGroup" label="Voces del sistema (Windows)">
-                    <option value="local">Predeterminada del sistema</option>
-                  </optgroup>
-                </select>
-              </label>
-
-              <label class="field">
-                <span class="field-row">Volumen <strong id="ttsVolumeValue">80%</strong></span>
-                <input id="ttsVolume" type="range" min="0" max="100" step="5" value="80" />
-              </label>
-            </div>
-
-            <!-- Opciones avanzadas y filtros de rol de TTS -->
-            <details class="disclosure-compact">
-              <summary class="disclosure-summary">
-                <span>Opciones avanzadas y filtros</span>
-                <svg class="disclosure-arrow icon" viewBox="0 0 256 256" aria-hidden="true"><polyline points="208 96 128 176 48 96" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="20"/></svg>
-              </summary>
-              <div class="disclosure-content">
-                <div class="toggle-list-compact" style="margin-top: 8px;">
+              <div class="tts-right-col">
+                <div class="section-label">Filtros y opciones avanzadas</div>
+                <div class="toggle-list-compact">
                   <label class="toggle-row">
                     <span class="toggle-copy">
                       <strong>Atenuar sonidos (Ducking)</strong>
-                      <small>Baja el volumen de alertas mientras habla la voz</small>
+                      <small>Baja el volumen de alertas mientras habla la voz.</small>
                     </span>
                     <span class="switch"><input id="ttsDucking" type="checkbox" checked /><span></span></span>
                   </label>
                   <label class="toggle-row">
                     <span class="toggle-copy">
                       <strong>Filtro anti-spam</strong>
-                      <small>Acorta risas y mensajes repetitivos</small>
+                      <small>Acorta risas y mensajes repetitivos para evitar saturación.</small>
                     </span>
                     <span class="switch"><input id="ttsAntiSpam" type="checkbox" checked /><span></span></span>
                   </label>
                   <label class="toggle-row">
                     <span class="toggle-copy">
                       <strong>Repetir voz en cada combo</strong>
+                      <small>Vuelve a anunciar regalos intermedios de una racha.</small>
                     </span>
                     <span class="switch"><input id="ttsPlayEveryStreak" type="checkbox" checked /><span></span></span>
                   </label>
                 </div>
 
-                <div class="field" style="margin-top: 10px;">
+                <div class="field" style="margin-top: 12px;">
                   <span class="field-row">Mínimo de monedas para regalos: <strong id="ttsMinCoinsValue">1</strong></span>
                   <input id="ttsMinCoins" type="range" min="0" max="100" step="1" value="1" />
                 </div>
 
-                <div class="toggle-list-compact" style="margin-top: 10px;">
+                <div class="toggle-list-compact" style="margin-top: 12px;">
                   <label class="toggle-row">
                     <span class="toggle-copy">
                       <strong>Filtrar chat por tipo de espectador</strong>
-                      <small>Solo lee mensajes de los roles seleccionados</small>
+                      <small>Solo lee mensajes de los roles seleccionados abajo.</small>
                     </span>
                     <span class="switch"><input id="ttsFilterChatByRole" type="checkbox" /><span></span></span>
                   </label>
@@ -443,25 +616,26 @@
                   <label class="checkbox-pill"><input id="ttsAllowGifter" type="checkbox" /> <span>Donadores (Nivel &ge; <input id="ttsMinGifterLevel" type="number" min="1" max="100" value="1" style="width: 44px; display: inline-block; padding: 2px 4px; border: 1px solid var(--md-outline-variant); border-radius: 4px;" />)</span></label>
                   <label class="checkbox-pill"><input id="ttsAllowMember" type="checkbox" /> <span>Club de fans (Nivel &ge; <input id="ttsMinMemberLevel" type="number" min="1" max="100" value="1" style="width: 44px; display: inline-block; padding: 2px 4px; border: 1px solid var(--md-outline-variant); border-radius: 4px;" />)</span></label>
                 </div>
+
+                <p class="tts-obs-notice">
+                  El TTS suena a través de esta aplicación (usa el audio del sistema en OBS Studio).
+                </p>
               </div>
-            </details>
-            <p style="margin-top: 10px; font-size: 11px; color: var(--md-on-surface-variant); opacity: 0.85; line-height: 1.4;">
-              El TTS suena a través de esta aplicación (usa el audio del sistema en OBS Studio).
-            </p>
-          </div>
+            </div>
 
-          <footer class="card-foot">
-            <button id="btnTestTTS" class="btn btn-primary btn-small" type="button">Probar voz</button>
-            <button id="btnSkipTTS" class="btn btn-ghost btn-small" type="button">Saltar</button>
-            <button id="btnClearTTS" class="btn btn-ghost btn-small" type="button">Silenciar</button>
-          </footer>
-        </section>
-      </main>
+            <footer class="card-foot">
+              <button id="btnTestTTS" class="btn btn-primary btn-small" type="button">Probar voz</button>
+              <button id="btnSkipTTS" class="btn btn-ghost btn-small" type="button">Saltar</button>
+              <button id="btnClearTTS" class="btn btn-ghost btn-small" type="button">Silenciar</button>
+            </footer>
+          </section>
+        </div>
 
-      <footer class="footer">
-        <span>Tiktato · Software libre y gratuito para TikTok LIVE</span>
-        <span id="appVersion" class="footer-version"></span>
-      </footer>
+        <footer class="footer">
+          <span>Tiktato · Software libre y gratuito para TikTok LIVE</span>
+          <span id="appVersion" class="footer-version"></span>
+        </footer>
+      </div>
     </div>
 
     <!-- DIÁLOGOS MODALES RESTILIZADOS -->
