@@ -111,11 +111,23 @@ function selectRule(rules, event, cooldowns = new Map(), now = Date.now()) {
   return eligible[0] || null;
 }
 
-function markPlayed(rule, event, cooldowns = new Map(), now = Date.now()) {
+const MAX_COOLDOWN_ENTRIES = 2000;
+
+function markPlayed(rule, event, cooldowns = new Map(), now = Date.now(), maxEntries = MAX_COOLDOWN_ENTRIES) {
   if (event.type === 'gift' && event.repeatEnd === false) {
     return cooldowns;
   }
-  cooldowns.set(cooldownKey(rule, event), now);
+  const key = cooldownKey(rule, event);
+  if (cooldowns.has(key)) {
+    cooldowns.delete(key);
+  }
+  cooldowns.set(key, now);
+  const limit = Math.max(1, Number(maxEntries) || MAX_COOLDOWN_ENTRIES);
+  while (cooldowns.size > limit) {
+    const oldestKey = cooldowns.keys().next().value;
+    if (oldestKey === undefined) break;
+    cooldowns.delete(oldestKey);
+  }
   return cooldowns;
 }
 
@@ -155,6 +167,7 @@ function buildAlert(event, rule, { sound, now = Date.now(), test = false, playEv
 }
 
 module.exports = {
+  MAX_COOLDOWN_ENTRIES,
   buildAlert,
   giftMatches,
   markPlayed,

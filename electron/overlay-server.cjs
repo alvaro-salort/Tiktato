@@ -30,27 +30,46 @@ function tokenMatches(expected, received) {
   return left.length === right.length && left.length > 0 && crypto.timingSafeEqual(left, right);
 }
 
-function sendJson(response, status, payload) {
+function resolveCorsOrigin(request, port = 3477) {
+  const activePort = Number(port) || 3477;
+  const defaultOrigin = `http://127.0.0.1:${activePort}`;
+  const rawOrigin = String(request?.headers?.origin || '').trim().replace(/\/+$/, '');
+  if (!rawOrigin) return defaultOrigin;
+  if (
+    rawOrigin.toLowerCase() === `http://127.0.0.1:${activePort}` ||
+    rawOrigin.toLowerCase() === `http://localhost:${activePort}`
+  ) {
+    return rawOrigin;
+  }
+  return defaultOrigin;
+}
+
+function sendJson(response, status, payload, { origin } = {}) {
   const body = JSON.stringify(payload);
-  response.writeHead(status, {
+  const headers = {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(body),
     'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff'
-  });
+    'X-Content-Type-Options': 'nosniff',
+    'Vary': 'Origin'
+  };
+  if (origin) {
+    headers['Access-Control-Allow-Origin'] = origin;
+  }
+  response.writeHead(status, headers);
   response.end(body);
 }
 
-function serveFile(request, response, filePath, { cache = false } = {}) {
+function serveFile(request, response, filePath, { cache = false, port = 3477 } = {}) {
   let stat;
   try {
     stat = fs.statSync(filePath);
     if (!stat.isFile()) {
-      sendJson(response, 404, { error: 'No encontrado' });
+      sendJson(response, 404, { error: 'No encontrado' }, { origin: resolveCorsOrigin(request, port) });
       return;
     }
   } catch {
-    sendJson(response, 404, { error: 'No encontrado' });
+    sendJson(response, 404, { error: 'No encontrado' }, { origin: resolveCorsOrigin(request, port) });
     return;
   }
 
@@ -58,13 +77,15 @@ function serveFile(request, response, filePath, { cache = false } = {}) {
   const contentType = MIME[extension] || 'application/octet-stream';
   const total = stat.size;
   const rangeHeader = request?.headers?.range;
+  const allowedOrigin = resolveCorsOrigin(request, port);
 
   const baseHeaders = {
     'Content-Type': contentType,
     'Accept-Ranges': 'bytes',
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
     'Access-Control-Allow-Headers': 'Range, Content-Type, Authorization',
+    'Vary': 'Origin',
     'Cache-Control': cache ? 'public, max-age=3600' : 'no-store',
     'X-Content-Type-Options': 'nosniff'
   };
@@ -205,30 +226,38 @@ class OverlayServer {
   }
 
   #handleHttp(request, response) {
-    const url = new URL(request.url || '/', `http://127.0.0.1:${this.port || 3477}`);
-    const pathname = decodeURIComponent(url.pathname);
+    const activePort = this.port || this.requestedPort || 3477;
+    const allowedOrigin = resolveCorsOrigin(request, activePort);
+    const url = new URL(request.url || '/', `http://127.0.0.1:${activePort}`);
+    let pathname = '/';
+    try {
+      pathname = decodeURIComponent(url.pathname);
+    } catch {
+      sendJson(response, 400, { error: 'Ruta inválida' }, { origin: allowedOrigin });
+      return;
+    }
+
+    const overlayCsp =
+      "default-src 'self' https: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; media-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; object-src 'none';";
 
     if (pathname === '/health') {
-      sendJson(response, 200, { ok: true, service: 'tiktato-overlay', clients: this.clients.size });
+      sendJson(response, 200, { ok: true, service: 'tiktato-overlay', clients: this.clients.size }, { origin: allowedOrigin });
       return;
     }
 
     if (pathname === '/' || pathname === '/overlay' || pathname === '/overlay/') {
-      response.setHeader(
-        'Content-Security-Policy',
-        "default-src 'self' https: data:; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* https: data: blob:; media-src 'self' http://127.0.0.1:* https: data: blob:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*;"
-      );
-      serveFile(request, response, path.join(this.overlayDir, 'index.html'));
+      response.setHeader('Content-Security-Policy', overlayCsp);
+      serveFile(request, response, path.join(this.overlayDir, 'index.html'), { port: activePort });
       return;
     }
 
     if (pathname === '/overlay.js') {
-      serveFile(request, response, path.join(this.overlayDir, 'overlay.js'));
+      serveFile(request, response, path.join(this.overlayDir, 'overlay.js'), { port: activePort });
       return;
     }
 
     if (pathname === '/overlay.css') {
-      serveFile(request, response, path.join(this.overlayDir, 'overlay.css'));
+      serveFile(request, response, path.join(this.overlayDir, 'overlay.css'), { port: activePort });
       return;
     }
 
@@ -239,77 +268,69 @@ class OverlayServer {
       pathname === '/jar/test/' ||
       pathname === '/jar-test'
     ) {
-      response.setHeader(
-        'Content-Security-Policy',
-        "default-src 'self' https: data:; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* https: data: blob:; media-src 'self' http://127.0.0.1:* https: data: blob:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*;"
-      );
-      serveFile(request, response, path.join(this.overlayDir, 'jar.html'));
+      response.setHeader('Content-Security-Policy', overlayCsp);
+      serveFile(request, response, path.join(this.overlayDir, 'jar.html'), { port: activePort });
       return;
     }
 
     if (pathname === '/jar.js') {
-      serveFile(request, response, path.join(this.overlayDir, 'jar.js'));
+      serveFile(request, response, path.join(this.overlayDir, 'jar.js'), { port: activePort });
       return;
     }
 
     if (pathname === '/jar.css') {
-      serveFile(request, response, path.join(this.overlayDir, 'jar.css'));
+      serveFile(request, response, path.join(this.overlayDir, 'jar.css'), { port: activePort });
       return;
     }
 
     if (pathname === '/matter.min.js' || pathname === '/matter.js') {
-      serveFile(request, response, path.join(this.overlayDir, 'matter.min.js'));
+      serveFile(request, response, path.join(this.overlayDir, 'matter.min.js'), { port: activePort });
       return;
     }
 
     if (pathname.startsWith('/assets/')) {
       const assetFile = safeChild(path.join(this.overlayDir, 'assets'), pathname.slice('/assets/'.length));
       if (assetFile) {
-        serveFile(request, response, assetFile, { cache: true });
+        serveFile(request, response, assetFile, { cache: true, port: activePort });
         return;
       }
     }
 
     if (pathname === '/shared/audio-engine.js') {
-      serveFile(request, response, path.join(this.sharedDir, 'audio-engine.js'));
+      serveFile(request, response, path.join(this.sharedDir, 'audio-engine.js'), { port: activePort });
       return;
     }
 
     if (pathname === '/api/config') {
       if (!tokenMatches(this.token, url.searchParams.get('token'))) {
-        sendJson(response, 401, { error: 'Token inválido' });
+        sendJson(response, 401, { error: 'Token inválido' }, { origin: allowedOrigin });
         return;
       }
-      sendJson(response, 200, this.config);
+      sendJson(response, 200, this.config, { origin: allowedOrigin });
       return;
     }
 
     if (pathname === '/api/jar') {
       if (!tokenMatches(this.token, url.searchParams.get('token'))) {
-        sendJson(response, 401, { error: 'Token inválido' });
+        sendJson(response, 401, { error: 'Token inválido' }, { origin: allowedOrigin });
         return;
       }
-      sendJson(response, 200, this.jar);
+      sendJson(response, 200, this.jar, { origin: allowedOrigin });
       return;
     }
 
     if (pathname.startsWith('/sounds/')) {
       if (!tokenMatches(this.token, url.searchParams.get('token'))) {
-        sendJson(response, 401, { error: 'Token inválido' });
+        sendJson(response, 401, { error: 'Token inválido' }, { origin: allowedOrigin });
         return;
       }
-      let rawFilename = pathname.slice('/sounds/'.length);
-      try {
-        rawFilename = decodeURIComponent(rawFilename);
-      } catch {
-        // Fallback si la codificación es inválida
-      }
+      const rawFilename = pathname.slice('/sounds/'.length);
       const file = safeChild(this.soundsDir, rawFilename);
       if (!file) {
-        sendJson(response, 400, { error: 'Ruta inválida' });
+        sendJson(response, 400, { error: 'Ruta inválida' }, { origin: allowedOrigin });
         return;
       }
-      serveFile(request, response, file, { cache: true });
+      serveFile(request, response, file, { cache: true, port: activePort });
       return;
     }
 
@@ -319,7 +340,7 @@ class OverlayServer {
       return;
     }
 
-    sendJson(response, 404, { error: 'No encontrado' });
+    sendJson(response, 404, { error: 'No encontrado' }, { origin: allowedOrigin });
   }
 
   #handleUpgrade(request, socket, head) {
@@ -395,5 +416,6 @@ class OverlayServer {
 
 module.exports = {
   OverlayServer,
+  resolveCorsOrigin,
   tokenMatches
 };

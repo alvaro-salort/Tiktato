@@ -63,26 +63,26 @@ const FEATURED_GIFT_IDS = ['5655', '15232', '6064', '7032', '6247', '7934', '548
 
 const ICON_PATHS = {
   gift:
-    '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7M7.5 8a2.5 2.5 0 0 1 0-5c2 0 3 2 4.5 5M16.5 8a2.5 2.5 0 0 0 0-5c-2 0-3 2-4.5 5"/>',
+    '<rect x="40" y="80" width="176" height="48" rx="8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,80V208M192,128v80H64V128" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,80H92a28,28,0,1,1,28-28V80Zm0,0h36a28,28,0,1,0-28-28V80Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>',
   follow:
-    '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m3-3h-6"/>',
+    '<path d="M104,136A56,56,0,1,0,48,80,56.06,56.06,0,0,0,104,136Zm0,32c-39.76,0-72,21.49-72,48a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8C176,189.49,143.76,168,104,168Zm96-56v32m16-16H184" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>',
   share:
-    '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>',
+    '<circle cx="64" cy="128" r="32" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><circle cx="176" cy="64" r="32" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><circle cx="176" cy="192" r="32" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="91.68" y1="114.16" x2="148.32" y2="77.84" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="91.68" y1="141.84" x2="148.32" y2="178.16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>',
   like:
-    '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6a5.5 5.5 0 0 0 1-8.8Z"/>',
+    '<path d="M178,32c-20.65,0-38.73,8.88-50,23.89C116.73,40.88,98.65,32,78,32A62.07,62.07,0,0,0,16,94c0,70,104,130,112,130s112-60,112-130A62.07,62.07,0,0,0,178,32Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>',
   chat:
-    '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    '<path d="M45.42,176.64A95.88,95.88,0,0,1,32,128C32,74.98,74.98,32,128,32s96,42.98,96,96-42.98,96-96,96a95.88,95.88,0,0,1-48.64-13.42L32,224Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><circle cx="88" cy="128" r="12" fill="currentColor"/><circle cx="128" cy="128" r="12" fill="currentColor"/><circle cx="168" cy="128" r="12" fill="currentColor"/>',
   music:
-    '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
-  play: '<path d="m8 5 11 7-11 7z"/>',
+    '<path d="M128,168a32,32,0,1,1-32-32h32V40l88,24V144a32,32,0,1,1-32-32h32V79.27L128,55.27Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>',
+  play: '<polygon points="80 40 200 128 80 216 80 40" fill="currentColor"/>',
   edit:
-    '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    '<path d="M96,216H48a8,8,0,0,1-8-8V160L168,32a24,24,0,0,1,34,0l22,22a24,24,0,0,1,0,34Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="144" y1="56" x2="200" y2="112" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>',
   trash:
-    '<path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/>'
+    '<line x1="216" y1="56" x2="40" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="104" y1="104" x2="104" y2="168" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="152" y1="104" x2="152" y2="168" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M200,56V208a8,8,0,0,1-8,8H64a8,8,0,0,1-8-8V56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M168,56V40a16,16,0,0,0-16-16H104A16,16,0,0,0,88,40V56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>'
 };
 
 function iconSvg(name) {
-  return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${ICON_PATHS[name] || ICON_PATHS.music}</svg>`;
+  return `<svg class="icon phosphor-icon" viewBox="0 0 256 256" aria-hidden="true">${ICON_PATHS[name] || ICON_PATHS.music}</svg>`;
 }
 
 function escapeHtml(value) {
@@ -127,11 +127,12 @@ function formatBytes(bytes) {
 
 function showToast(message, kind = 'info') {
   const toast = $('#toast');
+  if (!toast) return;
   toast.textContent = message;
   toast.classList.toggle('is-error', kind === 'error');
   toast.classList.add('is-visible');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('is-visible'), 3200);
+  toastTimer = setTimeout(() => toast?.classList.remove('is-visible'), 3200);
 }
 
 function setError(message) {
@@ -277,7 +278,7 @@ function updateStatus(status) {
   disconnect.disabled = !['connected', 'connecting', 'error'].includes(status.state);
   connect.disabled = status.state === 'connecting';
   connect.textContent = status.state === 'connecting' ? 'Conectando…' : 'Conectar';
-  message.textContent = status.message || 'Sin conexión';
+  message.textContent = status.state === 'connected' ? '' : (status.message || 'Sin conexión');
   message.classList.toggle('is-error', status.state === 'error');
   $('#statViewers').textContent = formatNumber(status.viewerCount || 0);
 }
@@ -294,8 +295,17 @@ function setInputChecked(selector, checked) {
   input.checked = Boolean(checked);
 }
 
+let lastStaticConfigSig = '';
+let lastGiftsDigest = '';
+
 function render(nextState) {
   if (!nextState) return;
+  const hasExplicitGifts = Array.isArray(nextState.gifts);
+  if (hasExplicitGifts) {
+    lastGiftsDigest = nextState.gifts.map((g) => `${g.id}:${g.name}:${g.coins}:${g.imageUrl || ''}`).join('|');
+  } else if (Array.isArray(state?.gifts)) {
+    nextState = { ...nextState, gifts: state.gifts };
+  }
   state = nextState;
 
   setInputValue('#username', state.username);
@@ -317,20 +327,36 @@ function render(nextState) {
   $('#statCoins').textContent = formatNumber(state.stats.coins);
   $('#statFollows').textContent = formatNumber(state.stats.follows);
 
+  if (state.appVersion) {
+    const verEl = $('#appVersion') || document.querySelector('.footer-version');
+    if (verEl) verEl.textContent = `v${state.appVersion}`;
+  }
+
   updateStatus(state.status);
-  renderGiftPresets();
-  renderGiftQuickList();
-  renderQuickRules();
-  renderRules();
-  renderGiftCatalog();
-  renderSounds();
+
+  const staticSig = JSON.stringify({
+    rules: state.rules,
+    sounds: state.sounds,
+    giftsDigest: lastGiftsDigest,
+    playEveryStreak: state.tts?.playEveryStreak
+  });
+  if (staticSig !== lastStaticConfigSig) {
+    lastStaticConfigSig = staticSig;
+    renderGiftPresets();
+    renderGiftQuickList();
+    renderQuickRules();
+    renderRules();
+    renderGiftCatalog();
+    renderSounds();
+    updateRuleSoundOptions();
+    if (!$('#ruleFormWrap')?.hidden) {
+      updateRuleGiftOptions($('#ruleGiftSelect')?.value || $('#ruleGiftId')?.value, $('#ruleGiftName')?.value);
+    }
+  }
+
   renderActivity();
   renderJar();
   renderTTS();
-  updateRuleSoundOptions();
-  if (!$('#ruleFormWrap')?.hidden) {
-    updateRuleGiftOptions($('#ruleGiftSelect')?.value || $('#ruleGiftId')?.value, $('#ruleGiftName')?.value);
-  }
 }
 
 function soundOptionsHtml(selectedId, { allowImport = true } = {}) {

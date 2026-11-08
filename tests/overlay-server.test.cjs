@@ -208,3 +208,44 @@ test('rechaza WebSocket sin token', async () => {
     fs.rmSync(sounds, { recursive: true, force: true });
   }
 });
+
+test('restringe Access-Control-Allow-Origin a orígenes locales en lugar de comodín *', async () => {
+  const { server, sounds } = makeServer();
+  try {
+    await server.start();
+    const port = server.port;
+
+    const noOriginRes = await fetch(`http://127.0.0.1:${port}/overlay.js`);
+    assert.equal(noOriginRes.status, 200);
+    assert.equal(noOriginRes.headers.get('access-control-allow-origin'), `http://127.0.0.1:${port}`);
+    assert.notEqual(noOriginRes.headers.get('access-control-allow-origin'), '*');
+
+    const localhostRes = await fetch(`http://127.0.0.1:${port}/overlay.js`, {
+      headers: { Origin: `http://localhost:${port}` }
+    });
+    assert.equal(localhostRes.status, 200);
+    assert.equal(localhostRes.headers.get('access-control-allow-origin'), `http://localhost:${port}`);
+
+    const externalOriginRes = await fetch(`http://127.0.0.1:${port}/sounds/demo.mp3?token=${token}`, {
+      headers: { Origin: 'https://evil.example.com' }
+    });
+    assert.equal(externalOriginRes.status, 200);
+    assert.equal(externalOriginRes.headers.get('access-control-allow-origin'), `http://127.0.0.1:${port}`);
+    assert.notEqual(externalOriginRes.headers.get('access-control-allow-origin'), 'https://evil.example.com');
+    assert.notEqual(externalOriginRes.headers.get('access-control-allow-origin'), '*');
+
+    const otherLocalPortRes = await fetch(`http://127.0.0.1:${port}/sounds/demo.mp3?token=${token}`, {
+      headers: { Origin: 'http://localhost:8080' }
+    });
+    assert.equal(otherLocalPortRes.status, 200);
+    assert.equal(otherLocalPortRes.headers.get('access-control-allow-origin'), `http://127.0.0.1:${port}`);
+    assert.notEqual(otherLocalPortRes.headers.get('access-control-allow-origin'), 'http://localhost:8080');
+
+    const malformedRes = await fetch(`http://127.0.0.1:${port}/%E0%A4%A`);
+    assert.equal(malformedRes.status, 400);
+  } finally {
+    await server.stop();
+    fs.rmSync(sounds, { recursive: true, force: true });
+  }
+});
+

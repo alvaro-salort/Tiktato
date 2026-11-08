@@ -4,449 +4,431 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' http://127.0.0.1:* https: data: blob:; media-src 'self' http://127.0.0.1:* https: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; media-src 'self' http://127.0.0.1:* http://localhost:* https://www.google.com https://*.google.com https: data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tiktato · Sound alerts para TikTok LIVE</title>
+    <title>Tiktato · Sonidos y alertas para TikTok LIVE</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="app">
-      <header class="topbar">
-        <div class="brand">
-          <img class="brand-logo" src="assets/logo.png" alt="Logo de Tiktato: una papa con auriculares" />
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+      <!-- BANNER SUPERIOR CON ESTADO, CONEXIÓN Y MÉTRICAS -->
+      <header id="bannerCard" class="card card-banner">
+        <div class="banner-brand">
+          <img class="brand-logo" src="assets/logo.png" alt="Logo de Tiktato" />
           <div class="brand-copy">
-            <span class="brand-name">Tiktato</span>
-            <span class="brand-tag">Sonidos para TikTok LIVE</span>
+            <h1 class="brand-name">Tiktato</h1>
+            <p class="brand-tag">Sonidos y alertas para tu TikTok LIVE</p>
           </div>
         </div>
 
-        <nav class="tabs" role="tablist" aria-label="Secciones">
-          <button class="tab" id="tab-sounds" role="tab" type="button" data-tab="sounds" aria-controls="panel-sounds" aria-selected="true">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-            Sonidos
-          </button>
-          <button class="tab" id="tab-obs" role="tab" type="button" data-tab="obs" aria-controls="panel-obs" aria-selected="false" tabindex="-1">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg>
-            OBS y frasco
-          </button>
-          <button class="tab" id="tab-voice" role="tab" type="button" data-tab="voice" aria-controls="panel-voice" aria-selected="false" tabindex="-1">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M8 9h8M8 13h5"></path></svg>
-            Voz
-          </button>
-        </nav>
+        <div class="banner-connect">
+          <form id="connectForm" class="connect-form">
+            <div class="input-prefix">
+              <input id="username" name="username" autocomplete="off" placeholder="@usuario" maxlength="80" />
+            </div>
+            <button id="btnConnect" class="btn btn-primary" type="submit">Conectar</button>
+            <button id="btnDisconnect" class="btn btn-ghost" type="button" disabled>Desconectar</button>
+          </form>
 
-        <div class="top-actions">
-          <button id="btnSettings" class="icon-button" type="button" title="Ajustes de audio" aria-label="Abrir ajustes de audio">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"></path></svg>
-          </button>
+          <div class="status-strip">
+            <div id="statusPill" class="status-pill status-disconnected">
+              <span class="status-dot"></span>
+              <span id="statusLabel">Desconectado</span>
+            </div>
+            <span id="liveBadge" class="badge-live">LIVE</span>
+            <span id="connectionMessage" class="connection-message"></span>
+          </div>
+        </div>
+
+        <div class="banner-stats">
+          <div class="metric-tile" title="Espectadores en vivo">
+            <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,56C48,56,16,128,16,128s32,72,112,72,112-72,112-72S208,56,128,56Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><circle cx="128" cy="128" r="40" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            <div class="metric-value">
+              <strong id="statViewers">0</strong>
+              <small>Viendo</small>
+            </div>
+          </div>
+          <div class="metric-tile" title="Regalos recibidos">
+            <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><rect x="40" y="80" width="176" height="48" rx="8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,80V208M192,128v80H64V128" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,80H92a28,28,0,1,1,28-28V80Zm0,0h36a28,28,0,1,0-28-28V80Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            <div class="metric-value">
+              <strong id="statGifts">0</strong>
+              <small>Regalos</small>
+            </div>
+          </div>
+          <div class="metric-tile" title="Monedas acumuladas">
+            <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><circle cx="96" cy="128" r="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,88.42A56,56,0,1,1,128,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M160,88.42A56,56,0,1,1,160,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            <div class="metric-value">
+              <strong id="statCoins">0</strong>
+              <small>Monedas</small>
+            </div>
+          </div>
+          <div class="metric-tile" title="Nuevos seguidores">
+            <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M104,136A56,56,0,1,0,48,80,56.06,56.06,0,0,0,104,136Zm0,32c-39.76,0-72,21.49-72,48a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8C176,189.49,143.76,168,104,168Zm96-56v32m16-16H184" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            <div class="metric-value">
+              <strong id="statFollows">0</strong>
+              <small>Follows</small>
+            </div>
+          </div>
+          <div class="banner-quick-actions">
+            <button id="btnSettings" class="btn btn-icon" type="button" title="Ajustes de audio y app" aria-label="Ajustes de audio">
+              <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,80a48,48,0,1,0,48,48A48,48,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z" fill="currentColor"/><path d="M232,120H214.28a86.69,86.69,0,0,0-8.31-20l12.56-12.56a8,8,0,0,0,0-11.31l-17-17a8,8,0,0,0-11.31,0L177.66,71.69a86.69,86.69,0,0,0-20-8.31V45.65A8,8,0,0,0,150,37.66H126a8,8,0,0,0-7.66,8v17.73a86.69,86.69,0,0,0-20,8.31L85.78,59.14a8,8,0,0,0-11.31,0l-17,17a8,8,0,0,0,0,11.31L70,99.98a86.69,86.69,0,0,0-8.31,20H44a8,8,0,0,0-8,8v24a8,8,0,0,0,8,8H61.69a86.69,86.69,0,0,0,8.31,20L57.44,192.54a8,8,0,0,0,0,11.31l17,17a8,8,0,0,0,11.31,0L98.31,208.29a86.69,86.69,0,0,0,20,8.31v17.75a8,8,0,0,0,7.66,8h24a8,8,0,0,0,8-7.66V216.6a86.69,86.69,0,0,0,20-8.31l12.56,12.56a8,8,0,0,0,11.31,0l17-17a8,8,0,0,0,0-11.31l-12.56-12.56a86.69,86.69,0,0,0,8.31-20H232a8,8,0,0,0,8-8V128A8,8,0,0,0,232,120Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            </button>
+            <button id="btnHelp" class="btn btn-icon" type="button" title="Ayuda y conexión QR" aria-label="Ayuda para conectar">
+              <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><circle cx="128" cy="128" r="96" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><circle cx="128" cy="180" r="12" fill="currentColor"/><path d="M128,144v-8a28,28,0,1,0-28-28" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            </button>
+          </div>
         </div>
       </header>
 
-      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <div id="errorBanner" class="error-banner" hidden></div>
 
-      <div class="shell">
-        <main class="workspace">
-          <div id="errorBanner" class="error-banner" hidden></div>
-
-          <!-- Sonidos -->
-          <section id="panel-sounds" class="panel" role="tabpanel" aria-labelledby="tab-sounds">
-            <header class="panel-head">
+      <!-- WORKSPACE EN BENTO GRID: ORDENADO Y CONSISTENTE -->
+      <main class="bento-grid">
+        <!-- FILA 1: SONIDOS (COL 8) Y ACTIVIDAD (COL 4) -->
+        <section class="card card-sounds">
+          <header class="card-head">
+            <div class="card-title-group">
+              <div class="card-icon-badge">
+                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,168a32,32,0,1,1-32-32h32V40l88,24V144a32,32,0,1,1-32-32h32V79.27L128,55.27Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+              </div>
               <div>
-                <h1>Sonidos</h1>
-                <p>Cada regalo puede tener su propio sonido. Lo que no tenga uno usa los eventos generales.</p>
+                <h2>Sonidos por regalo y eventos</h2>
+                <p>Asigna qué sonido suena al recibir cada interacción.</p>
               </div>
-              <div class="panel-actions">
-                <button id="btnSounds" class="btn btn-ghost" type="button">Biblioteca de sonidos</button>
-                <button id="btnAdvancedRules" class="btn btn-ghost" type="button">Reglas avanzadas</button>
-              </div>
-            </header>
-
-            <section class="block">
-              <div class="block-head">
-                <div>
-                  <h2>Sonidos por regalo</h2>
-                  <p>Toca un regalo para asignarle un sonido.</p>
-                </div>
-                <button id="btnPickGift" class="btn btn-secondary btn-small" type="button">
-                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-                  Elegir otro regalo
-                </button>
-              </div>
-              <div id="giftPresets" class="gift-presets" aria-label="Regalos rápidos"></div>
-              <div id="giftQuickList" class="quick-rules gift-quick-list"></div>
-            </section>
-
-            <section class="block">
-              <div class="block-head">
-                <div>
-                  <h2>Eventos generales</h2>
-                  <p>Suenan cuando no hay un sonido específico.</p>
-                </div>
-              </div>
-              <div id="quickRules" class="quick-rules"></div>
-
-              <label class="toggle-row">
-                <span class="toggle-copy">
-                  <strong>Repetir el sonido en cada combo</strong>
-                  <small>Si alguien manda 10 rosas seguidas, se escucha 10 veces.</small>
-                </span>
-                <span class="switch"><input id="ttsPlayEveryStreak" type="checkbox" checked /><span></span></span>
-              </label>
-            </section>
-          </section>
-
-          <!-- OBS y frasco -->
-          <section id="panel-obs" class="panel" role="tabpanel" aria-labelledby="tab-obs" hidden>
-            <header class="panel-head">
-              <div>
-                <h1>OBS y frasco</h1>
-                <p>Agrega cada URL como fuente de navegador en OBS o TikTok LIVE Studio.</p>
-              </div>
-            </header>
-
-            <div class="obs-grid">
-              <section class="block">
-                <div class="block-head">
-                  <div>
-                    <h2>Overlay de alertas</h2>
-                    <p>Muestra quién envió cada regalo. Tamaño 800 × 600.</p>
-                  </div>
-                </div>
-
-                <div class="url-row">
-                  <input id="overlayUrl" readonly aria-label="URL del overlay para OBS" />
-                  <button id="btnCopyOverlay" class="btn btn-primary" type="button">Copiar URL</button>
-                </div>
-
-                <div class="overlay-demo" aria-hidden="true">
-                  <div class="overlay-demo-card">
-                    <div class="overlay-demo-avatar">
-                      <img src="assets/logo.png" alt="" />
-                    </div>
-                    <div class="overlay-demo-body">
-                      <div class="overlay-demo-top">
-                        <span class="overlay-demo-tag">REGALO</span>
-                        <span class="overlay-demo-coins">100 monedas</span>
-                      </div>
-                      <strong class="overlay-demo-user">Viewer de prueba</strong>
-                      <span class="overlay-demo-detail">envió Galaxia</span>
-                    </div>
-                    <div class="overlay-demo-progress"></div>
-                  </div>
-                  <span class="overlay-demo-label">Así se ve una alerta en tu directo</span>
-                </div>
-
-                <ol class="overlay-steps">
-                  <li><span>1</span> En OBS, añade una fuente de <strong>Navegador</strong>.</li>
-                  <li><span>2</span> Pega la URL y pon 800 × 600.</li>
-                  <li><span>3</span> Prueba con un regalo desde la columna de actividad.</li>
-                </ol>
-
-                <div class="block-actions">
-                  <button id="btnOpenOverlay" class="btn btn-ghost" type="button">Vista previa</button>
-                  <button id="btnOverlaySettings" class="btn btn-ghost" type="button">Personalizar</button>
-                </div>
-              </section>
-
-              <section id="jarCard" class="block step-jar">
-                <div class="block-head">
-                  <div>
-                    <h2>Frasco de donaciones (Pro)</h2>
-                    <p>Física 2D con Matter.js, leaderboard rotativo y alertas.</p>
-                  </div>
-                  <span id="jarPercent" class="chip">0%</span>
-                </div>
-
-                <div class="jar-row">
-                  <div class="jar-mini" aria-hidden="true">
-                    <div class="jar-mini-lid"></div>
-                    <div class="jar-mini-glass">
-                      <div id="jarFill" class="jar-mini-fill"></div>
-                      <span class="jar-mini-shine"></span>
-                    </div>
-                  </div>
-                  <div class="jar-side">
-                    <div class="jar-summary">
-                      <strong id="jarAmount">0 / 1.000</strong>
-                      <span id="jarGifts">0 regalos</span>
-                    </div>
-                    <label class="field">
-                      <span>Meta de monedas</span>
-                      <input id="jarGoal" type="number" min="1" step="1" value="1000" />
-                    </label>
-                  </div>
-                </div>
-
-                <div class="url-row">
-                  <input id="jarUrl" readonly aria-label="URL del frasco para OBS o TikTok LIVE Studio" />
-                  <button id="btnCopyJar" class="btn btn-primary" type="button">Copiar enlace</button>
-                </div>
-
-                <ol class="overlay-steps">
-                  <li><span>1</span> <strong>TikTok LIVE Studio (Fuente Enlace):</strong> Pulsa <em>Añadir fuente → Enlace (Link)</em>, pega la URL y usa 800 × 800.</li>
-                  <li><span>2</span> <strong>TikTok LIVE Studio (Sin enlace):</strong> Pulsa <strong>Abrir ventana para LIVE Studio</strong> abajo y agrégala con <em>Captura de ventana</em> (elige <code>Tiktato - Frasco Pro</code> y activa Clave de color si usas fondo verde).</li>
-                  <li><span>3</span> <strong>En OBS Studio:</strong> Añade una fuente de <em>Navegador</em> con la URL a 800 × 800.</li>
-                </ol>
-
-                <div class="block-actions">
-                  <button id="btnOpenJarStudio" class="btn btn-secondary" type="button">Abrir ventana para LIVE Studio</button>
-                  <button id="btnOpenJar" class="btn btn-ghost" type="button">Vista previa</button>
-                  <button id="btnJarSettings" class="btn btn-ghost" type="button">Personalizar</button>
-                  <button id="btnResetJar" class="btn btn-ghost btn-danger" type="button">Vaciar frasco</button>
-                </div>
-              </section>
-
-              <section id="jarTestCard" class="block">
-                <div class="block-head">
-                  <div>
-                    <h2>Frasco de prueba (Demo)</h2>
-                    <p>Simulación continua de regalos para calibrar y probar en OBS.</p>
-                  </div>
-                  <span class="chip">DEMO / OBS</span>
-                </div>
-
-                <div class="quick-tests" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
-                  <button id="btnTestGiftRose" class="btn btn-ghost" type="button">Probar Rosa (1)</button>
-                  <button id="btnTestGiftCombo" class="btn btn-ghost" type="button">Probar Combo x10</button>
-                  <button id="btnTestGiftGalaxy" class="btn btn-ghost" type="button">Probar Galaxia (1.000)</button>
-                </div>
-
-                <div class="url-row">
-                  <input id="jarTestUrl" readonly aria-label="URL del frasco de prueba para OBS" />
-                  <button id="btnCopyJarTest" class="btn btn-primary" type="button">Copiar URL</button>
-                </div>
-
-                <div class="block-actions">
-                  <button id="btnOpenJarTest" class="btn btn-ghost" type="button">Vista previa de prueba</button>
-                </div>
-              </section>
             </div>
-          </section>
-
-          <!-- Voz -->
-          <section id="panel-voice" class="panel" role="tabpanel" aria-labelledby="tab-voice" hidden>
-            <header class="panel-head">
-              <div>
-                <h1>Voz</h1>
-                <p>Lee en voz alta el chat y los regalos mientras transmites.</p>
-              </div>
-              <span id="ttsQueueBadge" class="chip">INACTIVO</span>
-            </header>
-
-            <div class="voice-grid">
-              <section class="block">
-                <div class="block-head">
-                  <div>
-                    <h2>Qué se lee</h2>
-                  </div>
-                </div>
-                <div class="toggle-list">
-                  <label class="toggle-row">
-                    <span class="toggle-copy">
-                      <strong>Mensajes del chat</strong>
-                      <small>Lee lo que escriben los espectadores.</small>
-                    </span>
-                    <span class="switch"><input id="ttsChatEnabled" type="checkbox" /><span></span></span>
-                  </label>
-                  <label class="toggle-row">
-                    <span class="toggle-copy">
-                      <strong>Leer nombre del usuario</strong>
-                      <small>Ej: "Alvaro: hola amigo". Si lo desactivas, lee directo el mensaje.</small>
-                    </span>
-                    <span class="switch"><input id="ttsReadUsername" type="checkbox" checked /><span></span></span>
-                  </label>
-                  <label class="toggle-row">
-                    <span class="toggle-copy">
-                      <strong>Regalos</strong>
-                      <small>Anuncia quién envió qué regalo.</small>
-                    </span>
-                    <span class="switch"><input id="ttsGiftsEnabled" type="checkbox" /><span></span></span>
-                  </label>
-                  <label class="toggle-row">
-                    <span class="toggle-copy">
-                      <strong>Filtro anti-spam</strong>
-                      <small>Acorta letras repetidas e ignora comandos como !help.</small>
-                    </span>
-                    <span class="switch"><input id="ttsAntiSpam" type="checkbox" checked /><span></span></span>
-                  </label>
-                  <label class="toggle-row">
-                    <span class="toggle-copy">
-                      <strong>Bajar alertas mientras habla</strong>
-                      <small>Los sonidos se atenúan para que la voz se entienda.</small>
-                    </span>
-                    <span class="switch"><input id="ttsDucking" type="checkbox" checked /><span></span></span>
-                  </label>
-                  <label class="toggle-row">
-                    <span class="toggle-copy">
-                      <strong>Filtrar chat por rol o nivel (opcional)</strong>
-                      <small>Desactivado por defecto (lee todos los mensajes). Actívalo si tu chat va muy rápido.</small>
-                    </span>
-                    <span class="switch"><input id="ttsFilterChatByRole" type="checkbox" /><span></span></span>
-                  </label>
-                </div>
-
-                <div id="ttsRoleFiltersBox" class="field-stack" style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line-strong);" hidden>
-                  <small class="field-hint">Cuando el filtro está activo, el TTS solo leerá mensajes de quienes cumplan al menos una de estas condiciones:</small>
-                  <label class="checkline">
-                    <input id="ttsAllowModerators" type="checkbox" checked />
-                    <span>Moderadores del canal</span>
-                  </label>
-                  <label class="checkline">
-                    <input id="ttsAllowSubscribers" type="checkbox" checked />
-                    <span>Suscriptores y Superfans</span>
-                  </label>
-                  <label class="checkline">
-                    <input id="ttsAllowHighlighted" type="checkbox" checked />
-                    <span>Mensajes destacados / fijados</span>
-                  </label>
-                  <label class="checkline">
-                    <input id="ttsAllowFriends" type="checkbox" />
-                    <span>Amigos (seguidores mutuos)</span>
-                  </label>
-                  <label class="checkline">
-                    <input id="ttsAllowFollowers" type="checkbox" />
-                    <span>Seguidores</span>
-                  </label>
-                  <div style="display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px;">
-                    <label class="checkline">
-                      <input id="ttsAllowGifter" type="checkbox" />
-                      <span>Donadores desde nivel</span>
-                    </label>
-                    <input id="ttsMinGifterLevel" type="number" min="1" max="100" step="1" value="1" style="width: 72px; min-height: 32px;" aria-label="Nivel mínimo de donador" />
-                  </div>
-                  <div style="display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px;">
-                    <label class="checkline">
-                      <input id="ttsAllowMember" type="checkbox" />
-                      <span>Miembros del club desde nivel</span>
-                    </label>
-                    <input id="ttsMinMemberLevel" type="number" min="1" max="100" step="1" value="1" style="width: 72px; min-height: 32px;" aria-label="Nivel mínimo del club" />
-                  </div>
-                </div>
-              </section>
-
-              <section class="block">
-                <div class="block-head">
-                  <div>
-                    <h2>Cómo suena</h2>
-                  </div>
-                </div>
-                <div class="field-stack">
-                  <label class="field">
-                    <span>Voz</span>
-                    <select id="ttsVoiceProvider" aria-label="Elegir voz">
-                      <optgroup label="Voces de Google (Streaming)">
-                        <option value="google:es-ES">Google Español (España)</option>
-                        <option value="google:es-US">Google Español (Latinoamérica)</option>
-                        <option value="google:es-MX">Google Español (México)</option>
-                        <option value="google:es-AR">Google Español (Argentina)</option>
-                        <option value="google:en-US">Google English (US)</option>
-                      </optgroup>
-                      <optgroup id="ttsLocalVoicesGroup" label="Voces de Windows / Microsoft">
-                        <option value="local">Voz predeterminada del sistema</option>
-                      </optgroup>
-                    </select>
-                    <small class="field-hint">Puedes elegir voces de Google o cualquiera instalada en Windows.</small>
-                  </label>
-
-                  <label class="field">
-                    <span class="field-row">Volumen de la voz <strong id="ttsVolumeValue">80%</strong></span>
-                    <input id="ttsVolume" type="range" min="0" max="100" step="5" value="80" />
-                  </label>
-
-                  <label class="field">
-                    <span class="field-row">Leer regalos desde <strong id="ttsMinCoinsValue">1</strong></span>
-                    <input id="ttsMinCoins" type="range" min="0" max="100" step="1" value="1" />
-                    <small class="field-hint">Monedas mínimas para anunciar un regalo.</small>
-                  </label>
-                </div>
-
-                <div class="block-actions">
-                  <button id="btnTestTTS" class="btn btn-primary" type="button">
-                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7z"></path></svg>
-                    Probar voz
-                  </button>
-                  <button id="btnSkipTTS" class="btn btn-ghost" type="button" title="Saltar el mensaje actual">Saltar</button>
-                  <button id="btnClearTTS" class="btn btn-ghost" type="button" title="Silenciar y vaciar la cola de voz">Silenciar / Vaciar cola</button>
-                </div>
-              </section>
+            <div class="card-actions">
+              <button id="btnPickGift" class="btn btn-secondary btn-small" type="button">Elegir otro regalo</button>
+              <button id="btnAdvancedRules" class="btn btn-ghost btn-small" type="button">Reglas avanzadas</button>
             </div>
-          </section>
+          </header>
 
-          <footer class="footer">
-            <span>Tiktato no está afiliado a TikTok. Úsalo con cuentas que tengas derecho a analizar.</span>
-            <span class="footer-version">v0.4.5</span>
+          <div class="card-body card-scrollable">
+            <div class="section-label">Regalos destacados</div>
+            <div id="giftPresets" class="gift-presets" aria-label="Regalos rápidos"></div>
+
+            <div class="section-label" style="margin-top: 12px;">Regalos configurados</div>
+            <div id="giftQuickList" class="quick-rules gift-quick-list"></div>
+
+            <div class="section-label" style="margin-top: 12px;">Eventos generales</div>
+            <div id="quickRules" class="quick-rules"></div>
+
+            <label class="toggle-row" style="margin-top: 10px;">
+              <span class="toggle-copy">
+                <strong>Repetir el sonido en cada combo</strong>
+                <small>Si envían 10 rosas seguidas, suena 10 veces de forma secuencial.</small>
+              </span>
+              <span class="switch"><input id="ttsPlayEveryStreak" type="checkbox" checked /><span></span></span>
+            </label>
+
+            <!-- Formulario inline para añadir/editar regla -->
+            <div id="ruleFormWrap" class="rule-form-wrap" hidden>
+              <form id="ruleForm" class="rule-form">
+                <input id="ruleId" type="hidden" />
+                <input id="ruleGiftId" type="hidden" />
+                <input id="ruleGiftImageUrl" type="hidden" />
+
+                <div class="gift-picker-box gift-only span-3">
+                  <div class="gift-picker-toolbar">
+                    <span class="gift-picker-label">Elige un regalo <small id="giftCatalogCount"></small></span>
+                    <div class="gift-picker-search-row">
+                      <input id="giftSearch" type="search" autocomplete="off" placeholder="Buscar regalo…" />
+                      <button id="btnClearGiftSelection" class="btn btn-tiny btn-ghost" type="button">Cualquiera</button>
+                    </div>
+                  </div>
+                  <div id="giftCatalogGrid" class="gift-catalog-grid" role="listbox"></div>
+                </div>
+
+                <label class="field">
+                  <span>Evento</span>
+                  <select id="ruleEventType">
+                    <option value="gift">Regalo</option>
+                    <option value="follow">Follow</option>
+                    <option value="share">Share</option>
+                    <option value="like">Like</option>
+                    <option value="subscribe">Suscripción</option>
+                    <option value="join">Entrada (Join)</option>
+                  </select>
+                </label>
+                <label class="field gift-only">
+                  <span>Regalo</span>
+                  <select id="ruleGiftSelect"></select>
+                  <input id="ruleGiftName" placeholder="Nombre o comodín *" maxlength="80" hidden />
+                </label>
+                <label class="field gift-only">
+                  <span>Mínimo de monedas</span>
+                  <input id="ruleMinCoins" type="number" min="0" step="1" value="0" />
+                </label>
+                <label class="field">
+                  <span>Sonido</span>
+                  <div class="sound-select-row">
+                    <select id="ruleSound"></select>
+                    <button id="btnPreviewRuleSound" class="btn btn-icon btn-tiny" type="button" title="Probar sonido">
+                      <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><polygon points="80 40 200 128 80 216 80 40" fill="currentColor"/></svg>
+                    </button>
+                  </div>
+                </label>
+                <label class="field">
+                  <span>Volumen</span>
+                  <input id="ruleVolume" type="range" min="0" max="150" step="5" value="100" />
+                </label>
+                <label class="field">
+                  <span>Cooldown (segundos)</span>
+                  <input id="ruleCooldown" type="number" min="0" max="86400" step="1" value="0" />
+                </label>
+                <div class="rule-form-actions">
+                  <button id="btnSaveRule" class="btn btn-primary btn-small" type="submit">Guardar regla</button>
+                  <button id="btnCancelRule" class="btn btn-ghost btn-small" type="button">Cancelar</button>
+                </div>
+              </form>
+            </div>
+
+            <div id="rulesList" class="rules-list" hidden></div>
+            <div id="rulesEmpty" class="rules-empty" hidden></div>
+          </div>
+
+          <footer class="card-foot">
+            <button id="btnSounds" class="btn btn-ghost btn-small" type="button">Biblioteca de sonidos</button>
+            <button id="btnImportSound" class="btn btn-ghost btn-small" type="button">Añadir sonido</button>
+            <button id="btnAddRule" class="btn btn-primary btn-small" type="button">+ Nueva regla</button>
           </footer>
-        </main>
+        </section>
 
-        <!-- Columna en vivo -->
-        <aside class="live-rail" aria-label="Tu LIVE">
-          <section class="rail-connect">
-            <div class="rail-connect-head">
-              <h2>Tu LIVE</h2>
-              <div id="statusPill" class="status-pill status-disconnected">
-                <span class="status-dot"></span>
-                <span id="statusLabel">Desconectado</span>
+        <!-- TARJETA ACTIVIDAD EN VIVO (COL 4) -->
+        <section class="card card-activity">
+          <header class="card-head">
+            <div class="card-title-group">
+              <div class="card-icon-badge">
+                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><polygon points="160 16 48 144 120 144 96 240 208 112 136 112 160 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
               </div>
-              <span id="liveBadge" class="visually-hidden">OFFLINE</span>
+              <div>
+                <h2>Actividad en vivo</h2>
+                <p>Historial de eventos en directo.</p>
+              </div>
             </div>
+          </header>
 
-            <form id="connectForm" class="connect-row">
-              <label class="input-prefix" for="username">
-                <span>@</span>
-                <input id="username" name="username" autocomplete="off" placeholder="tu.usuario" maxlength="80" />
-              </label>
-              <button id="btnConnect" class="btn btn-primary" type="submit">Conectar</button>
-            </form>
+          <div class="test-toolbar" role="group" aria-label="Enviar evento de prueba">
+            <span class="test-label">Probar:</span>
+            <button class="btn btn-tiny" data-test="gift" type="button">Regalo</button>
+            <button class="btn btn-tiny" data-test="follow" type="button">Follow</button>
+            <button class="btn btn-tiny" data-test="share" type="button">Share</button>
+            <button class="btn btn-tiny" data-test="like" type="button">Like</button>
+            <button class="btn btn-tiny" data-test="chat" type="button">Chat</button>
+          </div>
 
-            <div id="connectionMessage" class="connection-message">Sin conexión</div>
-
-            <div class="connect-meta">
-              <button id="btnHelp" class="link-button" type="button">¿No conecta?</button>
-              <button id="btnDisconnect" class="link-button" type="button" disabled>Desconectar</button>
-            </div>
-
-            <dl class="stats">
-              <div class="stat"><dt>Regalos</dt><dd id="statGifts">0</dd></div>
-              <div class="stat"><dt>Monedas</dt><dd id="statCoins">0</dd></div>
-              <div class="stat"><dt>Follows</dt><dd id="statFollows">0</dd></div>
-              <div class="stat"><dt>Viendo</dt><dd id="statViewers">0</dd></div>
-            </dl>
-          </section>
-
-          <section class="rail-activity">
-            <div class="rail-activity-head">
-              <h2>Actividad</h2>
-            </div>
-            <div class="test-actions" role="group" aria-label="Enviar evento de prueba">
-              <span>Probar</span>
-              <button class="btn btn-tiny" data-test="gift" type="button">Regalo</button>
-              <button class="btn btn-tiny" data-test="follow" type="button">Follow</button>
-              <button class="btn btn-tiny" data-test="share" type="button">Share</button>
-              <button class="btn btn-tiny" data-test="like" type="button">Like</button>
-              <button class="btn btn-tiny" data-test="chat" type="button">Chat</button>
-            </div>
-
+          <div class="card-body card-scrollable">
             <div id="activityList" class="activity-list"></div>
             <div id="activityEmpty" class="empty-state" hidden>
               <strong>Todavía no hay eventos</strong>
-              <span>Cuando conectes tu LIVE vas a ver aquí cada regalo, follow y mensaje. Usa los botones de prueba para escuchar cómo suena.</span>
+              <span>Cuando inicies tu directo verás aquí cada regalo, follow y mensaje en tiempo real.</span>
             </div>
-          </section>
-        </aside>
-      </div>
+          </div>
+        </section>
+
+        <!-- FILA 2: OVERLAY + FRASCO + VOZ (3 TARJETAS IDÉNTICAS EN ALTURA) -->
+        <!-- 1. OVERLAY DE ALERTAS -->
+        <section class="card card-feature">
+          <header class="card-head">
+            <div class="card-title-group">
+              <div class="card-icon-badge">
+                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><rect x="32" y="48" width="192" height="144" rx="16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="160" y1="224" x2="96" y2="224" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="128" y1="192" x2="128" y2="224" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+              </div>
+              <div>
+                <h2>Overlay de alertas</h2>
+                <p>Aparece en pantalla al recibir regalos (800 × 600).</p>
+              </div>
+            </div>
+          </header>
+
+          <div class="card-body">
+            <div class="url-input-group">
+              <input id="overlayUrl" readonly aria-label="URL del overlay" />
+              <button id="btnCopyOverlay" class="btn btn-primary btn-small" type="button">Copiar enlace</button>
+            </div>
+
+            <div class="overlay-demo-box" aria-hidden="true">
+              <div class="overlay-demo-card">
+                <div class="overlay-demo-avatar"><img src="assets/logo.png" alt="" /></div>
+                <div class="overlay-demo-body">
+                  <div class="overlay-demo-top">
+                    <span class="overlay-demo-tag">REGALO</span>
+                    <span class="overlay-demo-coins">100 monedas</span>
+                  </div>
+                  <strong class="overlay-demo-user">Viewer de prueba</strong>
+                  <span class="overlay-demo-detail">envió Galaxia</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <footer class="card-foot">
+            <button id="btnOpenOverlay" class="btn btn-ghost btn-small" type="button">Vista previa</button>
+            <button id="btnOverlaySettings" class="btn btn-secondary btn-small" type="button">Personalizar</button>
+          </footer>
+        </section>
+
+        <!-- 2. FRASCO DE DONACIONES (SIN "PRO") -->
+        <section id="jarCard" class="card card-feature step-jar">
+          <header class="card-head">
+            <div class="card-title-group">
+              <div class="card-icon-badge">
+                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><circle cx="96" cy="128" r="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,88.42A56,56,0,1,1,128,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M160,88.42A56,56,0,1,1,160,167.58" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+              </div>
+              <div>
+                <h2>Frasco de donaciones</h2>
+                <p>Física interactiva de monedas cayendo en vivo.</p>
+              </div>
+            </div>
+            <span id="jarPercent" class="chip">0%</span>
+          </header>
+
+          <div class="card-body">
+            <div class="jar-status-box">
+              <div class="jar-mini" aria-hidden="true">
+                <div class="jar-mini-lid"></div>
+                <div class="jar-mini-glass">
+                  <div id="jarFill" class="jar-mini-fill"></div>
+                  <span class="jar-mini-shine"></span>
+                </div>
+              </div>
+              <div class="jar-stats-col">
+                <strong id="jarAmount">0 / 1.000</strong>
+                <span id="jarGifts">0 regalos</span>
+                <label class="field-compact">
+                  <span>Meta de monedas</span>
+                  <input id="jarGoal" type="number" min="1" step="1" value="1000" />
+                </label>
+              </div>
+            </div>
+
+            <div class="quick-tests" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px;">
+              <button id="btnTestGiftRose" class="btn btn-tiny" type="button">+1 Rosa</button>
+              <button id="btnTestGiftCombo" class="btn btn-tiny" type="button">x10 Combo</button>
+              <button id="btnTestGiftGalaxy" class="btn btn-tiny" type="button">+1000 Galaxia</button>
+            </div>
+
+            <div class="url-input-group" style="margin-top: 10px;">
+              <input id="jarUrl" readonly aria-label="URL del frasco" />
+              <button id="btnCopyJar" class="btn btn-primary btn-small" type="button">Copiar enlace</button>
+            </div>
+            <input id="jarTestUrl" readonly type="hidden" />
+            <button id="btnCopyJarTest" style="display: none;" type="button"></button>
+            <button id="btnOpenJarTest" style="display: none;" type="button"></button>
+          </div>
+
+          <footer class="card-foot">
+            <button id="btnOpenJarStudio" class="btn btn-secondary btn-small" type="button">Abrir ventana</button>
+            <button id="btnOpenJar" class="btn btn-ghost btn-small" type="button">Vista previa</button>
+            <button id="btnJarSettings" class="btn btn-ghost btn-small" type="button">Ajustes</button>
+            <button id="btnResetJar" class="btn btn-ghost btn-danger btn-small" type="button">Vaciar</button>
+          </footer>
+        </section>
+
+        <!-- 3. VOZ DEL CHAT (TTS) -->
+        <section class="card card-feature">
+          <header class="card-head">
+            <div class="card-title-group">
+              <div class="card-icon-badge">
+                <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M152,40V216L80,160H32a8,8,0,0,1-8-8V104a8,8,0,0,1,8-8H80L152,40Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M192,104a40,40,0,0,1,0,48M216,80a80,80,0,0,1,0,96" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+              </div>
+              <div>
+                <h2>Voz del chat</h2>
+                <p>Lee comentarios y regalos mediante voz sintética.</p>
+              </div>
+            </div>
+          </header>
+
+          <div class="card-body">
+            <div class="toggle-list-compact">
+              <label class="toggle-row">
+                <span class="toggle-copy">
+                  <strong>Leer mensajes del chat</strong>
+                </span>
+                <span class="switch"><input id="ttsChatEnabled" type="checkbox" /><span></span></span>
+              </label>
+              <label class="toggle-row">
+                <span class="toggle-copy">
+                  <strong>Leer nombre del usuario</strong>
+                </span>
+                <span class="switch"><input id="ttsReadUsername" type="checkbox" checked /><span></span></span>
+              </label>
+              <label class="toggle-row">
+                <span class="toggle-copy">
+                  <strong>Anunciar regalos recibidos</strong>
+                </span>
+                <span class="switch"><input id="ttsGiftsEnabled" type="checkbox" /><span></span></span>
+              </label>
+            </div>
+
+            <div class="field-compact-stack" style="margin-top: 10px;">
+              <label class="field">
+                <span>Voz</span>
+                <select id="ttsVoiceProvider" aria-label="Elegir voz">
+                  <optgroup label="Voces de Google">
+                    <option value="google:es-ES">Google Español (España)</option>
+                    <option value="google:es-US">Google Español (Latinoamérica)</option>
+                    <option value="google:es-MX">Google Español (México)</option>
+                    <option value="google:es-AR">Google Español (Argentina)</option>
+                    <option value="google:en-US">Google English (US)</option>
+                  </optgroup>
+                  <optgroup id="ttsLocalVoicesGroup" label="Voces del sistema (Windows)">
+                    <option value="local">Predeterminada del sistema</option>
+                  </optgroup>
+                </select>
+              </label>
+
+              <label class="field">
+                <span class="field-row">Volumen <strong id="ttsVolumeValue">80%</strong></span>
+                <input id="ttsVolume" type="range" min="0" max="100" step="5" value="80" />
+              </label>
+            </div>
+
+            <!-- Ajustes adicionales conservados para compatibilidad total -->
+            <input id="ttsDucking" type="checkbox" checked style="display: none;" />
+            <input id="ttsAntiSpam" type="checkbox" checked style="display: none;" />
+            <input id="ttsMinCoins" type="range" min="0" max="100" step="1" value="1" style="display: none;" />
+            <span id="ttsMinCoinsValue" style="display: none;">1</span>
+            <input id="ttsFilterChatByRole" type="checkbox" style="display: none;" />
+            <div id="ttsRoleFiltersBox" style="display: none;">
+              <input id="ttsAllowModerators" type="checkbox" checked />
+              <input id="ttsAllowSubscribers" type="checkbox" checked />
+              <input id="ttsAllowHighlighted" type="checkbox" checked />
+              <input id="ttsAllowFriends" type="checkbox" />
+              <input id="ttsAllowFollowers" type="checkbox" />
+              <input id="ttsAllowGifter" type="checkbox" />
+              <input id="ttsMinGifterLevel" type="number" value="1" />
+              <input id="ttsAllowMember" type="checkbox" />
+              <input id="ttsMinMemberLevel" type="number" value="1" />
+            </div>
+          </div>
+
+          <footer class="card-foot">
+            <button id="btnTestTTS" class="btn btn-primary btn-small" type="button">Probar voz</button>
+            <button id="btnSkipTTS" class="btn btn-ghost btn-small" type="button">Saltar</button>
+            <button id="btnClearTTS" class="btn btn-ghost btn-small" type="button">Silenciar</button>
+          </footer>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>Tiktato · Software libre y gratuito para TikTok LIVE</span>
+        <span id="appVersion" class="footer-version"></span>
+      </footer>
     </div>
 
+    <!-- DIÁLOGOS MODALES RESTILIZADOS -->
     <dialog id="helpDialog" class="dialog dialog-small">
       <div class="dialog-head">
         <div>
           <h2>Ayuda para conectar</h2>
         </div>
-        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg></button>
       </div>
       <p class="dialog-text">
-        La conexión anónima funciona para la mayoría de LIVE públicos. Para el LIVE de prueba de
-        Live Studio, inicia sesión con QR o pega el room ID de la sala.
+        La conexión anónima funciona para cualquier LIVE público. Para salas con restricciones, inicia sesión con QR o pega tu room ID.
       </p>
 
       <div class="dialog-actions">
@@ -477,7 +459,7 @@
 
       <label class="checkline dialog-check">
         <input id="autoConnect" type="checkbox" />
-        <span>Conectar al abrir Tiktato</span>
+        <span>Conectar automáticamente al abrir Tiktato</span>
       </label>
 
       <div class="dialog-foot">
@@ -489,117 +471,47 @@
     <dialog id="rulesDialog" class="dialog dialog-wide">
       <div class="dialog-head">
         <div>
-          <h2>Sonidos por regalo y reglas</h2>
+          <h2>Reglas y sonidos de eventos</h2>
         </div>
         <div class="dialog-head-actions">
           <button id="btnImportSoundFromRules" class="btn btn-ghost btn-small" type="button">Subir MP3</button>
-          <button id="btnAddRule" class="btn btn-secondary" type="button">+ Nueva regla</button>
-          <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+          <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg></button>
         </div>
-      </div>
-
-      <div id="ruleFormWrap" class="rule-form-wrap" hidden>
-        <form id="ruleForm" class="rule-form">
-          <input id="ruleId" type="hidden" />
-          <input id="ruleGiftId" type="hidden" />
-          <input id="ruleGiftImageUrl" type="hidden" />
-
-          <div class="gift-picker-box gift-only span-3">
-            <div class="gift-picker-toolbar">
-              <span class="gift-picker-label">Elige un regalo de TikTok <small id="giftCatalogCount"></small></span>
-              <div class="gift-picker-search-row">
-                <input
-                  id="giftSearch"
-                  type="search"
-                  autocomplete="off"
-                  placeholder="Buscar regalo: Rosa, Eres increíble, GG, Maracas, Galaxia…"
-                />
-                <button id="btnClearGiftSelection" class="btn btn-tiny btn-ghost" type="button" title="Cualquier regalo">
-                  Cualquiera
-                </button>
-              </div>
-            </div>
-            <div id="giftCatalogGrid" class="gift-catalog-grid" role="listbox" aria-label="Catálogo de regalos de TikTok"></div>
-          </div>
-
-          <label class="field">
-            <span>Evento</span>
-            <select id="ruleEventType">
-              <option value="gift">Regalo</option>
-              <option value="follow">Follow</option>
-              <option value="share">Share</option>
-              <option value="like">Like</option>
-              <option value="subscribe">Suscripción</option>
-              <option value="join">Entrada (Join)</option>
-            </select>
-          </label>
-          <label class="field gift-only">
-            <span>Regalo <small>(ordenados por monedas)</small></span>
-            <select id="ruleGiftSelect" aria-label="Elegir regalo ordenado por monedas"></select>
-            <input id="ruleGiftName" placeholder="Escribe el nombre o comodín *" maxlength="80" hidden />
-          </label>
-          <label class="field gift-only">
-            <span>Mínimo de monedas</span>
-            <input id="ruleMinCoins" type="number" min="0" step="1" value="0" />
-          </label>
-          <label class="field">
-            <span>Sonido</span>
-            <div class="sound-select-row">
-              <select id="ruleSound"></select>
-              <button id="btnPreviewRuleSound" class="icon-btn" type="button" title="Probar sonido seleccionado">
-                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7z"></path></svg>
-              </button>
-            </div>
-          </label>
-          <label class="field">
-            <span>Volumen</span>
-            <input id="ruleVolume" type="range" min="0" max="150" step="5" value="100" />
-          </label>
-          <label class="field">
-            <span>Cooldown (segundos)</span>
-            <input id="ruleCooldown" type="number" min="0" max="86400" step="1" value="0" />
-          </label>
-          <div class="rule-form-actions">
-            <button id="btnSaveRule" class="btn btn-primary" type="submit">Guardar regla</button>
-            <button id="btnCancelRule" class="btn btn-ghost" type="button">Cancelar</button>
-          </div>
-        </form>
       </div>
 
       <div id="rulesList" class="rules-list"></div>
       <div id="rulesEmpty" class="empty-state" hidden>
-        <strong>No hay reglas todavía.</strong>
-        <span>Añade una para que un regalo active un sonido.</span>
+        <strong>No hay reglas configuradas</strong>
+        <span>Añade una regla para que un regalo o evento active un sonido específico.</span>
       </div>
     </dialog>
 
     <dialog id="soundsDialog" class="dialog">
       <div class="dialog-head">
         <div>
-          <h2>Sonidos</h2>
+          <h2>Biblioteca de sonidos</h2>
         </div>
         <div class="dialog-head-actions">
-          <button id="btnImportSound" class="btn btn-secondary" type="button">Subir audio</button>
-          <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+          <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg></button>
         </div>
       </div>
 
-      <p class="section-label">Incluidos</p>
+      <p class="section-label">Sonidos incluidos</p>
       <div id="builtinSounds" class="sound-grid"></div>
 
-      <p class="section-label">Tus archivos</p>
+      <p class="section-label" style="margin-top: 14px;">Tus archivos de sonido</p>
       <div id="customSounds" class="custom-sounds"></div>
       <div id="soundsEmpty" class="empty-state small" hidden>
-        <span>Sube MP3, WAV, OGG, M4A, AAC, FLAC o WEBM. Máximo 30 MB.</span>
+        <span>Sube archivos MP3, WAV, OGG, M4A o FLAC. Máximo 30 MB.</span>
       </div>
     </dialog>
 
     <dialog id="overlayDialog" class="dialog dialog-small">
       <div class="dialog-head">
         <div>
-          <h2>Personalizar overlay</h2>
+          <h2>Personalizar overlay de alertas</h2>
         </div>
-        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg></button>
       </div>
 
       <div class="settings-grid">
@@ -608,7 +520,7 @@
           <input id="overlayTitle" maxlength="30" />
         </label>
         <label class="field">
-          <span>Color</span>
+          <span>Color de acento</span>
           <input id="overlayAccent" type="color" />
         </label>
         <label class="field">
@@ -624,21 +536,21 @@
         </label>
         <label class="checkline span-2">
           <input id="overlayGiftImage" type="checkbox" />
-          <span>Mostrar imagen del regalo</span>
+          <span>Mostrar imagen del regalo recibido</span>
         </label>
       </div>
 
       <div class="dialog-foot">
-        <button class="btn btn-ghost" data-close type="button">Cerrar</button>
+        <button class="btn btn-primary" data-close type="button">Listo</button>
       </div>
     </dialog>
 
     <dialog id="jarDialog" class="dialog dialog-small">
       <div class="dialog-head">
         <div>
-          <h2>Personalizar frasco Pro</h2>
+          <h2>Personalizar frasco</h2>
         </div>
-        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg></button>
       </div>
 
       <div class="settings-grid">
@@ -648,22 +560,22 @@
         </label>
 
         <label class="field">
-          <span>Escala general (0.5 - 2.5)</span>
+          <span>Escala general</span>
           <input id="jarScaleInput" type="number" min="0.2" max="3" step="0.05" value="1.0" />
         </label>
 
         <label class="field">
-          <span>Escala de monedas (0.5 - 2.5)</span>
+          <span>Escala de monedas</span>
           <input id="jarGiftScaleInput" type="number" min="0.2" max="3" step="0.05" value="1.0" />
         </label>
 
         <label class="field">
-          <span>Desplazamiento horizontal X (px)</span>
+          <span>Desplazamiento X (px)</span>
           <input id="jarXOffsetInput" type="number" step="5" value="0" />
         </label>
 
         <label class="field">
-          <span>Desplazamiento vertical Y (px)</span>
+          <span>Desplazamiento Y (px)</span>
           <input id="jarYOffsetInput" type="number" step="5" value="0" />
         </label>
 
@@ -682,7 +594,7 @@
         </label>
 
         <label class="field span-2" id="jarSelectedGiftsWrap" hidden>
-          <span>Regalos permitidos (nombres o IDs separados por coma)</span>
+          <span>Regalos permitidos (nombres o IDs)</span>
           <input id="jarSelectedGiftsInput" placeholder="Ej: Rosa, Galaxia, 5655" />
         </label>
 
@@ -712,36 +624,36 @@
 
         <label class="checkline span-2">
           <input id="jarShowTotalCoins" type="checkbox" />
-          <span>Mostrar contador de monedas totales acumuladas</span>
+          <span>Mostrar contador acumulado de monedas</span>
         </label>
 
         <label class="checkline span-2">
           <input id="jarDisplayLeaderboard" type="checkbox" />
-          <span>Mostrar barra rotativa de Donantes Destacados (Leaderboard)</span>
+          <span>Mostrar ranking rotativo de Donantes</span>
         </label>
 
         <label class="checkline span-2">
           <input id="jarDisplayAlert" type="checkbox" />
-          <span>Mostrar burbuja de alerta emergente al caer cada regalo</span>
+          <span>Mostrar burbuja de alerta emergente</span>
         </label>
 
         <label class="checkline span-2">
           <input id="jarDisplayRankBadges" type="checkbox" />
-          <span>Mostrar medallas de posición (oro, plata, bronce)</span>
+          <span>Mostrar medallas de posición</span>
         </label>
       </div>
 
       <div class="dialog-foot">
-        <button class="btn btn-ghost" data-close type="button">Cerrar</button>
+        <button class="btn btn-primary" data-close type="button">Listo</button>
       </div>
     </dialog>
 
     <dialog id="settingsDialog" class="dialog dialog-small">
       <div class="dialog-head">
         <div>
-          <h2>Audio y app</h2>
+          <h2>Audio y aplicación</h2>
         </div>
-        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg></button>
       </div>
 
       <label class="field">
@@ -753,12 +665,10 @@
         <input id="playInDashboard" type="checkbox" />
         <span>Reproducir también en esta ventana</span>
       </label>
-      <p class="hint">
-        Si usas OBS, desactívalo para escuchar el sonido una sola vez.
-      </p>
+      <p class="hint">Si usas OBS, desactívalo para evitar escuchar las alertas por duplicado.</p>
 
       <div class="dialog-foot">
-        <button id="btnOpenData" class="btn btn-ghost" type="button">Abrir carpeta de datos</button>
+        <button id="btnOpenData" class="btn btn-ghost" type="button">Carpeta de datos</button>
         <button class="btn btn-primary" data-close type="button">Listo</button>
       </div>
     </dialog>

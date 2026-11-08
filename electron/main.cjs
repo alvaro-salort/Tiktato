@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const {
   deleteSoundFile,
+  flushConfigSave,
   importSound,
   loadConfig,
   normalizeJar,
@@ -14,6 +15,7 @@ const {
   publicConfig,
   publicJar,
   saveConfig,
+  scheduleSaveConfig,
   shouldPassJarFilter,
   updateTopDonorsList
 } = require('./config.cjs');
@@ -25,6 +27,8 @@ const { TikTokService } = require('./tiktok-service.cjs');
 
 const isDev = process.argv.includes('--dev');
 const MAX_ACTIVITY = 40;
+const MAX_UNIQUE_USERS = 10_000;
+const STATE_COALESCE_MS = 80;
 
 if (process.env.TIKTATO_USER_DATA) {
   app.setPath('userData', path.resolve(process.env.TIKTATO_USER_DATA));
@@ -208,17 +212,19 @@ function overlaySettings() {
   };
 }
 
-function publicState() {
+let stateUpdateTimer = null;
+
+function publicState({ includeGifts = true } = {}) {
   const base = publicConfig(config, { overlayUrl: overlayUrl() });
-  return {
+  const payload = {
     ...base,
+    appVersion: app.getVersion(),
     overlay: {
       ...base.overlay,
       port: overlayServer?.port || base.overlay.port
     },
     jarUrl: jarUrl(),
     jarTestUrl: jarTestUrl(),
-    gifts: getActiveCatalog(),
     sounds: config.sounds.map((sound) => ({ ...sound, url: soundUrl(sound) })),
     status: tiktok ? tiktok.getStatus() : { state: 'disconnected', message: 'Sin conexión' },
     stats: {
@@ -231,12 +237,31 @@ function publicState() {
     },
     activity: recentActivity
   };
+  if (includeGifts) {
+    payload.gifts = getActiveCatalog();
+  }
+  return payload;
 }
 
-function sendState() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('state:update', publicState());
+function sendState({ includeGifts = true } = {}) {
+  if (stateUpdateTimer) {
+    clearTimeout(stateUpdateTimer);
+    stateUpdateTimer = null;
   }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('state:update', publicState({ includeGifts }));
+  }
+}
+
+function scheduleStateUpdate() {
+  if (stateUpdateTimer) return;
+  stateUpdateTimer = setTimeout(() => {
+    stateUpdateTimer = null;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('state:update', publicState({ includeGifts: false }));
+    }
+  }, STATE_COALESCE_MS);
+  stateUpdateTimer.unref?.();
 }
 
 function sendAlert(alert) {
@@ -288,7 +313,14 @@ function resolveSound(soundId) {
 }
 
 function registerActivity(event, alert) {
-  stats.uniqueUsers.add(event.userId || event.username || 'anon');
+  const userKey = event.userId || event.username || 'anon';
+  if (!stats.uniqueUsers.has(userKey)) {
+    if (stats.uniqueUsers.size >= MAX_UNIQUE_USERS) {
+      const oldestUser = stats.uniqueUsers.values().next().value;
+      if (oldestUser !== undefined) stats.uniqueUsers.delete(oldestUser);
+    }
+    stats.uniqueUsers.add(userKey);
+  }
   if (event.type === 'gift') {
     if (event.repeatEnd !== false) {
       stats.gifts += 1;
@@ -372,7 +404,7 @@ function addToJar(event) {
     });
     config.jar.recentGifts = config.jar.recentGifts.slice(0, 8);
   }
-  config = saveConfig(app.getPath('userData'), config);
+  config = scheduleSaveConfig(app.getPath('userData'), config);
   updateJarOverlay();
 
   const value =
@@ -442,7 +474,11 @@ function processEvent(event) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('event:incoming', event);
   }
-  sendState();
+  if (event.test) {
+    sendState();
+  } else {
+    scheduleStateUpdate();
+  }
   return alert;
 }
 
@@ -544,6 +580,16 @@ async function loginTikTok() {
 
   const loginSession = session.fromPartition(TIKTOK_LOGIN_PARTITION);
   loginSession.setUserAgent(BROWSER_UA);
+  if (loginSession.webRequest?.onBeforeRequest) {
+    loginSession.webRequest.onBeforeRequest((details, callback) => {
+      const reqUrl = String(details?.url || '');
+      if (/^(bytedance|tiktok|snssdk\d*):\/\//i.test(reqUrl)) {
+        callback({ cancel: true });
+        return;
+      }
+      callback({ cancel: false });
+    });
+  }
   const win = new BrowserWindow({
     width: 480,
     height: 760,
@@ -578,6 +624,11 @@ async function loginTikTok() {
   };
   win.webContents.on('will-navigate', allowOnlyHttp);
   win.webContents.on('will-redirect', allowOnlyHttp);
+  win.webContents.on('will-frame-navigate', (details) => {
+    if (details?.url && !/^https?:\/\//i.test(details.url)) {
+      details.preventDefault?.();
+    }
+  });
   win.loadURL('https://www.tiktok.com/login?lang=es');
 
   return new Promise((resolve) => {
@@ -651,7 +702,7 @@ function createWindow() {
     height: 860,
     minWidth: 980,
     minHeight: 680,
-    backgroundColor: '#f4efe6',
+    backgroundColor: '#fff8f5',
     show: false,
     autoHideMenuBar: true,
     title: 'Tiktato',
@@ -665,23 +716,88 @@ function createWindow() {
   });
 
   if (smokeScreenshot) {
-    if (process.env.TIKTATO_SMOKE_TALL === '1') {
-      mainWindow.setContentSize(1320, 1500);
+    if (process.env.TIKTATO_SMOKE_HEIGHT) {
+      mainWindow.setContentSize(1320, parseInt(process.env.TIKTATO_SMOKE_HEIGHT, 10));
+    } else if (process.env.TIKTATO_SMOKE_TALL === '1') {
+      mainWindow.setContentSize(1320, 1160);
     }
     mainWindow.webContents.once('did-finish-load', () => {
+      mainWindow.webContents.executeJavaScript(`
+        (() => {
+          const t = document.getElementById('toast');
+          if (t) t.remove();
+          return true;
+        })()
+      `);
       if (process.env.TIKTATO_SMOKE_TEST_EVENT === '1') {
         setTimeout(async () => {
-          await mainWindow.webContents.executeJavaScript(
-            'document.querySelector(\'[data-test="gift"]\')?.click()'
-          );
-        }, 1200);
+          await mainWindow.webContents.executeJavaScript(`
+            document.querySelector('[data-test="gift"]')?.click();
+            setTimeout(() => document.querySelector('[data-test="follow"]')?.click(), 180);
+            setTimeout(() => document.querySelector('[data-test="like"]')?.click(), 360);
+            setTimeout(() => document.querySelector('[data-test="chat"]')?.click(), 540);
+          `);
+        }, 600);
       }
       setTimeout(async () => {
         try {
-          if (process.env.TIKTATO_SMOKE_SCROLL === 'bottom') {
+          if (process.env.TIKTATO_SMOKE_TALL === '1') {
+            const docHeight = await mainWindow.webContents.executeJavaScript(`
+              (() => {
+                const app = document.querySelector('.app');
+                return app ? Math.ceil(app.getBoundingClientRect().height + 36) : 1120;
+              })()
+            `);
+            if (docHeight && docHeight > 600) {
+              mainWindow.setContentSize(1320, docHeight);
+              await new Promise((resolve) => setTimeout(resolve, 300));
+            }
+          } else if (process.env.TIKTATO_SMOKE_SCROLL === 'bottom') {
             await mainWindow.webContents.executeJavaScript('window.scrollTo(0, document.body.scrollHeight)');
             await new Promise((resolve) => setTimeout(resolve, 350));
           }
+          await mainWindow.webContents.executeJavaScript(`
+            (() => {
+              const badge = document.getElementById('liveBadge');
+              if (badge) {
+                badge.className = 'badge-live is-live';
+                badge.textContent = 'LIVE';
+              }
+              const pill = document.getElementById('statusPill');
+              if (pill) pill.className = 'status-pill status-connected';
+              const label = document.getElementById('statusLabel');
+              if (label) label.textContent = 'Conectado';
+              const msg = document.getElementById('connectionMessage');
+              if (msg) msg.textContent = '';
+              const user = document.getElementById('username');
+              if (user) {
+                user.value = '';
+                user.placeholder = '@usuario';
+              }
+              const conn = document.getElementById('btnConnect');
+              if (conn) conn.disabled = true;
+              const disc = document.getElementById('btnDisconnect');
+              if (disc) disc.disabled = false;
+              
+              const v = document.getElementById('statViewers'); if (v) v.textContent = '1.420';
+              const g = document.getElementById('statGifts'); if (g) g.textContent = '86';
+              const c = document.getElementById('statCoins'); if (c) c.textContent = '3.540';
+              const f = document.getElementById('statFollows'); if (f) f.textContent = '38';
+              
+              const ver = document.getElementById('appVersion');
+              if (ver) ver.textContent = 'v0.4.5';
+              
+              const t = document.getElementById('toast');
+              if (t) {
+                t.style.display = 'none';
+                t.className = 'toast';
+              }
+            })()
+          `);
+          await mainWindow.webContents.executeJavaScript(`
+            new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+          `);
+          await new Promise((resolve) => setTimeout(resolve, 400));
           const image = await mainWindow.webContents.capturePage();
           fs.writeFileSync(smokeScreenshot, image.toPNG());
           logger.info(`[smoke] captura guardada en ${smokeScreenshot}`);
@@ -690,7 +806,7 @@ function createWindow() {
         } finally {
           app.quit();
         }
-      }, 2600);
+      }, 3200);
     });
     mainWindow.webContents.on('did-fail-load', (_event, code, description) => {
       logger.error(`[smoke] falló la carga (${code}): ${description}`);
@@ -725,6 +841,19 @@ function createWindow() {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
+  const blockMainNavigation = (navEvent, targetUrl) => {
+    try {
+      const parsed = new URL(targetUrl);
+      if (parsed.protocol === 'file:' && parsed.pathname.toLowerCase().endsWith('/renderer/index.html')) {
+        return;
+      }
+    } catch {
+      // URL inválida: bloquear
+    }
+    navEvent.preventDefault();
+  };
+  mainWindow.webContents.on('will-navigate', blockMainNavigation);
+  mainWindow.webContents.on('will-redirect', blockMainNavigation);
   if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -867,14 +996,36 @@ function registerIpc() {
       minHeight: 540,
       autoHideMenuBar: true,
       backgroundColor: bg === 'green' ? '#00ff00' : '#141218',
-      title: 'Tiktato - Frasco Pro',
+      title: 'Tiktato - Frasco',
       icon: path.join(__dirname, '..', 'build', 'icon.png'),
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: true
+        sandbox: true,
+        backgroundThrottling: false
       }
     });
+    const isAllowedStudioUrl = (targetUrl) => {
+      try {
+        const parsed = new URL(targetUrl);
+        const activePort = String(overlayServer?.port || config.overlay.port || 3477);
+        return (
+          parsed.protocol === 'http:' &&
+          (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') &&
+          parsed.port === activePort
+        );
+      } catch {
+        return false;
+      }
+    };
+    const guardStudioNavigation = (navEvent, targetUrl) => {
+      if (!isAllowedStudioUrl(targetUrl)) {
+        navEvent.preventDefault();
+      }
+    };
+    jarStudioWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    jarStudioWindow.webContents.on('will-navigate', guardStudioNavigation);
+    jarStudioWindow.webContents.on('will-redirect', guardStudioNavigation);
     jarStudioWindow.loadURL(`${jarUrl()}&studio=1&bg=${encodeURIComponent(bg)}`);
     jarStudioWindow.on('closed', () => {
       jarStudioWindow = null;
@@ -983,6 +1134,11 @@ if (!singleInstance) {
   app.on('before-quit', () => {
     if (quitting) return;
     quitting = true;
+    try {
+      flushConfigSave(app.getPath('userData'));
+    } catch (error) {
+      logger.warn('[config] no se pudo volcar config al salir', error);
+    }
     releaseStreamResources();
     tiktok?.disconnect().catch(() => {});
     overlayServer?.stop().catch(() => {});

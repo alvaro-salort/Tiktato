@@ -140,6 +140,10 @@ export class TTSQueue {
 
     for (const id of msgSet) {
       this.seenMsgIds.add(id);
+      if (this.seenMsgIds.size > 2000) {
+        const oldest = this.seenMsgIds.values().next().value;
+        this.seenMsgIds.delete(oldest);
+      }
     }
 
     const matches = (entry) => {

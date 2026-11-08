@@ -20,21 +20,21 @@ También puedes ejecutarlo desde el código fuente con `npm install` y `npm star
 
 ## Qué incluye
 
-- **Diseño de panel limpio y accesible**: Distribución por pestañas (*Sonidos*, *OBS y frasco*, *Voz*) con columna lateral persistente de conexión, estadísticas y feed de actividad en vivo.
+- **Panel Bento Grid todo a la vista**: Nueva interfaz modular basada en tarjetas consistentes (*Sonidos por regalo y eventos*, *Actividad en vivo*, *Overlay de alertas*, *Frasco de donaciones* y *Voz del chat*) con paleta tonal cálida, indicador oficial TikTok LIVE pulsante e iconografía Phosphor limpia.
 - **Conexión directa y resiliente**: Conéctate a tu TikTok LIVE simplemente con tu nombre de usuario, con validación estricta de sala en vivo (`status === 2`), respaldo por scraping de perfil y detección en tiempo real de pausas, reanudaciones y cortes del directo.
 - **Reglas de sonido personalizables**: Asigna sonidos específicos a **regalos**, **follows**, **shares**, **likes**, **suscripciones / superfans** y **entradas al directo**.
 - **Manejo preciso de rachas de regalos**: Opción activable para que una racha de $N$ regalos (ej. 5 rosas) reproduzca $N$ veces su sonido asignado una detrás de otra, evitando duplicados cuando se envía un único regalo.
 - **Catálogo de regalos integrado**: Tarjetas rápidas y detección por `giftId` oficial (Rosa, Eres increíble, GG, Maracas, Galaxia, TikTok Universe, etc.) con coincidencia bilingüe (español/inglés) y comodines.
 - **Biblioteca y sonidos propios**: Incluye sonidos sintetizados de fábrica (moneda, campanilla, pop, destello, fanfarria, redoble) y permite importar tus propios archivos de audio (MP3, WAV, OGG, M4A, AAC, FLAC, WEBM hasta 30 MB).
 - **Overlay de alertas para OBS y TikTok LIVE Studio**: Notificación animada transparente con avatar centrado, badge de monedas, etiqueta y barra de progreso.
-- **Frasco de Donaciones Pro (Física 2D con Matter.js)**:
+- **Frasco de Donaciones (Física 2D con Matter.js)**:
   - Botella de vidrio multicapa SVG con efectos de transparencia y reflejos.
   - Simulación física 2D en tiempo real: los regalos caen y rebotan dentro de la botella como esferas con el ícono de cada regalo.
   - Escala logarítmica de radio según el valor del regalo ($R \in [11, 100]\text{ px}$).
   - Embudos de rebote superiores para impedir expulsión accidental.
   - Carrusel rotativo de máximos donantes (*Leaderboard*) con medallas e insignias.
   - Alerta emergente en cada donación y partículas de celebración al alcanzar la meta.
-  - **Modo Ventana Nativa para TikTok LIVE Studio**: Permite abrir el Frasco Pro en una ventana dedicada (`Tiktato - Frasco Pro`) con selector rápido de fondo (**Verde Chroma**, **Oscuro**, **Azul Chroma**, **Magenta** o **Transparente**) para quienes transmiten directamente desde TikTok LIVE Studio sin OBS.
+  - **Modo Ventana Nativa para TikTok LIVE Studio**: Permite abrir el Frasco en una ventana dedicada (`Tiktato - Frasco`) con selector rápido de fondo (**Verde Chroma**, **Oscuro**, **Azul Chroma**, **Magenta** o **Transparente**) para quienes transmiten directamente desde TikTok LIVE Studio sin OBS.
   - Modo de calibración/prueba con HUD interactivo (`/jar?test=1`).
 - **Voz para Chat y Regalos (TTS)**:
   - Selector de dialectos naturales de Google (España, LatAm, México, Argentina, EE.UU.) y compatibilidad automática con todas las voces del sistema instaladas en Windows.
@@ -47,12 +47,12 @@ También puedes ejecutarlo desde el código fuente con `npm install` y `npm star
 
 ![Overlay de alertas](docs/overlay.png)
 
-![Frasco Pro de donaciones](docs/jar.png)
+![Frasco de donaciones](docs/jar.png)
 
 ## Stack
 
 - Electron 45
-- Matter.js 0.20 (Física 2D offline para el Frasco Pro)
+- Matter.js 0.20 (Física 2D offline para el Frasco de donaciones)
 - Node.js 20+ (recomendado 22 LTS o superior)
 - [`piratetok-live-js`](https://github.com/PirateTok/live-js) para eventos de TikTok LIVE con firma local
 - `ws` para comunicación WebSocket bidireccional entre Electron y los overlays

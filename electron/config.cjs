@@ -412,7 +412,25 @@ function loadConfig(userDataDir) {
   }
 }
 
+const pendingConfigSaves = new Map();
+const inFlightConfigSaves = new Map();
+const configSaveGenerations = new Map();
+
+function bumpGeneration(dirKey) {
+  const next = (configSaveGenerations.get(dirKey) || 0) + 1;
+  configSaveGenerations.set(dirKey, next);
+  return next;
+}
+
 function saveConfig(userDataDir, config) {
+  const dirKey = path.resolve(userDataDir);
+  const pending = pendingConfigSaves.get(dirKey);
+  if (pending) {
+    clearTimeout(pending.timer);
+    pendingConfigSaves.delete(dirKey);
+  }
+  inFlightConfigSaves.delete(dirKey);
+  bumpGeneration(dirKey);
   ensureDirectories(userDataDir);
   const normalized = normalizeConfig(config);
   const file = configPath(userDataDir);
@@ -420,6 +438,124 @@ function saveConfig(userDataDir, config) {
   fs.writeFileSync(temporary, JSON.stringify(normalized, null, 2), 'utf8');
   fs.renameSync(temporary, file);
   return normalized;
+}
+
+async function writeConfigAsync(userDataDir, normalized, expectedGen) {
+  const dirKey = path.resolve(userDataDir);
+  await fs.promises.mkdir(userDataDir, { recursive: true });
+  await fs.promises.mkdir(soundsDir(userDataDir), { recursive: true });
+  if (configSaveGenerations.get(dirKey) !== expectedGen) return normalized;
+
+  const file = configPath(userDataDir);
+  const temporary = `${file}.${process.pid}.${expectedGen}.tmp`;
+  try {
+    await fs.promises.writeFile(temporary, JSON.stringify(normalized, null, 2), 'utf8');
+    if (configSaveGenerations.get(dirKey) !== expectedGen) {
+      await fs.promises.unlink(temporary).catch(() => {});
+      return normalized;
+    }
+    await fs.promises.rename(temporary, file);
+  } catch (error) {
+    await fs.promises.unlink(temporary).catch(() => {});
+    throw error;
+  }
+  return normalized;
+}
+
+function scheduleSaveConfig(userDataDir, config, { delayMs = 1000, maxWaitMs = 5000 } = {}) {
+  const dirKey = path.resolve(userDataDir);
+  const normalized = normalizeConfig(config);
+  const now = Date.now();
+  const existing = pendingConfigSaves.get(dirKey);
+  const firstQueuedAt = existing ? existing.firstQueuedAt : now;
+
+  if (existing) {
+    clearTimeout(existing.timer);
+  }
+
+  const elapsed = now - firstQueuedAt;
+  const effectiveDelay = Math.max(0, Math.min(Number(delayMs) || 1000, Math.max(0, (Number(maxWaitMs) || 5000) - elapsed)));
+
+  const timer = setTimeout(() => {
+    const current = pendingConfigSaves.get(dirKey);
+    if (!current) return;
+    pendingConfigSaves.delete(dirKey);
+    const gen = bumpGeneration(dirKey);
+    inFlightConfigSaves.set(dirKey, {
+      userDataDir: current.userDataDir,
+      config: current.config,
+      gen
+    });
+    writeConfigAsync(current.userDataDir, current.config, gen)
+      .catch(() => {
+        try {
+          if (configSaveGenerations.get(dirKey) === gen) {
+            saveConfig(current.userDataDir, current.config);
+          }
+        } catch {
+          // Ignorado si el directorio temporal ya fue eliminado.
+        }
+      })
+      .finally(() => {
+        if (inFlightConfigSaves.get(dirKey)?.gen === gen) {
+          inFlightConfigSaves.delete(dirKey);
+        }
+      });
+  }, effectiveDelay);
+  timer.unref?.();
+
+  pendingConfigSaves.set(dirKey, {
+    userDataDir,
+    config: normalized,
+    firstQueuedAt,
+    timer
+  });
+
+  return normalized;
+}
+
+function flushConfigSave(userDataDir) {
+  if (userDataDir) {
+    const dirKey = path.resolve(userDataDir);
+    const pending = pendingConfigSaves.get(dirKey);
+    const inFlight = inFlightConfigSaves.get(dirKey);
+    if (!pending && !inFlight) return null;
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingConfigSaves.delete(dirKey);
+    }
+    inFlightConfigSaves.delete(dirKey);
+    const target = pending || inFlight;
+    return saveConfig(target.userDataDir, target.config);
+  }
+
+  let lastSaved = null;
+  const allKeys = new Set([...pendingConfigSaves.keys(), ...inFlightConfigSaves.keys()]);
+  for (const dirKey of allKeys) {
+    const pending = pendingConfigSaves.get(dirKey);
+    const inFlight = inFlightConfigSaves.get(dirKey);
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingConfigSaves.delete(dirKey);
+    }
+    inFlightConfigSaves.delete(dirKey);
+    const target = pending || inFlight;
+    if (!target) continue;
+    try {
+      lastSaved = saveConfig(target.userDataDir, target.config);
+    } catch {
+      // Ignorado al cerrar si no se puede escribir.
+    }
+  }
+  return lastSaved;
+}
+
+function hasPendingConfigSave(userDataDir) {
+  if (userDataDir) {
+    const dirKey = path.resolve(userDataDir);
+    return pendingConfigSaves.has(dirKey) || inFlightConfigSaves.has(dirKey);
+  }
+  return pendingConfigSaves.size > 0 || inFlightConfigSaves.size > 0;
 }
 
 function importSound(userDataDir, sourcePath, displayName) {
@@ -529,6 +665,8 @@ module.exports = {
   configPath,
   createDefaultConfig,
   deleteSoundFile,
+  flushConfigSave,
+  hasPendingConfigSave,
   importSound,
   loadConfig,
   normalizeConfig,
@@ -538,6 +676,7 @@ module.exports = {
   publicConfig,
   publicJar,
   saveConfig,
+  scheduleSaveConfig,
   shouldPassJarFilter,
   soundsDir,
   updateTopDonorsList

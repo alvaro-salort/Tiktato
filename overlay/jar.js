@@ -1,4 +1,4 @@
-// Frasco de Donaciones Pro (Clean-room Coin Jar Pro con Matter.js)
+// Frasco de Donaciones (Clean-room Coin Jar con Matter.js)
 const params = new URLSearchParams(location.search);
 const token = params.get('token') || '';
 const isTestMode =
@@ -97,11 +97,18 @@ let leaderboardTimer = null;
 let alertTimer = null;
 
 // Physics State
+const MAX_BODIES = 250;
+const MAX_IMAGE_CACHE = 120;
 let engine = null;
 let render = null;
 let runner = null;
 let containerBodies = [];
+const dynamicBodies = [];
 const imageCache = new Map();
+
+function isBackgroundPaused() {
+  return Boolean(document.hidden && !isStudioMode);
+}
 
 // Queue State
 const giftQueue = [];
@@ -238,26 +245,60 @@ function computeSpawnPosition(R, width, height, config) {
   return { x: spawnX, y: spawnY };
 }
 
+function cleanupUnusedRenderTextures() {
+  if (!render?.textures) return;
+  const activeUrls = new Set();
+  for (const b of dynamicBodies) {
+    const tex = b?.render?.sprite?.texture;
+    if (tex) activeUrls.add(tex);
+  }
+  for (const url of Object.keys(render.textures)) {
+    if (!imageCache.has(url) && !activeUrls.has(url)) {
+      delete render.textures[url];
+    }
+  }
+}
+
 /* ───────── PRECARGA DE TEXTURAS ───────── */
 function preloadTexture(url, callback) {
   if (!url) return;
   if (imageCache.has(url)) {
     const cached = imageCache.get(url);
+    imageCache.delete(url);
+    imageCache.set(url, cached);
     if (cached.loaded) {
+      if (render?.textures) render.textures[url] = cached.img;
       callback?.(cached.img);
       return;
     }
+    if (callback && Array.isArray(cached.callbacks)) {
+      cached.callbacks.push(callback);
+    }
+    return;
   }
+  while (imageCache.size >= MAX_IMAGE_CACHE) {
+    const oldestUrl = imageCache.keys().next().value;
+    if (oldestUrl === undefined) break;
+    imageCache.delete(oldestUrl);
+  }
+  cleanupUnusedRenderTextures();
   const img = new Image();
   img.crossOrigin = 'anonymous';
-  const entry = { img, loaded: false };
+  const entry = { img, loaded: false, callbacks: callback ? [callback] : [] };
   imageCache.set(url, entry);
   img.onload = () => {
     entry.loaded = true;
-    callback?.(img);
+    if (render?.textures) render.textures[url] = img;
+    const pending = entry.callbacks.splice(0);
+    for (const cb of pending) {
+      cb(img);
+    }
   };
   img.onerror = () => {
     entry.loaded = false;
+    entry.callbacks.length = 0;
+    imageCache.delete(url);
+    if (render?.textures) delete render.textures[url];
   };
   img.src = url;
 }
@@ -310,7 +351,9 @@ function initPhysics() {
       const y = body.position.y;
 
       const spriteTexture = body.render?.sprite?.texture;
-      const isTextureLoaded = spriteTexture && imageCache.get(spriteTexture)?.loaded;
+      const isTextureLoaded = Boolean(
+        spriteTexture && (body.render?.sprite?.textureLoaded || imageCache.get(spriteTexture)?.loaded)
+      );
 
       if (!isTextureLoaded) {
         ctx.save();
@@ -346,7 +389,7 @@ function initPhysics() {
 
   window.addEventListener('resize', handleResize);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
+    if (isBackgroundPaused()) {
       if (runner && engine) Matter.Runner.stop(runner);
     } else {
       if (runner && engine) Matter.Runner.run(runner, engine);
@@ -398,10 +441,12 @@ function spawnGift(item) {
   if (cached?.loaded) {
     const naturalW = cached.img.naturalWidth || 64;
     const naturalH = cached.img.naturalHeight || 64;
+    if (render?.textures) render.textures[textureUrl] = cached.img;
     bodyOptions.render.sprite = {
       texture: textureUrl,
       xScale: (R * 2.5) / naturalW,
-      yScale: (R * 2.5) / naturalH
+      yScale: (R * 2.5) / naturalH,
+      textureLoaded: true
     };
   }
 
@@ -415,13 +460,33 @@ function spawnGift(item) {
         body.render.sprite = {
           texture: textureUrl,
           xScale: (R * 2.5) / naturalW,
-          yScale: (R * 2.5) / naturalH
+          yScale: (R * 2.5) / naturalH,
+          textureLoaded: true
         };
       }
     });
   }
 
   Matter.Composite.add(engine.world, body);
+  dynamicBodies.push(body);
+  let evicted = false;
+  while (dynamicBodies.length > MAX_BODIES) {
+    const oldestBody = dynamicBodies.shift();
+    if (oldestBody) {
+      Matter.Composite.remove(engine.world, oldestBody);
+      evicted = true;
+    }
+  }
+  if (evicted) {
+    cleanupUnusedRenderTextures();
+    if (Matter.Sleeping?.set) {
+      for (const activeBody of dynamicBodies) {
+        if (activeBody.isSleeping) {
+          Matter.Sleeping.set(activeBody, false);
+        }
+      }
+    }
+  }
 }
 
 /* ───────── COLA DE REGALOS (Sección 8.1 - tf 200ms) ───────── */
@@ -443,7 +508,7 @@ function enqueueGift(data) {
 }
 
 function processQueueTick() {
-  if (document.hidden) return; // Pausa en pestaña oculta (Sección 8.1)
+  if (isBackgroundPaused()) return; // Pausa en pestaña oculta salvo en Studio Mode (Sección 8.1)
   if (giftQueue.length === 0) return;
 
   const item = giftQueue.shift();
@@ -581,7 +646,7 @@ function startLeaderboardCarousel() {
   const step = 100;
 
   leaderboardTimer = setInterval(() => {
-    if (document.hidden) return;
+    if (isBackgroundPaused()) return;
     if (topDonorsList.length <= 1) {
       leaderboardProgressBar.style.width = '100%';
       return;
@@ -640,6 +705,8 @@ function showAlert(item) {
 /* ───────── VACIAR FRASCO (Sección 5.2) ───────── */
 function resetJar() {
   giftQueue.length = 0;
+  dynamicBodies.length = 0;
+  cleanupUnusedRenderTextures();
 
   if (engine) {
     const bodies = Matter.Composite.allBodies(engine.world);

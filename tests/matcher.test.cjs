@@ -273,3 +273,20 @@ test('coincide regalos de prueba con sufijos "de prueba" o "test" con la regla p
   assert.equal(matchedAfterCooldown?.id, 'rule_custom_rosa');
 });
 
+test('markPlayed acota el mapa de cooldowns para evitar fugas de memoria en directos largos', () => {
+  const { MAX_COOLDOWN_ENTRIES } = require('../electron/alert-matcher.cjs');
+  assert.equal(MAX_COOLDOWN_ENTRIES, 2000);
+
+  const cooldowns = new Map();
+  const rule = { id: 'rule_any', eventType: 'gift', cooldownSeconds: 10 };
+  for (let i = 1; i <= 150; i += 1) {
+    markPlayed(rule, { type: 'gift', userId: `user_${i}`, repeatEnd: true }, cooldowns, 1000 + i, 100);
+  }
+  assert.equal(cooldowns.size, 100);
+  assert.equal(cooldowns.has('rule_any:user_1'), false);
+  assert.equal(cooldowns.has('rule_any:user_50'), false);
+  assert.equal(cooldowns.has('rule_any:user_51'), true);
+  assert.equal(cooldowns.has('rule_any:user_150'), true);
+});
+
+
