@@ -126,13 +126,8 @@ function formatBytes(bytes) {
 }
 
 function showToast(message, kind = 'info') {
-  const toast = $('#toast');
-  if (!toast) return;
-  toast.textContent = message;
-  toast.classList.toggle('is-error', kind === 'error');
-  toast.classList.add('is-visible');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast?.classList.remove('is-visible'), 3200);
+  // Las notificaciones toast de cada acción fueron desactivadas a petición del usuario
+  return;
 }
 
 function setError(message) {
@@ -265,35 +260,34 @@ function updateStatus(status) {
   const connect = $('#btnConnect');
   const message = $('#connectionMessage');
 
-  pill.className = `status-pill status-${status.state || 'disconnected'}`;
+  if (pill) pill.className = `status-pill status-${status.state || 'disconnected'}`;
   const labels = {
     connected: 'Conectado',
     connecting: 'Conectando…',
     error: 'Error',
     disconnected: 'Desconectado'
   };
-  label.textContent = labels[status.state] || 'Desconectado';
-  liveBadge.textContent = status.state === 'connected' ? 'LIVE' : 'OFFLINE';
-  liveBadge.classList.toggle('is-live', status.state === 'connected');
-  disconnect.disabled = !['connected', 'connecting', 'error'].includes(status.state);
-  connect.disabled = status.state === 'connecting';
-  connect.textContent = status.state === 'connecting' ? 'Conectando…' : 'Conectar';
-  message.textContent = status.state === 'connected' ? '' : (status.message || 'Sin conexión');
-  message.classList.toggle('is-error', status.state === 'error');
-  $('#statViewers').textContent = formatNumber(status.viewerCount || 0);
+  if (label) label.textContent = labels[status.state] || 'Desconectado';
+  if (liveBadge) {
+    liveBadge.textContent = '';
+    liveBadge.classList.remove('is-live');
+    liveBadge.style.display = 'none';
+  }
+  if (disconnect) disconnect.disabled = !['connected', 'connecting', 'error'].includes(status.state);
+  if (connect) {
+    connect.disabled = status.state === 'connecting';
+    connect.textContent = status.state === 'connecting' ? 'Conectando…' : 'Conectar';
+  }
+  if (message) {
+    message.textContent = status.state === 'error' && status.message ? status.message : '';
+    message.classList.toggle('is-error', status.state === 'error');
+  }
+  const viewers = $('#statViewers');
+  if (viewers) viewers.textContent = formatNumber(status.viewerCount || 0);
 
   const sideCard = $('#sidebarStatusCard');
-  const sideText = $('#sidebarStatusText');
-  const sideLive = $('#sidebarLiveTag');
   if (sideCard) {
-    sideCard.className = `sidebar-status-card status-${status.state || 'disconnected'}`;
-  }
-  if (sideText) {
-    sideText.textContent = labels[status.state] || 'Desconectado';
-  }
-  if (sideLive) {
-    sideLive.textContent = status.state === 'connected' ? 'LIVE' : 'OFFLINE';
-    sideLive.classList.toggle('is-live', status.state === 'connected');
+    sideCard.style.display = 'none';
   }
 }
 

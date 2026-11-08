@@ -519,16 +519,19 @@ p {
 /* ───────── Tarjeta Banner Superior ───────── */
 
 .card.card-banner {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 20px;
-  padding: 12px 24px;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 20px;
   border-radius: var(--radius-xl);
   background: var(--surface);
   border: 1px solid var(--line);
   box-shadow: var(--shadow-card);
-  flex-direction: row;
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .banner-brand {
@@ -570,23 +573,22 @@ p {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  justify-self: center;
-  width: 100%;
-  max-width: 460px;
+  flex: 0 1 340px;
+  min-width: 260px;
 }
 
 .connect-form {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
 }
 
 .input-prefix {
   display: flex;
   align-items: center;
-  min-width: 0;
-  flex: 1;
+  min-width: 140px;
+  flex: 1 1 160px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: #ffffff;
@@ -611,14 +613,25 @@ p {
 }
 
 .input-prefix input {
+  width: 100%;
+  min-width: 120px;
+  min-height: 38px;
   padding: 0 12px;
   border: 0;
   box-shadow: none;
   background: transparent;
+  font-size: 13px;
 }
 
 .input-prefix input:focus {
   box-shadow: none;
+}
+
+.connect-form .btn {
+  flex-shrink: 0;
+  padding: 0 12px;
+  min-height: 38px;
+  font-size: 12.5px;
 }
 
 .status-strip {
@@ -700,6 +713,10 @@ p {
   text-transform: uppercase;
 }
 
+.badge-live {
+  display: none !important;
+}
+
 .badge-live.is-live {
   background: var(--tiktok-live);
   border-color: transparent;
@@ -752,7 +769,7 @@ p {
 .banner-stats {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
   justify-self: end;
 }
@@ -760,8 +777,8 @@ p {
 .metric-tile {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 11px;
+  gap: 6px;
+  padding: 5px 9px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
@@ -773,14 +790,14 @@ p {
 }
 
 .metric-tile .icon {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   color: var(--md-primary);
 }
 
 .metric-value strong {
   display: block;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 800;
   line-height: 1.1;
   color: var(--ink);
@@ -789,7 +806,7 @@ p {
 
 .metric-value small {
   display: block;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--ink-soft);
 }
@@ -831,21 +848,27 @@ p {
 
 /* Pestaña 1: Sonidos y Alertas */
 .sounds-workspace-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  align-items: start;
+  width: 100%;
+}
+
+.sounds-workspace-grid .card-sounds,
+.sounds-workspace-grid .card-activity {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  height: auto;
 }
 
 .sounds-workspace-grid .card-sounds {
-  height: auto;
-  min-height: 580px;
+  min-height: 520px;
 }
 
 .sounds-workspace-grid .card-activity {
-  height: 640px;
-  position: sticky;
-  top: 18px;
+  min-height: 380px;
+  position: static;
 }
 
 /* Pestaña 2: Overlay de Alertas */
@@ -902,7 +925,7 @@ p {
   height: auto;
 }
 
-.jar-body-layout {
+.card-body.jar-body-layout {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
   gap: 24px;
@@ -982,40 +1005,115 @@ p {
   padding: 10px;
 }
 
-.jar-visual-large {
+.jar-status-box.jar-visual-large {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 28px 24px;
+  background: linear-gradient(180deg, #fbf7f2 0%, #f4ede4 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.02);
+  min-height: 360px;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
 }
 
 .jar-visual-large .jar-mini {
-  width: 140px;
-  height: 220px;
+  position: relative;
+  width: 220px;
+  height: 275px;
+  flex: 0 0 220px;
+}
+
+.jar-visual-large .jar-mini-lid {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 130px;
+  height: 20px;
+  border: 2px solid rgba(40, 30, 20, 0.25);
+  border-radius: 8px 8px 3px 3px;
+  background: linear-gradient(180deg, #ffffff 0%, #e8e0d5 100%);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
 }
 
 .jar-visual-large .jar-mini-glass {
-  height: 190px;
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 200px;
+  height: 250px;
+  border: 3px solid rgba(40, 30, 20, 0.25);
+  border-radius: 20px 20px 36px 36px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(240, 245, 255, 0.5) 100%);
+  box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.04), 0 10px 28px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.jar-visual-large .jar-mini-fill {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 0%;
+  background: linear-gradient(180deg, #ffb84d 0%, #e88000 100%);
+  transition: height 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.jar-visual-large .jar-mini-fill::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  left: -8px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffd685;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.jar-visual-large .jar-mini-shine {
+  position: absolute;
+  top: 20px;
+  left: 14px;
+  width: 12px;
+  height: 140px;
+  border-radius: 99px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.15) 100%);
+  pointer-events: none;
 }
 
 /* Pestaña 4: Voz del chat (TTS) */
 .card-tts-main {
   min-height: 520px;
   height: auto;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
 }
 
-.tts-body-layout {
+.card-body.tts-body-layout {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 28px;
+  gap: 32px;
   align-items: start;
   padding: 24px 28px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .tts-left-col,
 .tts-right-col {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  min-width: 0;
+  width: 100%;
 }
 
 .tts-toggle-list {
@@ -2751,6 +2849,7 @@ select {
 /* ───────── Toasts y Alertas ───────── */
 
 .toast {
+  display: none !important;
   position: fixed;
   z-index: var(--z-toast);
   bottom: 24px;
@@ -2814,12 +2913,14 @@ select {
 @media (max-width: 1200px) {
   .card-sounds {
     grid-column: span 12;
-    height: 480px;
+    height: auto;
+    width: 100%;
   }
 
   .card-activity {
     grid-column: span 12;
-    height: 380px;
+    height: auto;
+    width: 100%;
   }
 
   .card-feature {
@@ -2946,11 +3047,11 @@ select {
   cursor: pointer;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 900px) {
   .sounds-workspace-grid,
   .overlay-layout,
-  .jar-body-layout,
-  .tts-body-layout {
+  .card-body.jar-body-layout,
+  .card-body.tts-body-layout {
     grid-template-columns: 1fr;
   }
 

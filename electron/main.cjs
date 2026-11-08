@@ -698,7 +698,7 @@ async function logoutTikTok() {
 let whenReadyTimestamp = 0;
 
 function createWindow() {
-  const smokeScreenshot = process.env.TIKTATO_SMOKE_SCREENSHOT || '';
+  const smokeScreenshot = (process.env.TIKTATO_SMOKE_SCREENSHOT || '').trim();
   mainWindow = new BrowserWindow({
     width: 1320,
     height: 860,
@@ -732,6 +732,12 @@ function createWindow() {
           return true;
         })()
       `);
+      if (process.env.TIKTATO_SMOKE_TAB) {
+        const targetTab = process.env.TIKTATO_SMOKE_TAB.trim();
+        mainWindow.webContents.executeJavaScript(`
+          document.getElementById('tab-' + ${JSON.stringify(targetTab)})?.click();
+        `);
+      }
       if (process.env.TIKTATO_SMOKE_TEST_EVENT === '1') {
         setTimeout(async () => {
           await mainWindow.webContents.executeJavaScript(`
@@ -788,7 +794,7 @@ function createWindow() {
               const f = document.getElementById('statFollows'); if (f) f.textContent = '38';
               
               const ver = document.getElementById('appVersion');
-              if (ver) ver.textContent = 'v0.4.6';
+              if (ver) ver.textContent = 'v1.0.0';
               
               const t = document.getElementById('toast');
               if (t) {
@@ -802,8 +808,9 @@ function createWindow() {
           `);
           await new Promise((resolve) => setTimeout(resolve, 400));
           const image = await mainWindow.webContents.capturePage();
-          fs.writeFileSync(smokeScreenshot, image.toPNG());
-          logger.info(`[smoke] captura guardada en ${smokeScreenshot}`);
+          const dest = path.resolve(smokeScreenshot);
+          fs.writeFileSync(dest, image.toPNG());
+          logger.info(`[smoke] captura guardada en ${dest}`);
         } catch (error) {
           logger.error('[smoke] no se pudo capturar la ventana', error);
         } finally {
@@ -816,7 +823,11 @@ function createWindow() {
     });
   }
 
-  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+  mainWindow.webContents.on('console-message', (event) => {
+    const level = event?.level ?? 0;
+    const message = event?.message ?? '';
+    const line = event?.line ?? 0;
+    const sourceId = event?.sourceId ?? '';
     logger.info(`[renderer:${level}] ${message} (${sourceId}:${line})`);
   });
   mainWindow.webContents.on('did-fail-load', (_event, code, description) => {
@@ -844,13 +855,13 @@ function createWindow() {
         }, process.env.TIKTATO_BENCHMARK_WAIT ? parseInt(process.env.TIKTATO_BENCHMARK_WAIT, 10) : 500);
       }
     }
-    if (!smokeScreenshot) showWindow();
+    showWindow();
   });
   mainWindow.webContents.once('did-finish-load', () => {
-    if (!smokeScreenshot) showWindow();
+    showWindow();
   });
   setTimeout(() => {
-    if (!smokeScreenshot) showWindow();
+    showWindow();
   }, 400);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);

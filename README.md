@@ -11,8 +11,8 @@
 
 ## Descargar
 
-- [Instalador de Windows v0.4.6 (`Tiktato-Setup-0.4.6.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
-- [Versión portable v0.4.6 (`Tiktato-Portable-0.4.6.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+- [Instalador de Windows v1.0.0 (`Tiktato-Setup-1.0.0.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+- [Versión portable v1.0.0 (`Tiktato-Portable-1.0.0.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
 
 También puedes ejecutarlo desde el código fuente con `npm install` y `npm start`.
 
@@ -20,7 +20,7 @@ También puedes ejecutarlo desde el código fuente con `npm install` y `npm star
 
 ## Qué incluye
 
-- **Panel Bento Grid todo a la vista**: Nueva interfaz modular basada en tarjetas consistentes (*Sonidos por regalo y eventos*, *Actividad en vivo*, *Overlay de alertas*, *Frasco de donaciones* y *Voz del chat*) con paleta tonal cálida, indicador oficial TikTok LIVE pulsante e iconografía Phosphor limpia.
+- **Menú lateral con 4 secciones dedicadas**: Navegación ágil y accesible entre *Sonidos y Alertas*, *Overlay de Alertas*, *Frasco de Donaciones* y *Voz del Chat (TTS)*, con personalización rápida de regalos destacados, barra de estado único y controles organizados.
 - **Conexión directa y resiliente**: Conéctate a tu TikTok LIVE simplemente con tu nombre de usuario, con validación estricta de sala en vivo (`status === 2`), respaldo por scraping de perfil y detección en tiempo real de pausas, reanudaciones y cortes del directo.
 - **Reglas de sonido personalizables**: Asigna sonidos específicos a **regalos**, **follows**, **shares**, **likes**, **suscripciones / superfans** y **entradas al directo**.
 - **Manejo preciso de rachas de regalos**: Opción activable para que una racha de $N$ regalos (ej. 5 rosas) reproduzca $N$ veces su sonido asignado una detrás de otra, evitando duplicados cuando se envía un único regalo.
@@ -85,26 +85,26 @@ npm run dist
 
 Los ejecutables generados se guardan en la carpeta `dist/`. El repositorio incluye además un flujo de **GitHub Actions** (`.github/workflows/release.yml`) que compila y publica los instaladores automáticamente en GitHub Releases al crear un tag `v*`.
 
-## Cómo agregar el Frasco Pro en TikTok LIVE Studio (sin OBS)
+## Cómo agregar el Frasco en TikTok LIVE Studio (sin OBS)
 
-Si transmites directamente con **TikTok LIVE Studio** y no utilizas OBS, tienes dos formas muy sencillas de agregar el **Frasco Pro**:
+Si transmites directamente con **TikTok LIVE Studio** y no utilizas OBS, tienes dos formas muy sencillas de agregar el **Frasco**:
 
 1. **Opción A — Fuente Enlace (Web / Link)** *(recomendada por transparencia nativa)*:
-   - En Tiktato, abre la pestaña **OBS y frasco** y pulsa **Copiar URL** en la tarjeta del Frasco de donaciones.
+   - En Tiktato, abre la sección **Frasco de Donaciones** y pulsa **Copiar enlace**.
    - En **TikTok LIVE Studio**, haz clic en **Añadir fuente (`+`) → Enlace (Link)**.
    - Pega la URL copiada y ajusta el tamaño a `800 × 800`.
 2. **Opción B — Captura de ventana con Fondo Chroma / Oscuro**:
-   - En Tiktato, ve a **OBS y frasco** y pulsa el botón **Abrir para TikTok LIVE Studio**.
-   - Se abrirá la ventana **`Tiktato - Frasco Pro`**. Al mover el cursor sobre ella verás una barra superior donde puedes elegir el fondo (**Verde Chroma**, **Oscuro**, **Azul Chroma**, **Magenta** o **Transparente**); la barra se oculta sola tras 2 segundos sin mover el ratón.
-   - En **TikTok LIVE Studio**, añade **Captura de ventana**, selecciona **`Tiktato - Frasco Pro`** y, si elegiste fondo verde, activa el filtro **Clave de color (Chroma Key)**.
+   - En Tiktato, ve a la sección **Frasco de Donaciones** y pulsa el botón **Abrir ventana**.
+   - Se abrirá la ventana **`Tiktato - Frasco`**. Al mover el cursor sobre ella verás una barra superior donde puedes elegir el fondo (**Verde Chroma**, **Oscuro**, **Azul Chroma**, **Magenta** o **Transparente**); la barra se oculta sola tras 2 segundos sin mover el ratón.
+   - En **TikTok LIVE Studio**, añade **Captura de ventana**, selecciona **`Tiktato - Frasco`** y, si elegiste fondo verde, activa el filtro **Clave de color (Chroma Key)**.
 
 ## Configuración rápida en OBS Studio
 
 1. Inicia tu directo en TikTok.
-2. Abre Tiktato, escribe tu usuario en el panel lateral y pulsa **Conectar**.
-3. En la pestaña **OBS y frasco**, copia la URL que desees:
+2. Abre Tiktato, escribe tu usuario en la cabecera y pulsa **Conectar**.
+3. En Tiktato, copia el enlace que desees desde sus respectivas secciones:
    - **Overlay de alertas**: Fuente de navegador de `800 × 600`.
-   - **Frasco de donaciones Pro**: Fuente de navegador de `800 × 800`.
+   - **Frasco de donaciones**: Fuente de navegador de `800 × 800`.
    - **Frasco de prueba**: URL con parámetro `?test=1` para calibrar la escena y probar botones de regalos.
 4. En las propiedades de la fuente de navegador en OBS, activa **Controlar audio vía OBS** para gestionar el volumen desde el mezclador.
 
@@ -116,7 +116,7 @@ Si transmites directamente con **TikTok LIVE Studio** y no utilizas OBS, tienes 
 
 ## Autor y Licencia
 
-Desarrollado por **Alvaro Salort** (<alvarosalort9@gmail.com> · [GitHub](https://github.com/alvaro-salort/Tiktato)).
+Desarrollado por **Alvaro Salort** ([GitHub](https://github.com/alvaro-salort/Tiktato)).
 
 Distribuido bajo la licencia **GNU General Public License v3.0 (GPL-3.0-or-later)**. Consulta el archivo [LICENSE](LICENSE) para más detalles. Si compartes o modificas este proyecto, debes mantener el crédito al autor original y distribuir el código derivado bajo la misma licencia libre GPLv3.
 

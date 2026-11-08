@@ -1,11 +1,10 @@
 {
   "name": "tiktato",
-  "version": "0.4.6",
+  "version": "1.0.0",
   "description": "TikTato es una aplicación de escritorio de código abierto para streamers de TikTok LIVE que permite automatizar y configurar alertas de sonido, overlays para OBS y TikTok LIVE Studio, leer los mensajes del chat con voz (TTS), interactuar con la audiencia y crear salas de juego interactivas.",
   "main": "electron/main.cjs",
   "author": {
     "name": "Alvaro Salort",
-    "email": "alvarosalort9@gmail.com",
     "url": "https://github.com/alvaro-salort"
   },
   "license": "GPL-3.0-or-later",
@@ -52,6 +51,12 @@
     "productName": "Tiktato",
     "copyright": "Copyright © 2026 Alvaro Salort",
     "asar": true,
+    "compression": "maximum",
+    "electronLanguages": [
+      "es",
+      "es-419",
+      "en-US"
+    ],
     "publish": [
       {
         "provider": "github",
@@ -72,7 +77,13 @@
       "LICENSE",
       "package.json",
       "!**/*.map",
-      "!tests/**/*"
+      "!tests/**/*",
+      "!docs/**/*",
+      "!patches/**/*",
+      "!scripts/**/*",
+      "!**/*.md",
+      "!**/README*",
+      "!**/CHANGELOG*"
     ],
     "win": {
       "icon": "build/icon.ico",
