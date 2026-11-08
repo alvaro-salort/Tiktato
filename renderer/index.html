@@ -312,8 +312,11 @@
 
             <div class="url-input-group" style="margin-top: 10px;">
               <input id="jarUrl" readonly aria-label="URL del frasco" />
-              <button id="btnCopyJar" class="btn btn-primary btn-small" type="button">Copiar enlace</button>
+              <button id="btnCopyJar" class="btn btn-primary btn-small" type="button" title="Copiar URL para OBS Studio">Copiar enlace</button>
             </div>
+            <small style="display: block; margin-top: 5px; font-size: 11px; color: var(--md-on-surface-variant); opacity: 0.85; line-height: 1.4;">
+              Para OBS Studio usa «Copiar enlace». Para TikTok LIVE Studio usa «Abrir ventana» con fondo chroma.
+            </small>
             <input id="jarTestUrl" readonly type="hidden" />
             <button id="btnCopyJarTest" style="display: none;" type="button"></button>
             <button id="btnOpenJarTest" style="display: none;" type="button"></button>
