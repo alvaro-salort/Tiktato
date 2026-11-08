@@ -11,8 +11,8 @@
 
 ## Descargar
 
-- [Instalador de Windows v0.4.5 (`Tiktato-Setup-0.4.5.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
-- [Versión portable v0.4.5 (`Tiktato-Portable-0.4.5.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+- [Instalador de Windows v0.4.6 (`Tiktato-Setup-0.4.6.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+- [Versión portable v0.4.6 (`Tiktato-Portable-0.4.6.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
 
 También puedes ejecutarlo desde el código fuente con `npm install` y `npm start`.
 

@@ -785,7 +785,7 @@ function createWindow() {
               const f = document.getElementById('statFollows'); if (f) f.textContent = '38';
               
               const ver = document.getElementById('appVersion');
-              if (ver) ver.textContent = 'v0.4.5';
+              if (ver) ver.textContent = 'v0.4.6';
               
               const t = document.getElementById('toast');
               if (t) {
