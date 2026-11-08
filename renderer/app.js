@@ -1388,8 +1388,12 @@ function wireEvents() {
   $('#btnOpenJar').addEventListener('click', () => api.openJar());
 
   $('#btnOpenJarStudio')?.addEventListener('click', async () => {
-    await api.openJarStudio?.({ bg: 'green' });
-    showToast('Ventana de Frasco Pro abierta para TikTok LIVE Studio');
+    const res = await api.openJarStudio?.({ bg: 'green' });
+    if (res?.error) {
+      showToast(res.error, 'error');
+    } else {
+      showToast('Ventana del frasco abierta para TikTok LIVE Studio');
+    }
   });
 
   $('#btnCopyJarTest')?.addEventListener('click', async () => {

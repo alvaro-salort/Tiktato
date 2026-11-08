@@ -122,15 +122,6 @@ function formatNumber(value) {
   return new Intl.NumberFormat('es-ES').format(Number(value) || 0);
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
 /* ───────── FÓRMULA MATEMÁTICA DE RADIO (Sección 6.4) ───────── */
 function computeBaseRadius(v) {
   const value = Math.max(1, Math.min(100000, Number(v) || 1));
@@ -307,6 +298,10 @@ function preloadTexture(url, callback) {
 function initPhysics() {
   if (typeof Matter === 'undefined') {
     console.error('[jar] Matter.js no está cargado');
+    const err = document.createElement('div');
+    err.className = 'jar-fatal-error';
+    err.textContent = 'Error: Matter.js no cargó. Reinicia el frasco o comprueba la conexión.';
+    document.body.appendChild(err);
     return;
   }
 
@@ -819,18 +814,6 @@ function connect() {
 function setupTestMode() {
   if (!isTestMode) return;
   if (testHud) testHud.hidden = false;
-
-  // Cargar donantes de prueba iniciales para ver el carrusel
-  if (topDonorsList.length === 0) {
-    topDonorsList = [
-      { username: 'ElenaLive', displayName: 'Elena ⭐', avatarUrl: '', totalCoins: 1250 },
-      { username: 'CarlosGamer', displayName: 'CarlosGamer', avatarUrl: '', totalCoins: 850 },
-      { username: 'StreamFan', displayName: 'Fan #1', avatarUrl: '', totalCoins: 300 }
-    ];
-    currentCoinsTotal = 2400;
-    updateTotalCoinsHud();
-    renderCurrentLeaderboardItem();
-  }
 
   // Botones de acción manual
   $('#btnTestRose')?.addEventListener('click', () => {

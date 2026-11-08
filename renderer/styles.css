@@ -2312,6 +2312,80 @@ select {
   }
 }
 
+/* ───────── DISCLOSURE COMPACT & ROLE FILTERS ───────── */
+.disclosure-compact {
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 12px;
+  background: var(--md-surface-container-low);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.disclosure-compact[open] {
+  border-color: var(--md-primary-container);
+  background: var(--md-surface-container);
+}
+
+.disclosure-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--md-on-surface);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure-arrow {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.2s ease;
+}
+
+.disclosure-compact[open] .disclosure-arrow {
+  transform: rotate(180deg);
+}
+
+.disclosure-content {
+  padding: 0 12px 12px 12px;
+}
+
+.role-filters-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--md-surface-container-lowest);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 8px;
+}
+
+.checkbox-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--md-on-surface);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-pill input[type="checkbox"] {
+  accent-color: var(--md-primary);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

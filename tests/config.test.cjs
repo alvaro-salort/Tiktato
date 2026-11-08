@@ -216,7 +216,9 @@ test('flushConfigSave persiste incluso si writeConfigAsync ya está en vuelo al 
       { delayMs: 10, maxWaitMs: 50 }
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 35));
+    for (let i = 0; i < 25 && !writeStarted; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     assert.equal(writeStarted, true);
     assert.equal(hasPendingConfigSave(dir), true);
 

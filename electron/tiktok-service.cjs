@@ -228,13 +228,19 @@ class TikTokService extends EventEmitter {
       return;
     }
     if (action === 3) {
+      const client = this.client;
+      this.client = null;
+      if (client) {
+        try {
+          client.disconnect();
+        } catch {}
+      }
       this.#setStatus({
         state: 'disconnected',
         paused: false,
         message: 'El directo terminó.',
         viewerCount: 0
       });
-      this.client = null;
       this.emit('control', { action: 3, status: 'ended', data });
       return;
     }
@@ -395,13 +401,17 @@ class TikTokService extends EventEmitter {
         if (Number.isFinite(count)) this.#setStatus({ viewerCount: count });
       });
       client.on(EventType.liveEnded, () => {
+        const endedClient = this.client;
+        this.client = null;
+        if (endedClient) {
+          try { endedClient.disconnect(); } catch {}
+        }
         this.#setStatus({
           state: 'disconnected',
           paused: false,
           message: 'El directo terminó.',
           viewerCount: 0
         });
-        this.client = null;
       });
       client.on(EventType.reconnecting, () => {
         this.beginBacklogWindow();

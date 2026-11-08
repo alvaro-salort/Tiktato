@@ -350,6 +350,17 @@ class OverlayServer {
       socket.destroy();
       return;
     }
+
+    const origin = String(request.headers.origin || '').toLowerCase();
+    const activePort = this.port || 3477;
+    const localOrigin = `http://127.0.0.1:${activePort}`;
+    const localhostOrigin = `http://localhost:${activePort}`;
+    if (origin && origin !== localOrigin && origin !== localhostOrigin) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
     this.wss.handleUpgrade(request, socket, head, (websocket) => {
       this.wss.emit('connection', websocket, request);
     });

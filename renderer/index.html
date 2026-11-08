@@ -386,23 +386,65 @@
               </label>
             </div>
 
-            <!-- Ajustes adicionales conservados para compatibilidad total -->
-            <input id="ttsDucking" type="checkbox" checked style="display: none;" />
-            <input id="ttsAntiSpam" type="checkbox" checked style="display: none;" />
-            <input id="ttsMinCoins" type="range" min="0" max="100" step="1" value="1" style="display: none;" />
-            <span id="ttsMinCoinsValue" style="display: none;">1</span>
-            <input id="ttsFilterChatByRole" type="checkbox" style="display: none;" />
-            <div id="ttsRoleFiltersBox" style="display: none;">
-              <input id="ttsAllowModerators" type="checkbox" checked />
-              <input id="ttsAllowSubscribers" type="checkbox" checked />
-              <input id="ttsAllowHighlighted" type="checkbox" checked />
-              <input id="ttsAllowFriends" type="checkbox" />
-              <input id="ttsAllowFollowers" type="checkbox" />
-              <input id="ttsAllowGifter" type="checkbox" />
-              <input id="ttsMinGifterLevel" type="number" value="1" />
-              <input id="ttsAllowMember" type="checkbox" />
-              <input id="ttsMinMemberLevel" type="number" value="1" />
-            </div>
+            <!-- Opciones avanzadas y filtros de rol de TTS -->
+            <details class="disclosure-compact">
+              <summary class="disclosure-summary">
+                <span>Opciones avanzadas y filtros</span>
+                <svg class="disclosure-arrow icon" viewBox="0 0 256 256" aria-hidden="true"><polyline points="208 96 128 176 48 96" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="20"/></svg>
+              </summary>
+              <div class="disclosure-content">
+                <div class="toggle-list-compact" style="margin-top: 8px;">
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
+                      <strong>Atenuar sonidos (Ducking)</strong>
+                      <small>Baja el volumen de alertas mientras habla la voz</small>
+                    </span>
+                    <span class="switch"><input id="ttsDucking" type="checkbox" checked /><span></span></span>
+                  </label>
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
+                      <strong>Filtro anti-spam</strong>
+                      <small>Acorta risas y mensajes repetitivos</small>
+                    </span>
+                    <span class="switch"><input id="ttsAntiSpam" type="checkbox" checked /><span></span></span>
+                  </label>
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
+                      <strong>Repetir voz en cada combo</strong>
+                    </span>
+                    <span class="switch"><input id="ttsPlayEveryStreak" type="checkbox" checked /><span></span></span>
+                  </label>
+                </div>
+
+                <div class="field" style="margin-top: 10px;">
+                  <span class="field-row">Mínimo de monedas para regalos: <strong id="ttsMinCoinsValue">1</strong></span>
+                  <input id="ttsMinCoins" type="range" min="0" max="100" step="1" value="1" />
+                </div>
+
+                <div class="toggle-list-compact" style="margin-top: 10px;">
+                  <label class="toggle-row">
+                    <span class="toggle-copy">
+                      <strong>Filtrar chat por tipo de espectador</strong>
+                      <small>Solo lee mensajes de los roles seleccionados</small>
+                    </span>
+                    <span class="switch"><input id="ttsFilterChatByRole" type="checkbox" /><span></span></span>
+                  </label>
+                </div>
+
+                <div id="ttsRoleFiltersBox" class="role-filters-grid" hidden>
+                  <label class="checkbox-pill"><input id="ttsAllowModerators" type="checkbox" checked /> <span>Moderadores</span></label>
+                  <label class="checkbox-pill"><input id="ttsAllowSubscribers" type="checkbox" checked /> <span>Suscriptores</span></label>
+                  <label class="checkbox-pill"><input id="ttsAllowHighlighted" type="checkbox" checked /> <span>Destacados</span></label>
+                  <label class="checkbox-pill"><input id="ttsAllowFriends" type="checkbox" /> <span>Amigos</span></label>
+                  <label class="checkbox-pill"><input id="ttsAllowFollowers" type="checkbox" /> <span>Seguidores</span></label>
+                  <label class="checkbox-pill"><input id="ttsAllowGifter" type="checkbox" /> <span>Donadores (Nivel &ge; <input id="ttsMinGifterLevel" type="number" min="1" max="100" value="1" style="width: 44px; display: inline-block; padding: 2px 4px; border: 1px solid var(--md-outline-variant); border-radius: 4px;" />)</span></label>
+                  <label class="checkbox-pill"><input id="ttsAllowMember" type="checkbox" /> <span>Club de fans (Nivel &ge; <input id="ttsMinMemberLevel" type="number" min="1" max="100" value="1" style="width: 44px; display: inline-block; padding: 2px 4px; border: 1px solid var(--md-outline-variant); border-radius: 4px;" />)</span></label>
+                </div>
+              </div>
+            </details>
+            <p style="margin-top: 10px; font-size: 11px; color: var(--md-on-surface-variant); opacity: 0.85; line-height: 1.4;">
+              El TTS suena a través de esta aplicación (usa el audio del sistema en OBS Studio).
+            </p>
           </div>
 
           <footer class="card-foot">

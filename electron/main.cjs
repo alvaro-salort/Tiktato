@@ -205,13 +205,6 @@ function updateJarOverlay() {
   overlayServer?.setJar(publicJar(config));
 }
 
-function overlaySettings() {
-  return {
-    ...config.overlay,
-    port: overlayServer?.port || config.overlay.port
-  };
-}
-
 let stateUpdateTimer = null;
 
 function publicState({ includeGifts = true } = {}) {
@@ -648,7 +641,10 @@ async function loginTikTok() {
       resolve(result);
     };
 
+    let checking = false;
     const checkCookies = async () => {
+      if (checking || finished) return;
+      checking = true;
       try {
         const cookies = await loginSession.cookies.get({ url: 'https://www.tiktok.com' });
         const sessionId = cookies.find((cookie) => cookie.name === 'sessionid')?.value || '';
@@ -670,6 +666,8 @@ async function loginTikTok() {
         }
       } catch (error) {
         logger.warn('[tiktok] no se pudieron leer las cookies del login', error);
+      } finally {
+        checking = false;
       }
     };
 
@@ -890,8 +888,8 @@ function registerIpc() {
       ]
     });
     if (result.canceled || result.filePaths.length === 0) return { canceled: true };
+    const imported = [];
     try {
-      const imported = [];
       for (const filePath of result.filePaths) {
         const sound = importSound(app.getPath('userData'), filePath);
         config.sounds.push(sound);
@@ -901,7 +899,11 @@ function registerIpc() {
       sendState();
       return { canceled: false, sound: imported[0], sounds: imported };
     } catch (error) {
-      return { canceled: false, error: error.message };
+      if (imported.length > 0) {
+        config = saveConfig(app.getPath('userData'), config);
+        sendState();
+      }
+      return { canceled: false, error: error.message, sounds: imported };
     }
   });
 
@@ -987,6 +989,10 @@ function registerIpc() {
 
   ipcMain.handle('jar:open-studio', (_event, opts = {}) => {
     const bg = String(opts?.bg || 'green');
+    const url = jarUrl();
+    if (!url) {
+      return { ok: false, error: 'El servidor del frasco no está activo. Reinicia Tiktato.' };
+    }
     if (jarStudioWindow && !jarStudioWindow.isDestroyed()) {
       jarStudioWindow.focus();
       return { ok: true };
@@ -1028,7 +1034,7 @@ function registerIpc() {
     jarStudioWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     jarStudioWindow.webContents.on('will-navigate', guardStudioNavigation);
     jarStudioWindow.webContents.on('will-redirect', guardStudioNavigation);
-    jarStudioWindow.loadURL(`${jarUrl()}&studio=1&bg=${encodeURIComponent(bg)}`);
+    jarStudioWindow.loadURL(`${url}&studio=1&bg=${encodeURIComponent(bg)}`);
     jarStudioWindow.on('closed', () => {
       jarStudioWindow = null;
     });

@@ -360,6 +360,17 @@ test('TikTokService maneja EventType.control para pausa, reanudación y STREAM_S
   assert.equal(statuses[statuses.length - 1].paused, false);
   assert.match(statuses[statuses.length - 1].message, /Conectado a @streamer_test/);
 
+  let disconnectedAction3 = false;
+  service.client = {
+    disconnect() {
+      disconnectedAction3 = true;
+    }
+  };
+  service.handleControlEvent({ action: 3 });
+  assert.equal(statuses[statuses.length - 1].state, 'disconnected');
+  assert.equal(disconnectedAction3, true);
+  assert.equal(service.client, null);
+
   service.handleControlEvent({ action: 4 });
   assert.equal(statuses[statuses.length - 1].state, 'error');
   assert.equal(statuses[statuses.length - 1].suspended, true);

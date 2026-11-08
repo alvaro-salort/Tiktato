@@ -119,7 +119,8 @@ async function present(alert) {
   void card.offsetWidth;
   card.classList.add('show');
 
-  const duration = Math.max(1500, Number(config.durationMs) || 5000);
+  const baseDuration = Math.max(1500, Number(config.durationMs) || 5000);
+  const duration = queue.length > 0 ? Math.min(baseDuration, queue.length > 2 ? 1400 : 2000) : baseDuration;
   const playback = alert.sound
     ? audio.play(alert.sound, Number(alert.sound.volume ?? 1))
     : Promise.resolve();
@@ -145,7 +146,7 @@ async function drain() {
 
 function enqueue(alert) {
   if (!alert) return;
-  if (queue.length > 8) queue.splice(0, queue.length - 8);
+  if (queue.length > 5) queue.splice(0, queue.length - 5);
   queue.push(alert);
   drain();
 }
