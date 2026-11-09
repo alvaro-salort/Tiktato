@@ -59,7 +59,7 @@ function createDefaultConfig() {
     username: '',
     autoConnect: false,
     masterVolume: 0.8,
-    playInDashboard: true,
+    playInDashboard: false,
     sessionIdEncrypted: '',
     ttTargetIdcEncrypted: '',
     overlay: {
@@ -123,7 +123,8 @@ function createDefaultConfig() {
       minMemberLevel: 1
     },
     rules: defaultRules(),
-    sounds: []
+    sounds: Object.assign([], { playEveryStreak: true }),
+    soundsPlayEveryStreak: true
   };
 }
 
@@ -339,9 +340,16 @@ function normalizeConfig(input) {
   const rules = Array.isArray(source.rules)
     ? source.rules.map(normalizeRule).filter(Boolean)
     : defaults.rules;
+  const soundsPlayEveryStreak =
+    source?.sounds?.playEveryStreak !== undefined
+      ? Boolean(source.sounds.playEveryStreak)
+      : (source?.soundsPlayEveryStreak !== undefined
+          ? Boolean(source.soundsPlayEveryStreak)
+          : true);
   const sounds = Array.isArray(source.sounds)
     ? source.sounds.map(normalizeSound).filter(Boolean)
     : [];
+  sounds.playEveryStreak = soundsPlayEveryStreak;
 
   return {
     ...defaults,
@@ -350,7 +358,7 @@ function normalizeConfig(input) {
     username: String(source.username || '').replace(/^@/, '').trim().slice(0, 80),
     autoConnect: source.autoConnect === true,
     masterVolume: clampNumber(source.masterVolume, defaults.masterVolume, 0, 1),
-    playInDashboard: source.playInDashboard !== false,
+    playInDashboard: source.playInDashboard === true,
     sessionIdEncrypted: String(source.sessionIdEncrypted || ''),
     ttTargetIdcEncrypted: String(source.ttTargetIdcEncrypted || ''),
     overlay: {
@@ -371,7 +379,8 @@ function normalizeConfig(input) {
     jar: normalizeJar(source.jar),
     tts: normalizeTts(source.tts),
     rules,
-    sounds
+    sounds,
+    soundsPlayEveryStreak
   };
 }
 
@@ -651,7 +660,10 @@ function publicConfig(config, { overlayUrl } = {}) {
     jar: publicJar(config),
     tts: config.tts || createDefaultConfig().tts,
     rules: config.rules,
-    sounds: config.sounds
+    sounds: Object.assign(config.sounds, {
+      playEveryStreak: config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak ?? true
+    }),
+    soundsPlayEveryStreak: config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak ?? true
   };
 }
 

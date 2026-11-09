@@ -741,13 +741,14 @@ function applyConfig(cfg) {
   document.documentElement.style.setProperty('--y-offset', `${currentConfig.yOffset || 0}px`);
   document.documentElement.style.setProperty('--scale', `${currentConfig.scale || 1.0}`);
 
-  if (cfg.currentCoins !== undefined && (isInitialLoad || giftQueue.length === 0)) {
+  if (cfg.currentCoins !== undefined && isInitialLoad) {
     currentCoinsTotal = Number(cfg.currentCoins) || 0;
   }
 
-  if (Array.isArray(cfg.topDonors) && (isInitialLoad || giftQueue.length === 0)) {
+  if (Array.isArray(cfg.topDonors) && isInitialLoad) {
     topDonorsList = [...cfg.topDonors];
   }
+  isInitialLoad = false;
 
   rebuildJarContainer();
   updateTotalCoinsHud();

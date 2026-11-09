@@ -121,8 +121,9 @@ async function present(alert) {
 
   const baseDuration = Math.max(1500, Number(config.durationMs) || 5000);
   const duration = queue.length > 0 ? Math.min(baseDuration, queue.length > 2 ? 1400 : 2000) : baseDuration;
+  const master = Number(config.masterVolume ?? 0.8);
   const playback = alert.sound
-    ? audio.play(alert.sound, Number(alert.sound.volume ?? 1))
+    ? audio.play(alert.sound, master * Number(alert.sound.volume ?? 1))
     : Promise.resolve();
   await Promise.all([wait(duration), playback.catch(() => {})]);
   card.classList.remove('show');

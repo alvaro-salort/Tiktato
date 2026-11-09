@@ -226,12 +226,12 @@ export class TTSQueue {
 
     try {
       if (isGoogle) {
+        const googleLang = voiceId.startsWith('google:') ? voiceId.slice(7) : (item.voiceLanguage || 'es-ES');
         try {
-          const googleLang = voiceId.startsWith('google:') ? voiceId.slice(7) : (item.voiceLanguage || 'es-ES');
           await this.#speakGoogle({ ...item, voiceLanguage: googleLang });
         } catch (googleError) {
           console.warn('[tts] Google Speech API v2 falló, intentando voz local', googleError);
-          await this.#speakLocal(item);
+          await this.#speakLocal({ ...item, voiceLanguage: googleLang });
         }
       } else {
         await this.#speakLocal(item);

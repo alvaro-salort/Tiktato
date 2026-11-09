@@ -21,7 +21,7 @@
           <img class="sidebar-logo" src="assets/logo.png" alt="Logo de Tiktato" />
           <div class="sidebar-brand-text">
             <h1 class="sidebar-brand-name">Tiktato</h1>
-            <span id="sidebarVersion" class="sidebar-badge-version">v0.2.2</span>
+            <span id="sidebarVersion" class="sidebar-badge-version">v1.1.0</span>
           </div>
         </div>
 
@@ -112,19 +112,12 @@
         <div id="panel-sounds" class="tab-panel" role="tabpanel" aria-labelledby="tab-sounds">
           <!-- BANNER SUPERIOR: ESTADO, CONEXIÓN Y MÉTRICAS -->
           <header id="bannerCard" class="card card-banner">
-            <div class="banner-brand">
-              <img class="brand-logo" src="assets/logo.png" alt="Logo de Tiktato" />
-              <div class="brand-copy">
-                <h1 class="brand-name">Tiktato</h1>
-                <p class="brand-tag">Sonidos y alertas para tu TikTok LIVE</p>
-              </div>
-            </div>
-
             <div class="banner-connect">
               <form id="connectForm" class="connect-form">
-                <div class="input-prefix">
-                  <input id="username" name="username" autocomplete="off" placeholder="@usuario" maxlength="80" />
-                </div>
+                <label class="input-prefix" for="username">
+                  <span class="prefix-symbol" aria-hidden="true">@</span>
+                  <input id="username" name="username" autocomplete="off" placeholder="usuario" maxlength="80" />
+                </label>
                 <button id="btnConnect" class="btn btn-primary" type="submit">Conectar</button>
                 <button id="btnDisconnect" class="btn btn-ghost" type="button" disabled>Desconectar</button>
               </form>
@@ -180,10 +173,7 @@
                   <div class="card-icon-badge">
                     <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,168a32,32,0,1,1-32-32h32V40l88,24V144a32,32,0,1,1-32-32h32V79.27L128,55.27Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
                   </div>
-                  <div>
-                    <h2>Sonidos por regalo y eventos</h2>
-                    <p>Asigna qué sonido suena al recibir cada interacción.</p>
-                  </div>
+                  <h2>Sonidos por regalos y eventos</h2>
                 </div>
                 <div class="card-actions">
                   <button id="btnPickGift" class="btn btn-secondary btn-small" type="button">Elegir otro regalo</button>
@@ -560,6 +550,10 @@
                     </span>
                     <span class="switch"><input id="ttsDucking" type="checkbox" checked /><span></span></span>
                   </label>
+                  <div id="ttsDuckingLevelWrap" class="field" style="margin-top: 8px;">
+                    <span class="field-row">Volumen al atenuar <strong id="ttsDuckingLevelValue">25%</strong></span>
+                    <input id="ttsDuckingLevel" type="range" min="0" max="100" step="5" value="25" />
+                  </div>
                   <label class="toggle-row">
                     <span class="toggle-copy">
                       <strong>Filtro anti-spam</strong>
@@ -597,8 +591,14 @@
                   <label class="checkbox-pill"><input id="ttsAllowHighlighted" type="checkbox" checked /> <span>Destacados</span></label>
                   <label class="checkbox-pill"><input id="ttsAllowFriends" type="checkbox" /> <span>Amigos</span></label>
                   <label class="checkbox-pill"><input id="ttsAllowFollowers" type="checkbox" /> <span>Seguidores</span></label>
-                  <label class="checkbox-pill"><input id="ttsAllowGifter" type="checkbox" /> <span>Donadores (Nivel &ge; <input id="ttsMinGifterLevel" type="number" min="1" max="100" value="1" style="width: 44px; display: inline-block; padding: 2px 4px; border: 1px solid var(--md-outline-variant); border-radius: 4px;" />)</span></label>
-                  <label class="checkbox-pill"><input id="ttsAllowMember" type="checkbox" /> <span>Club de fans (Nivel &ge; <input id="ttsMinMemberLevel" type="number" min="1" max="100" value="1" style="width: 44px; display: inline-block; padding: 2px 4px; border: 1px solid var(--md-outline-variant); border-radius: 4px;" />)</span></label>
+                  <div class="role-filter-row">
+                    <label class="checkbox-pill" for="ttsAllowGifter"><input id="ttsAllowGifter" type="checkbox" /> <span>Donadores</span></label>
+                    <label class="role-level-subfield" for="ttsMinGifterLevel"><span>(Nivel &ge;</span> <input id="ttsMinGifterLevel" type="number" min="1" max="100" value="1" /><span>)</span></label>
+                  </div>
+                  <div class="role-filter-row">
+                    <label class="checkbox-pill" for="ttsAllowMember"><input id="ttsAllowMember" type="checkbox" /> <span>Club de fans</span></label>
+                    <label class="role-level-subfield" for="ttsMinMemberLevel"><span>(Nivel &ge;</span> <input id="ttsMinMemberLevel" type="number" min="1" max="100" value="1" /><span>)</span></label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -865,6 +865,18 @@
         <span>Reproducir también en esta ventana</span>
       </label>
       <p class="hint">Si usas OBS, desactívalo para evitar escuchar las alertas por duplicado.</p>
+
+      <div style="margin: 16px 0; border-top: 1px solid var(--line);"></div>
+
+      <div class="section-label" style="margin-bottom: 8px;">Atenuación de alertas (Ducking)</div>
+      <label class="checkline">
+        <input id="settingsAudioDucking" type="checkbox" checked />
+        <span>Atenuar alertas mientras habla la voz (TTS)</span>
+      </label>
+      <label class="field" id="settingsAudioDuckingLevelWrap" style="margin-top: 8px;">
+        <span class="field-row">Volumen al atenuar <strong id="settingsAudioDuckingLevelValue">25%</strong></span>
+        <input id="settingsAudioDuckingLevel" type="range" min="0" max="100" step="5" value="25" />
+      </label>
 
       <div class="dialog-foot">
         <button id="btnOpenData" class="btn btn-ghost" type="button">Carpeta de datos</button>

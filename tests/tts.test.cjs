@@ -312,3 +312,51 @@ test('un combo de regalos no multiplica las monedas ni los regalos en el frasco'
   assert.equal(jarCredits.length, 1);
   assert.equal(jarCredits[0].coins, 5);
 });
+
+test('SoundEngine ducking y restore admiten volumen de hasta 1.5', async () => {
+  const { SoundEngine } = await import('../shared/audio-engine.js');
+  const engine = new SoundEngine();
+
+  const mockNode = {
+    gain: { value: 1.5, setValueAtTime() {}, linearRampToValueAtTime(val) { this.value = val; } }
+  };
+  engine.activeNodes.set(mockNode, 1.5);
+
+  engine.duck(0.5);
+  assert.equal(mockNode.gain.value, 0.75); // 1.5 * 0.5
+
+  engine.restore();
+  assert.equal(mockNode.gain.value, 1.5);
+});
+
+test('config.sounds.playEveryStreak es independiente de config.tts.playEveryStreak', () => {
+  const { createDefaultConfig, normalizeConfig } = require('../electron/config.cjs');
+  const defaults = createDefaultConfig();
+  assert.equal(defaults.sounds.playEveryStreak, true);
+  assert.equal(defaults.tts.playEveryStreak, true);
+
+  // Modificar solo sounds
+  const customSounds = normalizeConfig({
+    sounds: Object.assign([], { playEveryStreak: false }),
+    tts: { playEveryStreak: true }
+  });
+  assert.equal(customSounds.sounds.playEveryStreak, false);
+  assert.equal(customSounds.tts.playEveryStreak, true);
+
+  // Modificar solo tts
+  const customTts = normalizeConfig({
+    sounds: Object.assign([], { playEveryStreak: true }),
+    tts: { playEveryStreak: false }
+  });
+  assert.equal(customTts.sounds.playEveryStreak, true);
+  assert.equal(customTts.tts.playEveryStreak, false);
+
+  // Ingesta de combos debe permitirse si cualquiera de los dos switches está activo
+  const shouldIngestCombos = (cfg) =>
+    Boolean(cfg.sounds?.playEveryStreak ?? cfg.soundsPlayEveryStreak ?? true) ||
+    Boolean(cfg.tts?.playEveryStreak !== false);
+
+  assert.equal(shouldIngestCombos({ sounds: { playEveryStreak: true }, tts: { playEveryStreak: false } }), true);
+  assert.equal(shouldIngestCombos({ sounds: { playEveryStreak: false }, tts: { playEveryStreak: true } }), true);
+  assert.equal(shouldIngestCombos({ sounds: { playEveryStreak: false }, tts: { playEveryStreak: false } }), false);
+});

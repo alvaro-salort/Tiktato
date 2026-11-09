@@ -259,28 +259,61 @@ function updateStatus(status) {
   const disconnect = $('#btnDisconnect');
   const connect = $('#btnConnect');
   const message = $('#connectionMessage');
+  const usernameInput = $('#username');
 
-  if (pill) pill.className = `status-pill status-${status.state || 'disconnected'}`;
+  const isConnected = status.state === 'connected';
+  const isReconnecting = status.state !== 'connected' && Boolean(status.reconnecting || (status.message && status.message.includes('reintentando en')));
+  const isConnecting = status.state === 'connecting' || isReconnecting;
+  const isError = status.state === 'error' && !isReconnecting;
+
+  if (pill) {
+    if (isConnected) {
+      pill.className = 'status-pill status-connected';
+    } else if (isConnecting) {
+      pill.className = 'status-pill status-connecting';
+    } else if (isError) {
+      pill.className = 'status-pill status-error';
+    } else {
+      pill.className = 'status-pill status-disconnected';
+    }
+  }
+
   const labels = {
     connected: 'Conectado',
-    connecting: 'Conectando…',
+    connecting: isReconnecting ? 'Buscando…' : 'Conectando…',
     error: 'Error',
     disconnected: 'Desconectado'
   };
-  if (label) label.textContent = labels[status.state] || 'Desconectado';
+  if (label) label.textContent = labels[status.state] || (isReconnecting ? 'Buscando…' : 'Desconectado');
+
   if (liveBadge) {
     liveBadge.textContent = '';
     liveBadge.classList.remove('is-live');
     liveBadge.style.display = 'none';
   }
-  if (disconnect) disconnect.disabled = !['connected', 'connecting', 'error'].includes(status.state);
-  if (connect) {
-    connect.disabled = status.state === 'connecting';
-    connect.textContent = status.state === 'connecting' ? 'Conectando…' : 'Conectar';
+
+  if (disconnect) {
+    disconnect.disabled = !(isConnected || isConnecting || isError);
   }
+
+  if (usernameInput) {
+    usernameInput.disabled = isConnected || isConnecting;
+  }
+
+  if (connect) {
+    connect.disabled = isConnected || isConnecting;
+    connect.textContent = isConnecting ? (isReconnecting ? 'Buscando…' : 'Conectando…') : 'Conectar';
+  }
+
   if (message) {
-    message.textContent = status.state === 'error' && status.message ? status.message : '';
-    message.classList.toggle('is-error', status.state === 'error');
+    if (status.message && (isError || isReconnecting)) {
+      message.textContent = status.message;
+      message.classList.toggle('is-error', isError);
+      message.classList.toggle('is-reconnecting', isReconnecting);
+    } else {
+      message.textContent = '';
+      message.classList.remove('is-error', 'is-reconnecting');
+    }
   }
   const viewers = $('#statViewers');
   if (viewers) viewers.textContent = formatNumber(status.viewerCount || 0);
@@ -487,7 +520,7 @@ function renderGiftQuickList() {
             ${soundOptionsHtml(rule.soundId)}
           </select>
           <div class="gift-rule-actions">
-            <button class="icon-btn" data-gift-rule-action="test" type="button" title="Probar alerta y sonido de ${escapeHtml(title)}">
+            <button class="icon-btn" data-gift-rule-action="test" type="button" title="Escuchar sonido de ${escapeHtml(title)}">
               ${iconSvg('play')}
             </button>
             <button class="icon-btn" data-gift-rule-action="edit" type="button" title="Personalizar opciones y volumen de ${escapeHtml(title)}">
@@ -522,7 +555,7 @@ function renderQuickRules() {
           ${soundOptionsHtml(soundId)}
         </select>
         <div class="gift-rule-actions">
-          <button class="icon-btn" data-quick-preview type="button" title="Probar sonido">
+          <button class="icon-btn" data-quick-preview type="button" title="Escuchar sonido">
             ${iconSvg('play')}
           </button>
           <label class="switch" title="${enabled ? 'Desactivar' : 'Activar'}">
@@ -579,7 +612,7 @@ function renderRules() {
           <span class="rule-sound">${escapeHtml(soundName(rule.soundId))}</span>
           <span class="rule-meta">${meta}</span>
           <span class="rule-actions">
-            <button class="icon-btn" data-action="test" type="button" title="Probar regla">${iconSvg('play')}</button>
+            <button class="icon-btn" data-action="test" type="button" title="Escuchar sonido">${iconSvg('play')}</button>
             <button class="icon-btn" data-action="edit" type="button" title="Editar">${iconSvg('edit')}</button>
             <button class="icon-btn" data-action="delete" type="button" title="Eliminar">${iconSvg('trash')}</button>
           </span>
@@ -724,6 +757,11 @@ function renderTTS() {
   const readUsernameCheckbox = $('#ttsReadUsername');
   const giftsCheckbox = $('#ttsGiftsEnabled');
   const duckingCheckbox = $('#ttsDucking');
+  const duckingSlider = $('#ttsDuckingLevel');
+  const duckingLabel = $('#ttsDuckingLevelValue');
+  const settingsDucking = $('#settingsAudioDucking');
+  const settingsDuckingSlider = $('#settingsAudioDuckingLevel');
+  const settingsDuckingLabel = $('#settingsAudioDuckingLevelValue');
   const streaksCheckbox = $('#ttsPlayEveryStreak');
   const antiSpamCheckbox = $('#ttsAntiSpam');
   const filterChatCheckbox = $('#ttsFilterChatByRole');
@@ -737,10 +775,34 @@ function renderTTS() {
   if (chatCheckbox) chatCheckbox.checked = tts.chatEnabled !== false;
   if (readUsernameCheckbox) readUsernameCheckbox.checked = tts.readUsername !== false;
   if (giftsCheckbox) giftsCheckbox.checked = tts.giftsEnabled !== false;
-  if (duckingCheckbox) duckingCheckbox.checked = tts.ducking !== false;
+
+  const duckingEnabled = tts.ducking !== false;
+  const duckingPct = Math.round((tts.duckingLevel ?? 0.25) * 100);
+
+  if (duckingCheckbox) duckingCheckbox.checked = duckingEnabled;
+  if (duckingSlider) {
+    duckingSlider.disabled = !duckingEnabled;
+    if (document.activeElement !== duckingSlider) duckingSlider.value = duckingPct;
+  }
+  if (duckingLabel) duckingLabel.textContent = `${duckingPct}%`;
+
+  if (settingsDucking) settingsDucking.checked = duckingEnabled;
+  if (settingsDuckingSlider) {
+    settingsDuckingSlider.disabled = !duckingEnabled;
+    if (document.activeElement !== settingsDuckingSlider) settingsDuckingSlider.value = duckingPct;
+  }
+  if (settingsDuckingLabel) settingsDuckingLabel.textContent = `${duckingPct}%`;
+
+  const duckingWrap = $('#ttsDuckingLevelWrap');
+  if (duckingWrap) duckingWrap.style.opacity = duckingEnabled ? '1' : '0.5';
+  const settingsWrap = $('#settingsAudioDuckingLevelWrap');
+  if (settingsWrap) settingsWrap.style.opacity = duckingEnabled ? '1' : '0.5';
   if (streaksCheckbox) streaksCheckbox.checked = tts.playEveryStreak !== false;
   const soundsStreaks = $('#soundsPlayEveryStreak');
-  if (soundsStreaks) soundsStreaks.checked = tts.playEveryStreak !== false;
+  if (soundsStreaks) {
+    const soundsStreakVal = state?.sounds?.playEveryStreak ?? state?.soundsPlayEveryStreak;
+    soundsStreaks.checked = soundsStreakVal !== false;
+  }
   if (antiSpamCheckbox) antiSpamCheckbox.checked = Boolean(tts.antiSpam);
   if (filterChatCheckbox) filterChatCheckbox.checked = Boolean(tts.filterChatByRole);
   if (roleFiltersBox) roleFiltersBox.hidden = !tts.filterChatByRole;
@@ -850,7 +912,7 @@ function handleIncomingEventForTTS(event) {
     });
   } else if (event.type === 'gift') {
     if (!ttsSettings.giftsEnabled) return;
-    if (event.repeatEnd === false) return;
+    if (Boolean(event.suppressAlert) || (event.repeatEnd === false && !ttsSettings.playEveryStreak)) return;
     const minCoins = Number(ttsSettings.minCoins ?? 1);
     const coins = Number(event.coins || 0);
     if (coins < minCoins) return;
@@ -1036,6 +1098,10 @@ function selectGiftInRuleForm(gift) {
 }
 
 function openRuleForm(rule = null) {
+  const soundsTab = $('#tab-sounds');
+  if (soundsTab && soundsTab.getAttribute('aria-selected') !== 'true') {
+    soundsTab.click();
+  }
   updateRuleSoundOptions();
   editingRuleId = rule?.id || null;
   $('#ruleFormWrap').hidden = false;
@@ -1090,7 +1156,6 @@ async function importAndReturnSound() {
     const imported = result.sound || (state.sounds || [])[state.sounds.length - 1] || null;
     if (imported) {
       showToast(`Sonido "${imported.name}" añadido`);
-      await previewSoundById(imported.id, 1);
     }
     return imported;
   } catch (error) {
@@ -1203,7 +1268,6 @@ function wireEvents() {
     const existing = findRuleForCatalogGift(gift);
     if (existing) {
       openRuleForm(existing);
-      await previewSoundById(existing.soundId, existing.volume ?? 1);
       showToast(`Personalizando sonido de ${existing.giftName || gift.name}`);
       return;
     }
@@ -1222,14 +1286,9 @@ function wireEvents() {
       enabled: true,
       order: state.rules.length
     };
-    const rules = [
-      ...state.rules,
-      newRule
-    ];
-    await saveRules(rules, `${cleanName} configurado: personaliza su sonido`);
-    const savedRule = state.rules.find((r) => r.eventType === 'gift' && (String(r.giftId) === String(gift.id) || r.giftName === cleanName));
+    const savedRule = null;
     openRuleForm(savedRule || newRule);
-    await previewSoundById(soundId, 1);
+    showToast(`Configurando sonido para ${cleanName}: revisa y guarda la regla`);
   });
 
   $('#giftQuickList')?.addEventListener('change', async (event) => {
@@ -1253,7 +1312,6 @@ function wireEvents() {
       item.id === ruleId ? { ...item, soundId } : item
     );
     await saveRules(rules, `${rule.giftName || 'Regalo'}: ${soundName(soundId)}`);
-    await previewSoundById(soundId, rule.volume ?? 1);
   });
 
   $('#giftQuickList')?.addEventListener('click', async (event) => {
@@ -1265,15 +1323,16 @@ function wireEvents() {
     if (!action) return;
 
     if (action === 'test') {
-      await triggerTestForRule(rule);
+      await previewSoundById(rule.soundId, rule.soundVolume ?? rule.volume ?? 1);
       return;
     }
     if (action === 'edit') {
+      $('#rulesDialog')?.close();
       openRuleForm(rule);
-      await previewSoundById(rule.soundId, rule.volume ?? 1);
       return;
     }
     if (action === 'delete') {
+      if (!confirm('¿Eliminar esta regla?')) return;
       await saveRules(
         state.rules.filter((item) => item.id !== rule.id),
         `Regla de ${rule.giftName || 'regalo'} eliminada`
@@ -1326,7 +1385,6 @@ function wireEvents() {
         });
       }
       await saveRules(rules, `${defaults.label}: sonido actualizado`);
-      await previewSoundById(soundId, existing?.volume ?? 1);
       return;
     }
 
@@ -1353,6 +1411,7 @@ function wireEvents() {
 
   $('#connectForm').addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (state?.status?.state === 'connected' || Boolean(state?.status?.reconnecting) || state?.status?.state === 'connecting') return;
     setError('');
     const username = $('#username').value.trim();
     if (!username) {
@@ -1383,8 +1442,12 @@ function wireEvents() {
       setError(error.message || 'No se pudo conectar.');
       showToast(error.message || 'No se pudo conectar.', 'error');
     } finally {
-      button.disabled = false;
-      button.textContent = 'Conectar';
+      if (state?.status) {
+        updateStatus(state.status);
+      } else {
+        button.disabled = false;
+        button.textContent = 'Conectar';
+      }
     }
   });
 
@@ -1692,10 +1755,11 @@ function wireEvents() {
     if (!action) return;
 
     if (action === 'test') {
-      await triggerTestForRule(rule);
+      await previewSoundById(rule.soundId, rule.soundVolume ?? rule.volume ?? 1);
       return;
     }
     if (action === 'edit') {
+      $('#rulesDialog')?.close();
       openRuleForm(rule);
       return;
     }
@@ -1778,9 +1842,40 @@ function wireEvents() {
     saveTtsPatch({ giftsEnabled: e.target.checked });
   });
 
-  $('#ttsDucking')?.addEventListener('change', (e) => {
-    saveTtsPatch({ ducking: e.target.checked });
-  });
+  const onDuckingToggle = (checked) => {
+    saveTtsPatch({ ducking: checked });
+    if ($('#ttsDucking')) $('#ttsDucking').checked = checked;
+    if ($('#settingsAudioDucking')) $('#settingsAudioDucking').checked = checked;
+    if ($('#ttsDuckingLevel')) $('#ttsDuckingLevel').disabled = !checked;
+    if ($('#settingsAudioDuckingLevel')) $('#settingsAudioDuckingLevel').disabled = !checked;
+    const duckingWrap = $('#ttsDuckingLevelWrap');
+    if (duckingWrap) duckingWrap.style.opacity = checked ? '1' : '0.5';
+    const settingsWrap = $('#settingsAudioDuckingLevelWrap');
+    if (settingsWrap) settingsWrap.style.opacity = checked ? '1' : '0.5';
+  };
+
+  $('#ttsDucking')?.addEventListener('change', (e) => onDuckingToggle(e.target.checked));
+  $('#settingsAudioDucking')?.addEventListener('change', (e) => onDuckingToggle(e.target.checked));
+
+  const onDuckingLevelInput = (val) => {
+    const pct = Math.max(0, Math.min(100, Number(val) || 0));
+    if ($('#ttsDuckingLevelValue')) $('#ttsDuckingLevelValue').textContent = `${pct}%`;
+    if ($('#settingsAudioDuckingLevelValue')) $('#settingsAudioDuckingLevelValue').textContent = `${pct}%`;
+    if ($('#ttsDuckingLevel') && document.activeElement !== $('#ttsDuckingLevel')) $('#ttsDuckingLevel').value = pct;
+    if ($('#settingsAudioDuckingLevel') && document.activeElement !== $('#settingsAudioDuckingLevel')) $('#settingsAudioDuckingLevel').value = pct;
+    if (state?.tts) state.tts.duckingLevel = pct / 100;
+  };
+
+  const onDuckingLevelChange = (val) => {
+    const factor = Math.max(0, Math.min(1, (Number(val) || 0) / 100));
+    saveTtsPatch({ duckingLevel: factor });
+  };
+
+  $('#ttsDuckingLevel')?.addEventListener('input', (e) => onDuckingLevelInput(e.target.value));
+  $('#ttsDuckingLevel')?.addEventListener('change', (e) => onDuckingLevelChange(e.target.value));
+
+  $('#settingsAudioDuckingLevel')?.addEventListener('input', (e) => onDuckingLevelInput(e.target.value));
+  $('#settingsAudioDuckingLevel')?.addEventListener('change', (e) => onDuckingLevelChange(e.target.value));
 
   $('#ttsPlayEveryStreak')?.addEventListener('change', (e) => {
     saveTtsPatch({ playEveryStreak: e.target.checked });
@@ -1822,7 +1917,9 @@ function wireEvents() {
   });
 
   $('#ttsMinGifterLevel')?.addEventListener('change', (e) => {
-    saveTtsPatch({ minGifterLevel: Math.max(1, Number(e.target.value) || 1) });
+    const val = Math.min(100, Math.max(1, Math.round(Number(e.target.value)) || 1));
+    e.target.value = val;
+    saveTtsPatch({ minGifterLevel: val });
   });
 
   $('#ttsAllowMember')?.addEventListener('change', (e) => {
@@ -1830,7 +1927,9 @@ function wireEvents() {
   });
 
   $('#ttsMinMemberLevel')?.addEventListener('change', (e) => {
-    saveTtsPatch({ minMemberLevel: Math.max(1, Number(e.target.value) || 1) });
+    const val = Math.min(100, Math.max(1, Math.round(Number(e.target.value)) || 1));
+    e.target.value = val;
+    saveTtsPatch({ minMemberLevel: val });
   });
 
   $('#ttsVoiceProvider')?.addEventListener('change', (e) => {
@@ -1899,8 +1998,12 @@ function wireEvents() {
 
   $('#btnSidebarSettings')?.addEventListener('click', () => openDialog('#settingsDialog'));
   $('#btnSidebarHelp')?.addEventListener('click', () => openDialog('#helpDialog'));
-  $('#soundsPlayEveryStreak')?.addEventListener('change', (e) => {
-    saveTtsPatch({ playEveryStreak: e.target.checked });
+  $('#soundsPlayEveryStreak')?.addEventListener('change', async (e) => {
+    const checked = e.target.checked;
+    await api.updateSettings({
+      soundsPlayEveryStreak: checked,
+      sounds: { playEveryStreak: checked }
+    });
   });
 
   api.onIncomingEvent?.((event) => {

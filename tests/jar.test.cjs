@@ -64,7 +64,7 @@ test('calcula porcentaje y meta completada', () => {
   assert.equal(complete.completed, true);
 });
 
-test('crea y normaliza los parámetros de Frasco Pro', () => {
+test('crea y normaliza los parámetros avanzados del frasco', () => {
   const jarDefault = createDefaultConfig().jar;
   assert.equal(jarDefault.giftType, 'allGifts');
   assert.equal(jarDefault.minimumValue, 1);
@@ -309,13 +309,18 @@ test('jar.js limita los cuerpos físicos a MAX_BODIES (250) sin perder monedas y
 
   vm.createContext(sandbox);
   vm.runInContext(
-    `${jarCode}\n;globalThis.__jarTest = { enqueueGift, processQueueTick, preloadTexture, resetJar, getCoins: () => currentCoinsTotal, getDynamicCount: () => dynamicBodies.length, getCacheSize: () => imageCache.size, maxBodies: MAX_BODIES, maxImageCache: MAX_IMAGE_CACHE };`,
+    `${jarCode}\n;globalThis.__jarTest = { enqueueGift, processQueueTick, preloadTexture, resetJar, applyConfig, getCoins: () => currentCoinsTotal, getDynamicCount: () => dynamicBodies.length, getCacheSize: () => imageCache.size, maxBodies: MAX_BODIES, maxImageCache: MAX_IMAGE_CACHE };`,
     sandbox
   );
 
   const api = sandbox.__jarTest;
   assert.equal(api.maxBodies, 250);
   assert.equal(api.maxImageCache, 120);
+
+  // Comprobar que applyConfig tras carga inicial no sobreescribe las monedas acumuladas
+  api.applyConfig({ currentCoins: 0 });
+  api.applyConfig({ currentCoins: 9999 });
+  assert.equal(api.getCoins(), 0);
 
   // Encolar y procesar 300 regalos de 10 monedas cada uno
   for (let i = 1; i <= 300; i += 1) {
@@ -361,6 +366,9 @@ test('main.cjs e index.html incluyen protecciones de navegación, bytedance://, 
   assert.match(mainContent, /scheduleSaveConfig/);
   assert.match(mainContent, /flushConfigSave/);
   assert.match(mainContent, /MAX_UNIQUE_USERS/);
+  assert.match(mainContent, /recentActivity\.find/);
+  assert.match(mainContent, /transparent:\s*true/);
+  assert.match(mainContent, /masterVolume:\s*Number/);
   assert.match(indexHtml, /Content-Security-Policy/);
   assert.match(indexHtml, /object-src 'none'/);
 });

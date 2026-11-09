@@ -132,14 +132,14 @@ function markPlayed(rule, event, cooldowns = new Map(), now = Date.now(), maxEnt
 }
 
 function buildAlert(event, rule, { sound, now = Date.now(), test = false, playEveryStreak = false } = {}) {
-  // Salvaguarda: un cierre de combo con streakDelta 0 nunca debe sonar
-  if (event.type === 'gift' && event.repeatEnd !== false && Number(event.streakDelta) === 0) {
+  // Salvaguarda: un regalo con suppressAlert o streakDelta 0 nunca debe sonar
+  if (Boolean(event.suppressAlert) || (event.type === 'gift' && Number(event.streakDelta) === 0)) {
     return null;
   }
 
   const repeat =
     event.type === 'gift' && playEveryStreak
-      ? Math.max(1, Number(event.streakDelta ?? event.repeatCount ?? 1))
+      ? Math.max(1, Number(event.streakDelta || 1))
       : 1;
   return {
     id: `alert_${now}_${Math.random().toString(36).slice(2, 8)}`,

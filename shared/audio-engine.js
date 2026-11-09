@@ -47,9 +47,9 @@ export class SoundEngine {
       try {
         if (this.context) {
           node.gain.setValueAtTime(node.gain.value, this.context.currentTime);
-          node.gain.linearRampToValueAtTime(Math.max(0, Math.min(1, baseVol * this.duckFactor)), this.context.currentTime + 0.05);
+          node.gain.linearRampToValueAtTime(Math.max(0, Math.min(1.5, baseVol * this.duckFactor)), this.context.currentTime + 0.05);
         } else {
-          node.gain.value = Math.max(0, Math.min(1, baseVol * this.duckFactor));
+          node.gain.value = Math.max(0, Math.min(1.5, baseVol * this.duckFactor));
         }
       } catch {}
     }
@@ -66,9 +66,9 @@ export class SoundEngine {
       try {
         if (this.context) {
           node.gain.setValueAtTime(node.gain.value, this.context.currentTime);
-          node.gain.linearRampToValueAtTime(Math.max(0, Math.min(1, baseVol)), this.context.currentTime + 0.08);
+          node.gain.linearRampToValueAtTime(Math.max(0, Math.min(1.5, baseVol)), this.context.currentTime + 0.08);
         } else {
-          node.gain.value = Math.max(0, Math.min(1, baseVol));
+          node.gain.value = Math.max(0, Math.min(1.5, baseVol));
         }
       } catch {}
     }
@@ -132,11 +132,11 @@ export class SoundEngine {
   async #startFile(url, volume, { waitForEnd = true } = {}) {
     const audio = new Audio(url);
     audio.preload = 'auto';
-    const baseVolume = Math.max(0, Math.min(1, Number(volume) || 0));
+    const baseVolume = Math.max(0, Math.min(1.5, Number(volume) || 0));
     const effectiveVolume = this.isDucked
-      ? Math.max(0, Math.min(1, baseVolume * this.duckFactor))
+      ? Math.max(0, Math.min(1.5, baseVolume * this.duckFactor))
       : baseVolume;
-    audio.volume = effectiveVolume;
+    audio.volume = Math.max(0, Math.min(1, effectiveVolume));
     this.activeAudio.set(audio, baseVolume);
 
     const cleanup = () => {
@@ -177,9 +177,9 @@ export class SoundEngine {
   async #playBuiltin(key, volume) {
     const ctx = this.context;
     const master = ctx.createGain();
-    const baseVolume = Math.max(0, Math.min(1, Number(volume) || 0));
+    const baseVolume = Math.max(0, Math.min(1.5, Number(volume) || 0));
     const effectiveVolume = this.isDucked
-      ? Math.max(0, Math.min(1, baseVolume * this.duckFactor))
+      ? Math.max(0, Math.min(1.5, baseVolume * this.duckFactor))
       : baseVolume;
     master.gain.value = effectiveVolume;
     master.connect(ctx.destination);

@@ -183,7 +183,9 @@ test('scheduleSaveConfig escribe de forma asíncrona tras cumplirse el delayMs',
       { ...config, username: 'async_streamer', jar: { ...config.jar, currentCoins: 777 } },
       { delayMs: 35, maxWaitMs: 200 }
     );
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    for (let i = 0; i < 40 && hasPendingConfigSave(dir); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
     assert.equal(hasPendingConfigSave(dir), false);
     const saved = loadConfig(dir);
     assert.equal(saved.username, 'async_streamer');

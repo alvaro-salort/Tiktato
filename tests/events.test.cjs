@@ -91,6 +91,102 @@ test('no suena dos veces cuando el paquete final trae un groupId distinto al int
   assert.equal(b.suppressAlert, true);
 });
 
+test('trata repeatEnd undefined en un combo como en curso (repeatEnd: false)', () => {
+  const streakTracker = createStreakTracker();
+  const rawMsg = {
+    user: { uniqueId: 'carlos', userId: '99' },
+    giftId: 5655,
+    repeatCount: 1,
+    gift: { type: 1, name: 'Rosa', diamondCount: 1 }
+    // repeatEnd viene undefined
+  };
+  const event = normalizeTikTokEvent('gift', rawMsg, 1000, {
+    playEveryStreak: true,
+    streakTracker
+  });
+  assert.notEqual(event, null);
+  assert.equal(event.repeatEnd, false);
+  assert.equal(event.streakDelta, 1);
+  assert.equal(event.suppressAlert, false);
+});
+
+test('corrige doble sonido cuando giftType no es 1 pero llega en dos paquetes (repeatEnd: 0 y luego 1)', () => {
+  const streakTracker = createStreakTracker();
+  const rule = { id: 'r1', eventType: 'gift', soundId: 'builtin:coin' };
+  const sound = { id: 'builtin:coin', kind: 'builtin', key: 'coin' };
+  const rawBase = {
+    user: { uniqueId: 'marcos', userId: '101' },
+    giftId: 9999,
+    repeatCount: 1,
+    gift: { type: 0, name: 'RegaloCustom', diamondCount: 10 }
+  };
+
+  const firstEvent = normalizeTikTokEvent('gift', { ...rawBase, repeatEnd: 0 }, 1000, {
+    playEveryStreak: true,
+    streakTracker
+  });
+  assert.equal(firstEvent.repeatEnd, false);
+  assert.equal(firstEvent.streakDelta, 1);
+  assert.equal(firstEvent.suppressAlert, false);
+  const firstAlert = buildAlert(firstEvent, rule, { sound, playEveryStreak: true });
+  assert.notEqual(firstAlert, null);
+
+  const closeEvent = normalizeTikTokEvent('gift', { ...rawBase, repeatEnd: 1 }, 2500, {
+    playEveryStreak: true,
+    streakTracker
+  });
+  assert.equal(closeEvent.repeatEnd, true);
+  assert.equal(closeEvent.streakDelta, 0);
+  assert.equal(closeEvent.suppressAlert, true);
+  const closeAlert = buildAlert(closeEvent, rule, { sound, playEveryStreak: true });
+  assert.equal(closeAlert, null);
+
+  // Tercer paquete: cierre repetido enviado por TikTok con el mismo repeatCount
+  const duplicateClose = normalizeTikTokEvent('gift', { ...rawBase, repeatEnd: 1 }, 3000, {
+    playEveryStreak: true,
+    streakTracker
+  });
+  assert.equal(duplicateClose.repeatEnd, true);
+  assert.equal(duplicateClose.streakDelta, 0);
+  assert.equal(duplicateClose.suppressAlert, true);
+  const dupAlert = buildAlert(duplicateClose, rule, { sound, playEveryStreak: true });
+  assert.equal(dupAlert, null);
+});
+
+test('dos paquetes directos de cierre (repeatEnd 1 y repeatEnd 1) para un regalo individual solo suenan una vez', () => {
+  const streakTracker = createStreakTracker();
+  const rule = { id: 'r1', eventType: 'gift', soundId: 'builtin:coin' };
+  const sound = { id: 'builtin:coin', kind: 'builtin', key: 'coin' };
+  const giftMsg = {
+    user: { uniqueId: 'sofia', userId: '505' },
+    giftId: 5655,
+    repeatCount: 1,
+    repeatEnd: 1,
+    gift: { type: 0, name: 'Rosa', diamondCount: 1 }
+  };
+
+  // Primer paquete
+  const ev1 = normalizeTikTokEvent('gift', giftMsg, 1000, { playEveryStreak: true, streakTracker });
+  assert.equal(ev1.streakDelta, 1);
+  assert.equal(ev1.suppressAlert, false);
+  const alert1 = buildAlert(ev1, rule, { sound, playEveryStreak: true });
+  assert.notEqual(alert1, null);
+
+  // Segundo paquete duplicado recibido poco después (ej. 300ms)
+  const ev2 = normalizeTikTokEvent('gift', giftMsg, 1300, { playEveryStreak: true, streakTracker });
+  assert.equal(ev2.streakDelta, 0);
+  assert.equal(ev2.suppressAlert, true);
+  const alert2 = buildAlert(ev2, rule, { sound, playEveryStreak: true });
+  assert.equal(alert2, null);
+
+  // Tercer paquete recibido 10s después: es una nueva donación legítima
+  const ev3 = normalizeTikTokEvent('gift', giftMsg, 11500, { playEveryStreak: true, streakTracker });
+  assert.equal(ev3.streakDelta, 1);
+  assert.equal(ev3.suppressAlert, false);
+  const alert3 = buildAlert(ev3, rule, { sound, playEveryStreak: true });
+  assert.notEqual(alert3, null);
+});
+
 test('combo tras combo en la misma sesión dispara de nuevo en el primer golpe del segundo combo', () => {
   const streakTracker = createStreakTracker();
   const base = {

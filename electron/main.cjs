@@ -270,7 +270,8 @@ function updateOverlayConfig() {
     accent: config.overlay.accent,
     position: config.overlay.position,
     showGiftImage: config.overlay.showGiftImage,
-    durationMs: config.overlay.durationMs
+    durationMs: config.overlay.durationMs,
+    masterVolume: Number(config.masterVolume ?? 0.8)
   });
   overlayServer?.setJar(publicJar(config));
 }
@@ -306,45 +307,49 @@ function resolveSound(soundId) {
 }
 
 function registerActivity(event, alert) {
-  const userKey = event.userId || event.username || 'anon';
-  if (!stats.uniqueUsers.has(userKey)) {
-    if (stats.uniqueUsers.size >= MAX_UNIQUE_USERS) {
-      const oldestUser = stats.uniqueUsers.values().next().value;
-      if (oldestUser !== undefined) stats.uniqueUsers.delete(oldestUser);
+  if (!event.test) {
+    const userKey = event.userId || event.username || 'anon';
+    if (!stats.uniqueUsers.has(userKey)) {
+      if (stats.uniqueUsers.size >= MAX_UNIQUE_USERS) {
+        const oldestUser = stats.uniqueUsers.values().next().value;
+        if (oldestUser !== undefined) stats.uniqueUsers.delete(oldestUser);
+      }
+      stats.uniqueUsers.add(userKey);
     }
-    stats.uniqueUsers.add(userKey);
-  }
-  if (event.type === 'gift') {
-    if (event.repeatEnd !== false) {
-      stats.gifts += 1;
-      stats.coins += Number(event.coins || 0);
+    if (event.type === 'gift') {
+      if (event.repeatEnd !== false) {
+        stats.gifts += 1;
+        stats.coins += Number(event.coins || 0);
+      }
+    } else if (event.type === 'follow') {
+      stats.follows += 1;
+    } else if (event.type === 'share') {
+      stats.shares += 1;
+    } else if (event.type === 'like') {
+      stats.likes += Number(event.repeatCount || 1);
     }
-  } else if (event.type === 'follow') {
-    stats.follows += 1;
-  } else if (event.type === 'share') {
-    stats.shares += 1;
-  } else if (event.type === 'like') {
-    stats.likes += Number(event.repeatCount || 1);
   }
 
-  const currentStreak = recentActivity[0];
-  const isOngoingStreak =
-    currentStreak &&
-    currentStreak.type === 'gift' &&
-    currentStreak.username === (event.username || 'alguien') &&
-    currentStreak.giftName === (event.giftName || '') &&
-    currentStreak.repeatEnd === false;
+  const activeStreak = event.type === 'gift'
+    ? recentActivity.find(
+        (item) =>
+          item.type === 'gift' &&
+          item.repeatEnd === false &&
+          (item.userId && event.userId ? item.userId === event.userId : item.username === (event.username || 'alguien')) &&
+          item.giftName === (event.giftName || '')
+      )
+    : null;
 
-  if (isOngoingStreak) {
-    currentStreak.repeatCount = Number(event.repeatCount || 1);
-    currentStreak.coins = Number(event.coins || 0);
-    currentStreak.repeatEnd = event.repeatEnd !== false;
-    currentStreak.createdAt = new Date().toISOString();
+  if (activeStreak) {
+    activeStreak.repeatCount = Number(event.repeatCount || 1);
+    activeStreak.coins = Number(event.coins || 0);
+    activeStreak.repeatEnd = event.repeatEnd !== false;
+    activeStreak.createdAt = new Date().toISOString();
     if (alert) {
-      currentStreak.played = true;
-      currentStreak.soundName = alert?.sound?.name || currentStreak.soundName;
+      activeStreak.played = true;
+      activeStreak.soundName = alert?.sound?.name || activeStreak.soundName;
     }
-    return currentStreak;
+    return activeStreak;
   }
 
   const record = {
@@ -377,34 +382,38 @@ function addToJar(event) {
   if (!shouldPassJarFilter(config.jar, event)) return;
 
   const coinsAdded = Math.max(0, Number(event.coins) || 0);
-  config.jar.currentGifts += 1;
-  config.jar.currentCoins += coinsAdded;
 
-  config.jar.topDonors = updateTopDonorsList(config.jar.topDonors, {
-    username: event.username,
-    displayName: event.displayName,
-    avatarUrl: event.avatarUrl,
-    coins: coinsAdded
-  });
+  if (!event.test) {
+    config.jar.currentGifts += 1;
+    config.jar.currentCoins += coinsAdded;
 
-  if (config.jar.showRecentGifts) {
-    config.jar.recentGifts.unshift({
-      name: event.giftName || 'Regalo',
-      imageUrl: event.giftImageUrl || '',
-      coins: coinsAdded,
-      username: event.username || '',
-      at: new Date().toISOString()
+    config.jar.topDonors = updateTopDonorsList(config.jar.topDonors, {
+      username: event.username,
+      displayName: event.displayName,
+      avatarUrl: event.avatarUrl,
+      coins: coinsAdded
     });
-    config.jar.recentGifts = config.jar.recentGifts.slice(0, 8);
+
+    if (config.jar.showRecentGifts) {
+      config.jar.recentGifts.unshift({
+        name: event.giftName || 'Regalo',
+        imageUrl: event.giftImageUrl || '',
+        coins: coinsAdded,
+        username: event.username || '',
+        at: new Date().toISOString()
+      });
+      config.jar.recentGifts = config.jar.recentGifts.slice(0, 8);
+    }
+    config = scheduleSaveConfig(app.getPath('userData'), config);
+    updateJarOverlay();
   }
-  config = scheduleSaveConfig(app.getPath('userData'), config);
-  updateJarOverlay();
 
   const value =
     event.coinsPerGift ||
     (event.repeatCount ? Math.round(coinsAdded / event.repeatCount) : coinsAdded) ||
     1;
   const jarPayload = {
+    id: event.msgId || 'jar_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     value,
     giftPictureUrl: event.giftImageUrl || '',
     giftName: event.giftName || 'Regalo',
@@ -457,7 +466,7 @@ function processEvent(event) {
       alert = buildAlert(event, rule, {
         sound,
         now,
-        playEveryStreak: config.tts?.playEveryStreak !== false
+        playEveryStreak: (config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak) !== false
       });
       if (alert) {
         sendAlert(alert);
@@ -493,6 +502,13 @@ async function startOverlayServer() {
   await overlayServer.start();
   updateOverlayConfig();
   logger.info(`[overlay] ${overlayServer.getUrl()}`);
+}
+
+function syncTikTokStreakOption() {
+  const allowCombos =
+    Boolean(config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak ?? true) ||
+    Boolean(config.tts?.playEveryStreak !== false);
+  tiktok?.setOptions({ playEveryStreak: allowCombos });
 }
 
 function applySettings(patch) {
@@ -538,7 +554,22 @@ function applySettings(patch) {
       ...config.tts,
       ...patch.tts
     });
-    tiktok?.setOptions({ playEveryStreak: config.tts.playEveryStreak !== false });
+    syncTikTokStreakOption();
+  } else if (patch.ducking !== undefined || patch.duckingLevel !== undefined) {
+    config.tts = normalizeTts({
+      ...config.tts,
+      ...(patch.ducking !== undefined ? { ducking: Boolean(patch.ducking) } : {}),
+      ...(patch.duckingLevel !== undefined ? { duckingLevel: Number(patch.duckingLevel) } : {})
+    });
+  }
+
+  if (patch.soundsPlayEveryStreak !== undefined || patch.sounds?.playEveryStreak !== undefined) {
+    const val = patch.sounds?.playEveryStreak !== undefined
+      ? Boolean(patch.sounds.playEveryStreak)
+      : Boolean(patch.soundsPlayEveryStreak);
+    config.soundsPlayEveryStreak = val;
+    if (config.sounds) config.sounds.playEveryStreak = val;
+    syncTikTokStreakOption();
   }
 
   if (typeof patch.sessionId === 'string' && patch.sessionId.trim()) {
@@ -1029,7 +1060,8 @@ function registerIpc() {
       minWidth: 420,
       minHeight: 540,
       autoHideMenuBar: true,
-      backgroundColor: bg === 'green' ? '#00ff00' : '#141218',
+      transparent: true,
+      backgroundColor: '#00000000',
       title: 'Tiktato - Frasco',
       icon: path.join(__dirname, '..', 'build', 'icon.png'),
       webPreferences: {
@@ -1105,7 +1137,7 @@ function registerIpc() {
 
 function wireTikTok() {
   tiktok = new TikTokService({ logger });
-  tiktok.setOptions({ playEveryStreak: config.tts?.playEveryStreak !== false });
+  syncTikTokStreakOption();
   tiktok.on('event', (event) => processEvent(event));
   tiktok.on('status', (status) => {
     if (status.state === 'connected') {

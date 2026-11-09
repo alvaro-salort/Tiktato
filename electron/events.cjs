@@ -1,6 +1,7 @@
 const { findGiftById, findGiftByName, normalizeGiftText } = require('./gifts-catalog.cjs');
 
 const STREAK_STALE_MS = 60_000;
+const CLOSING_WINDOW_MS = 4_000;
 
 function createStreakTracker() {
   const streaks = new Map();
@@ -17,39 +18,86 @@ function createStreakTracker() {
     streaks,
     process({ userId = '', username = '', giftId = '', giftName = '', groupId = '', giftType = 0, repeatCount = 1, repeatEnd = true }, now = Date.now()) {
       const count = Math.max(1, Number(repeatCount) || 1);
-      const isCombo = Number(giftType) === 1;
+      evictStale(now);
+      const actor = String(userId || username || 'anon');
+      const giftKey = String(giftId || giftName || 'gift');
+      const key = `${actor}:${giftKey}`;
+      const gid = String(groupId || '');
+
+      const prev = streaks.get(key);
       const isFinal = Boolean(repeatEnd);
 
-      if (!isCombo) {
+      if (!prev) {
+        streaks.set(key, {
+          lastRepeatCount: count,
+          closed: isFinal,
+          closedAt: isFinal ? now : 0,
+          groupId: gid,
+          lastSeen: now
+        });
         return {
-          streakKey: '',
-          isActive: false,
-          isFinal: true,
+          streakKey: key,
+          isActive: !isFinal,
+          isFinal,
           streakDelta: count,
           totalCount: count,
           suppressAlert: false
         };
       }
 
-      evictStale(now);
-      const actor = String(userId || username || 'anon');
-      const giftKey = String(giftId || giftName || 'gift');
-      const key = `${actor}:${giftKey}`;
+      if (prev.closed) {
+        const hasDistinctGroupId = Boolean(gid && prev.groupId && gid !== prev.groupId);
+        const withinClosingWindow = (now - prev.closedAt) < CLOSING_WINDOW_MS;
+        const isDuplicateClosing = isFinal && !hasDistinctGroupId && withinClosingWindow && count <= prev.lastRepeatCount;
 
-      const prev = streaks.get(key);
-      const prevCount = prev ? prev.lastRepeatCount : 0;
+        if (isDuplicateClosing) {
+          prev.lastSeen = now;
+          return {
+            streakKey: key,
+            isActive: false,
+            isFinal: true,
+            streakDelta: 0,
+            totalCount: count,
+            suppressAlert: true
+          };
+        }
+
+        // Nuevo combo o donación posterior
+        streaks.set(key, {
+          lastRepeatCount: count,
+          closed: isFinal,
+          closedAt: isFinal ? now : 0,
+          groupId: gid || prev.groupId,
+          lastSeen: now
+        });
+        return {
+          streakKey: key,
+          isActive: !isFinal,
+          isFinal,
+          streakDelta: count,
+          totalCount: count,
+          suppressAlert: false
+        };
+      }
+
+      // prev.closed es false (racha activa en curso)
+      const prevCount = prev.lastRepeatCount;
       const delta = Math.max(0, count - prevCount);
+      streaks.set(key, {
+        lastRepeatCount: count,
+        closed: isFinal,
+        closedAt: isFinal ? now : 0,
+        groupId: gid || prev.groupId,
+        lastSeen: now
+      });
 
-      streaks.set(key, { lastRepeatCount: isFinal ? 0 : count, lastSeen: now });
-
-      const suppressAlert = isFinal && prev !== undefined && delta === 0;
       return {
         streakKey: key,
         isActive: !isFinal,
         isFinal,
         streakDelta: delta,
         totalCount: count,
-        suppressAlert
+        suppressAlert: delta === 0
       };
     },
     reset() {
@@ -232,12 +280,20 @@ function normalizeTikTokEvent(type, data, now = Date.now(), options = {}) {
   if (normalizedType === 'gift') {
     const gift = (data && (data.gift || data.giftDetails)) || {};
     const giftType = Number(gift.type ?? gift.giftType ?? data.giftType ?? 0);
-    const repeatEndRaw = data.repeatEnd ?? 1;
+    const isCombo =
+      giftType === 1 ||
+      Boolean(gift.combo) ||
+      Number(data?.comboCount || 0) > 1 ||
+      Number(data?.repeatCount || 0) > 1 ||
+      Boolean(data?.groupId);
+    const repeatEndRaw = data.repeatEnd !== undefined
+      ? data.repeatEnd
+      : (isCombo ? 0 : 1);
     const repeatEnd =
       typeof repeatEndRaw === 'boolean' ? repeatEndRaw : Number(repeatEndRaw) !== 0;
 
     const playEveryStreak = Boolean(options && (options.playEveryStreak || options.allowCombos));
-    if (giftType === 1 && !repeatEnd && !playEveryStreak) return null;
+    if (!repeatEnd && !playEveryStreak) return null;
 
     const rawGiftName = String(gift.name || gift.giftName || data.giftName || '').trim();
     const isTest = Boolean(

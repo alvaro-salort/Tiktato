@@ -12,8 +12,8 @@
 
 ## Descargar
 
-- [Instalador de Windows v1.0.0 (`Tiktato-Setup-1.0.0.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
-- [Versión portable v1.0.0 (`Tiktato-Portable-1.0.0.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+- [Instalador de Windows v1.1.0 (`Tiktato-Setup-1.1.0.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+- [Versión portable v1.1.0 (`Tiktato-Portable-1.1.0.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
 
 También puedes ejecutarlo desde el código fuente con `npm install` y `npm start`.
 
@@ -52,75 +52,64 @@ También puedes ejecutarlo desde el código fuente con `npm install` y `npm star
 
 ![Frasco de donaciones](docs/jar.png)
 
-## Stack
+![Configuración de TTS](docs/tts.png)
 
-- Electron 45
-- Matter.js 0.20 (Física 2D offline para el Frasco de donaciones)
-- Node.js 20+ (recomendado 22 LTS o superior)
-- [`piratetok-live-js`](https://github.com/PirateTok/live-js) para eventos de TikTok LIVE con firma local
-- `ws` para comunicación WebSocket bidireccional entre Electron y los overlays
-- HTML5, CSS3 moderno y JavaScript vanilla en la interfaz
+## Estructura del proyecto
 
-## Instalación y desarrollo
+```text
+Tiktato/
+├── electron/
+│   ├── main.cjs            # Proceso principal de Electron, servidor HTTP/WS local y ventana Studio
+│   ├── config.cjs          # Gestión y persistencia segura de la configuración (config.json)
+│   ├── events.cjs          # Normalización y enriquecimiento de eventos de TikTok LIVE
+│   ├── alert-matcher.cjs   # Motor de coincidencia de reglas y cooldowns
+│   ├── tiktok-service.cjs  # Cliente de conexión TikTok LIVE (piratetok-live-js) con reconexión
+│   └── preload.cjs         # Context bridge seguro para el panel de control
+├── renderer/
+│   ├── index.html          # Panel de control de escritorio con menú lateral
+│   ├── styles.css          # Estilos Bento / Material 3 y componentes de UI
+│   ├── app.js              # Lógica de la interfaz de usuario, navegación y gráficos
+│   └── assets/             # Logo, íconos y tipografías Nunito y Fredoka
+├── overlay/
+│   ├── overlay.html        # Página web transparente para OBS Browser Source
+│   ├── overlay.css         # Animaciones y diseño de la tarjeta de alerta
+│   ├── overlay.js          # Cliente WebSocket y cola de renderizado
+│   ├── jar.html            # Overlay del Frasco de Donaciones 2D
+│   ├── jar.css             # Estilos del frasco, ventana nativa y leaderboard
+│   └── jar.js              # Motor de física 2D (Matter.js) y renderizado SVG
+├── shared/
+│   ├── audio-engine.js     # Motor de audio Web Audio API / HTML5 Audio con ducking y volumen > 100%
+│   └── tts-engine.js       # Motor de síntesis de voz (Google TTS + Web Speech API fallback)
+├── tests/                  # 91 pruebas unitarias automáticas con el runner nativo de Node.js
+└── package.json            # Scripts, dependencias y configuración de electron-builder
+```
+
+## Requisitos
+
+- **Windows 10 / 11** (64 bits).
+- Conexión a Internet para conectar con TikTok LIVE y descargar voces de Google Speech.
+- Para ejecutar desde el código fuente: **Node.js 22 LTS** o superior.
+
+## Instalación para desarrollo
 
 ```bash
+git clone https://github.com/alvaro-salort/Tiktato.git
+cd Tiktato
 npm install
+npm test
 npm start
 ```
 
-Para abrir con herramientas de desarrollo (DevTools):
+## Empaquetar instaladores
 
-```bash
-npm run dev
-```
-
-Para ejecutar las pruebas automatizadas:
-
-```bash
-npm test
-```
-
-Para empaquetar instaladores de Windows (NSIS y Portable):
+Para compilar el instalador estándar (`.exe` con NSIS) y la versión portable:
 
 ```bash
 npm run dist
 ```
 
-Los ejecutables generados se guardan en la carpeta `dist/`. El repositorio incluye además un flujo de **GitHub Actions** (`.github/workflows/release.yml`) que compila y publica los instaladores automáticamente en GitHub Releases al crear un tag `v*`.
+Los binarios resultantes se generarán en la carpeta `dist/`.
 
-## Cómo agregar el Frasco en TikTok LIVE Studio (sin OBS)
+## Licencia
 
-Si transmites directamente con **TikTok LIVE Studio** y no utilizas OBS, tienes dos formas muy sencillas de agregar el **Frasco**:
-
-1. **Opción A — Fuente Enlace (Web / Link)** *(recomendada por transparencia nativa)*:
-   - En Tiktato, abre la sección **Frasco de Donaciones** y pulsa **Copiar enlace**.
-   - En **TikTok LIVE Studio**, haz clic en **Añadir fuente (`+`) → Enlace (Link)**.
-   - Pega la URL copiada y ajusta el tamaño a `800 × 800`.
-2. **Opción B — Captura de ventana con Fondo Chroma / Oscuro**:
-   - En Tiktato, ve a la sección **Frasco de Donaciones** y pulsa el botón **Abrir ventana**.
-   - Se abrirá la ventana **`Tiktato - Frasco`**. Al mover el cursor sobre ella verás una barra superior donde puedes elegir el fondo (**Verde Chroma**, **Oscuro**, **Azul Chroma**, **Magenta** o **Transparente**); la barra se oculta sola tras 2 segundos sin mover el ratón.
-   - En **TikTok LIVE Studio**, añade **Captura de ventana**, selecciona **`Tiktato - Frasco`** y, si elegiste fondo verde, activa el filtro **Clave de color (Chroma Key)**.
-
-## Configuración rápida en OBS Studio
-
-1. Inicia tu directo en TikTok.
-2. Abre Tiktato, escribe tu usuario en la cabecera y pulsa **Conectar**.
-3. En Tiktato, copia el enlace que desees desde sus respectivas secciones:
-   - **Overlay de alertas**: Fuente de navegador de `800 × 600`.
-   - **Frasco de donaciones**: Fuente de navegador de `800 × 800`.
-   - **Frasco de prueba**: URL con parámetro `?test=1` para calibrar la escena y probar botones de regalos.
-4. En las propiedades de la fuente de navegador en OBS, activa **Controlar audio vía OBS** para gestionar el volumen desde el mezclador.
-
-## Datos y privacidad
-
-- Configuración, sonidos y logs se almacenan localmente en `%APPDATA%\tiktato`.
-- No hay servidores intermedios, cuentas externas ni telemetría.
-- El servidor de overlays escucha únicamente en localhost (`127.0.0.1`).
-
-## Autor y Licencia
-
-Desarrollado por **Alvaro Salort** ([GitHub](https://github.com/alvaro-salort/Tiktato)).
-
-Distribuido bajo la licencia **GNU General Public License v3.0 (GPL-3.0-or-later)**. Consulta el archivo [LICENSE](LICENSE) para más detalles. Si compartes o modificas este proyecto, debes mantener el crédito al autor original y distribuir el código derivado bajo la misma licencia libre GPLv3.
-
-Créditos a [PirateTok](https://github.com/PirateTok/live-js) (licencia 0BSD) por la capa de conexión local con TikTok LIVE.
+Distribuido bajo la licencia **GNU General Public License v3.0**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
