@@ -1,14 +1,10 @@
 # Tiktato
 
-[![Versión](https://img.shields.io/github/v/release/alvaro-salort/Tiktato?style=flat-square&logo=github&logoColor=white&color=2ea44f&label=Version)](https://github.com/alvaro-salort/Tiktato/releases/latest)
-[![Licencia](https://img.shields.io/badge/Licencia-GPLv3-E95420?style=flat-square&logo=gnu&logoColor=white)](LICENSE)
-[![Plataforma](https://img.shields.io/badge/plataforma-Windows-blue)](https://github.com/alvaro-salort/Tiktato/releases)
-[![TikTok](https://img.shields.io/badge/TikTok_LIVE-Sin_costo-010101?style=flat-square&logo=tiktok&logoColor=white)](https://github.com/alvaro-salort/Tiktato)
-[![OBS Ready](https://img.shields.io/badge/OBS_Studio-Overlays-302E31?style=flat-square&logo=obsstudio&logoColor=white)](https://github.com/alvaro-salort/Tiktato)
-[![Descargas](https://img.shields.io/github/downloads/alvaro-salort/Tiktato/total?style=flat-square&logo=windows&logoColor=white&color=0078D4&label=Descargas)](https://github.com/alvaro-salort/Tiktato/releases)
-
-
-
+[![Versión](https://img.shields.io/github/v/release/alvaro-salort/Tiktato?style=for-the-badge&logo=github&logoColor=white&color=2ea44f&label=VERSION)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+[![Descargas](https://img.shields.io/github/downloads/alvaro-salort/Tiktato/total?style=for-the-badge&logo=windows&logoColor=white&color=0078D4&label=DESCARGAS)](https://github.com/alvaro-salort/Tiktato/releases)
+[![TikTok LIVE](https://img.shields.io/badge/TIKTOK_LIVE-GRATIS-010101?style=for-the-badge&logo=tiktok&logoColor=white)](https://github.com/alvaro-salort/Tiktato)
+[![Licencia](https://img.shields.io/badge/LICENCIA-GPLv3-E95420?style=for-the-badge&logo=gnu&logoColor=white)](LICENSE)
+[![OBS Ready](https://img.shields.io/badge/OBS_STUDIO-OVERLAYS-302E31?style=for-the-badge&logo=obsstudio&logoColor=white)](https://github.com/alvaro-salort/Tiktato)
 
 **TikTato** es una aplicación de escritorio de código abierto diseñada para streamers de **TikTok LIVE** que permite automatizar y configurar alertas de sonido, overlays para **OBS Studio** y **TikTok LIVE Studio**, leer los mensajes del chat con voz (TTS) e interactuar con la audiencia en tiempo real, sin suscripciones ni paywalls.
 
