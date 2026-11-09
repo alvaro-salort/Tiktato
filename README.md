@@ -16,6 +16,8 @@
 
 También puedes ejecutarlo desde el código fuente con `npm install` y `npm start`.
 
+<img width="1361" height="696" alt="image" src="https://github.com/user-attachments/assets/bd3532b8-9c55-4fb2-817c-8087c860410c" />
+
 ![Panel de Tiktato](docs/dashboard.png)
 
 ## Qué incluye
