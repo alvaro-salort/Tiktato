@@ -8,6 +8,7 @@ const {
   deleteSoundFile,
   flushConfigSave,
   importSound,
+  importSoundAsync,
   loadConfig,
   normalizeJar,
   normalizeRule,
@@ -20,10 +21,11 @@ const {
   updateTopDonorsList
 } = require('./config.cjs');
 const { buildAlert, markPlayed, selectRule } = require('./alert-matcher.cjs');
-const { makeTestEvent } = require('./events.cjs');
+const { createStreakTracker, makeTestEvent } = require('./events.cjs');
 const { getActiveCatalog, loadGiftsCatalog, refreshGiftsCatalog } = require('./gifts-catalog.cjs');
 const { OverlayServer } = require('./overlay-server.cjs');
 const { TikTokService } = require('./tiktok-service.cjs');
+const { setupAutoUpdater } = require('./updater.cjs');
 
 const isDev = process.argv.includes('--dev');
 const MAX_ACTIVITY = 40;
@@ -32,6 +34,11 @@ const STATE_COALESCE_MS = 80;
 
 if (process.env.TIKTATO_USER_DATA) {
   app.setPath('userData', path.resolve(process.env.TIKTATO_USER_DATA));
+} else if (process.env.PORTABLE_EXECUTABLE_DIR) {
+  const portableDataDir = path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'tiktato-data');
+  if (fs.existsSync(portableDataDir)) {
+    app.setPath('userData', portableDataDir);
+  }
 }
 
 let mainWindow = null;
@@ -40,6 +47,7 @@ let jarStudioWindow = null;
 let config = null;
 let overlayServer = null;
 let tiktok = null;
+let updaterApi = null;
 let logFile = '';
 let quitting = false;
 const TIKTOK_LOGIN_PARTITION = 'persist:tiktok-login';
@@ -47,6 +55,7 @@ const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 const cooldowns = new Map();
+const soundStreakTracker = createStreakTracker();
 const recentActivity = [];
 const stats = {
   gifts: 0,
@@ -72,12 +81,44 @@ const logger = {
   }
 };
 
+let logBuffer = '';
+let logFlushTimer = null;
+
 function writeLog(level, message, args) {
   if (!logFile) return;
-  const extra = args.length > 0 ? ` ${args.map((item) => safeString(item)).join(' ')}` : '';
+  const extra = args && args.length > 0 ? ` ${args.map((item) => safeString(item)).join(' ')}` : '';
   const line = `${new Date().toISOString()} [${level}] ${safeString(message)}${extra}\n`;
+  logBuffer += line;
+  if (!logFlushTimer) {
+    logFlushTimer = setTimeout(() => {
+      logFlushTimer = null;
+      flushLogBuffer();
+    }, 500);
+    if (typeof logFlushTimer?.unref === 'function') logFlushTimer.unref();
+  }
+}
+
+async function flushLogBuffer() {
+  if (!logBuffer || !logFile) return;
+  const toWrite = logBuffer;
+  logBuffer = '';
   try {
-    fs.appendFileSync(logFile, line, 'utf8');
+    await fs.promises.appendFile(logFile, toWrite, 'utf8');
+  } catch {
+    // El log no debe interrumpir la app.
+  }
+}
+
+function flushLogBufferSync() {
+  if (logFlushTimer) {
+    clearTimeout(logFlushTimer);
+    logFlushTimer = null;
+  }
+  if (!logBuffer || !logFile) return;
+  const toWrite = logBuffer;
+  logBuffer = '';
+  try {
+    fs.appendFileSync(logFile, toWrite, 'utf8');
   } catch {
     // El log no debe interrumpir la app.
   }
@@ -455,22 +496,57 @@ function processEvent(event) {
 
   const now = Date.now();
   const rule = selectRule(config.rules, event, cooldowns, now);
-  const suppressAlert = Boolean(
-    event.suppressAlert || (event.type === 'gift' && event.streakDelta === 0)
-  );
-  let alert = null;
-  if (rule) {
-    markPlayed(rule, event, cooldowns, now);
-    if (!suppressAlert) {
-      const sound = resolveSound(rule.soundId);
-      alert = buildAlert(event, rule, {
-        sound,
+  const soundPerStreak =
+    (config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak) !== false;
+
+  let soundTracked = null;
+  if (event.type === 'gift') {
+    if (event.test) {
+      soundTracked = {
+        suppressAlert: false,
+        streakDelta: Number(event.streakDelta || event.repeatCount || 1)
+      };
+    } else {
+      soundTracked = soundStreakTracker.process(
+        {
+          userId: event.userId,
+          username: event.username,
+          giftId: event.giftId,
+          giftName: event.giftName,
+          groupId: event.groupId,
+          giftType: event.giftType,
+          repeatCount: event.repeatCount,
+          repeatEnd: event.repeatEnd
+        },
         now,
-        playEveryStreak: (config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak) !== false
-      });
-      if (alert) {
-        sendAlert(alert);
+        { playEveryStreak: soundPerStreak }
+      );
+    }
+  }
+
+  const soundEvent = event.type === 'gift' && soundTracked
+    ? {
+        ...event,
+        streakDelta: soundTracked.streakDelta,
+        suppressAlert: soundTracked.suppressAlert
       }
+    : event;
+
+  const suppressAlert = Boolean(
+    soundEvent.suppressAlert || (soundEvent.type === 'gift' && soundEvent.streakDelta === 0)
+  );
+
+  let alert = null;
+  if (rule && !suppressAlert) {
+    markPlayed(rule, soundEvent, cooldowns, now);
+    const sound = resolveSound(rule.soundId);
+    alert = buildAlert(soundEvent, rule, {
+      sound,
+      now,
+      playEveryStreak: soundPerStreak
+    });
+    if (alert) {
+      sendAlert(alert);
     }
   }
   registerActivity(event, alert);
@@ -520,6 +596,7 @@ function applySettings(patch) {
   if (typeof patch.autoConnect === 'boolean') config.autoConnect = patch.autoConnect;
   if (patch.masterVolume !== undefined) {
     config.masterVolume = Math.max(0, Math.min(1, Number(patch.masterVolume) || 0));
+    updateOverlayConfig();
   }
   if (typeof patch.playInDashboard === 'boolean') config.playInDashboard = patch.playInDashboard;
 
@@ -591,19 +668,19 @@ async function restartOverlayIfPortChanged(previousPort) {
     try {
       await startOverlayServer();
     } catch (error) {
-      logger.error('[overlay] no se pudo reiniciar en el nuevo puerto', error);
+      logger.error('[overlay] no se pudo reiniciar, volviendo al anterior', error);
+      config.overlay.port = previousPort;
+      config = saveConfig(app.getPath('userData'), config);
+      try {
+        await startOverlayServer();
+      } catch {}
     }
   } else {
     updateOverlayConfig();
   }
 }
 
-async function loginTikTok() {
-  if (loginWindow && !loginWindow.isDestroyed()) {
-    loginWindow.focus();
-    return { ok: false, error: 'Ya hay una ventana de inicio de sesión abierta.' };
-  }
-
+function setupTikTokLoginSession() {
   const loginSession = session.fromPartition(TIKTOK_LOGIN_PARTITION);
   loginSession.setUserAgent(BROWSER_UA);
   if (loginSession.webRequest?.onBeforeRequest) {
@@ -616,6 +693,16 @@ async function loginTikTok() {
       callback({ cancel: false });
     });
   }
+}
+
+async function loginTikTok() {
+  if (loginWindow && !loginWindow.isDestroyed()) {
+    loginWindow.focus();
+    return { ok: false, error: 'Ya hay una ventana de inicio de sesión abierta.' };
+  }
+
+  const loginSession = session.fromPartition(TIKTOK_LOGIN_PARTITION);
+  loginSession.setUserAgent(BROWSER_UA);
   const win = new BrowserWindow({
     width: 480,
     height: 760,
@@ -948,7 +1035,7 @@ function registerIpc() {
     const imported = [];
     try {
       for (const filePath of result.filePaths) {
-        const sound = importSound(app.getPath('userData'), filePath);
+        const sound = await importSoundAsync(app.getPath('userData'), filePath);
         config.sounds.push(sound);
         imported.push({ ...sound, url: soundUrl(sound) });
       }
@@ -1133,6 +1220,10 @@ function registerIpc() {
     await shell.openPath(app.getPath('userData'));
     return { ok: true };
   });
+
+  ipcMain.handle('update:check', () => updaterApi?.check());
+  ipcMain.handle('update:download', () => updaterApi?.download());
+  ipcMain.handle('update:install', () => updaterApi?.install());
 }
 
 function wireTikTok() {
@@ -1143,6 +1234,7 @@ function wireTikTok() {
     if (status.state === 'connected') {
       acquireStreamResources();
     } else if (status.state === 'disconnected' || status.state === 'error') {
+      soundStreakTracker.reset();
       releaseStreamResources();
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1159,11 +1251,15 @@ async function bootstrap() {
   loadGiftsCatalog(app.getPath('userData'));
   refreshGiftsCatalog(app.getPath('userData'))
     .then(() => sendState())
-    .catch(() => {});
+    .catch((err) => {
+      logger.warn('[catalog] no se pudo refrescar el catálogo de regalos', err);
+    });
+  setupTikTokLoginSession();
   await startOverlayServer();
   wireTikTok();
   registerIpc();
   createWindow();
+  updaterApi = setupAutoUpdater({ getMainWindow: () => mainWindow });
 
   if (config.autoConnect && config.username) {
     setTimeout(async () => {
@@ -1204,11 +1300,15 @@ if (!singleInstance) {
   app.on('before-quit', () => {
     if (quitting) return;
     quitting = true;
-    try {
-      flushConfigSave(app.getPath('userData'));
-    } catch (error) {
-      logger.warn('[config] no se pudo volcar config al salir', error);
+    flushLogBufferSync();
+    if (!updaterApi?.isUpdaterQuitting()) {
+      try {
+        flushConfigSave(app.getPath('userData'));
+      } catch (error) {
+        logger.warn('[config] no se pudo volcar config al salir', error);
+      }
     }
+    flushLogBufferSync();
     releaseStreamResources();
     tiktok?.disconnect().catch(() => {});
     overlayServer?.stop().catch(() => {});

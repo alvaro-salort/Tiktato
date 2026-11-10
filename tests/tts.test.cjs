@@ -360,3 +360,117 @@ test('config.sounds.playEveryStreak es independiente de config.tts.playEveryStre
   assert.equal(shouldIngestCombos({ sounds: { playEveryStreak: false }, tts: { playEveryStreak: true } }), true);
   assert.equal(shouldIngestCombos({ sounds: { playEveryStreak: false }, tts: { playEveryStreak: false } }), false);
 });
+
+test('sounds.playEveryStreak false con tts.playEveryStreak true reproduce exactamente un solo sonido al final de cada combo y no silencia regalos posteriores', () => {
+  const { createStreakTracker, normalizeTikTokEvent } = require('../electron/events.cjs');
+  const { buildAlert } = require('../electron/alert-matcher.cjs');
+
+  const rule = {
+    id: 'rule_rosa',
+    eventType: 'gift',
+    giftId: '5655',
+    giftName: 'Rosa',
+    soundId: 'builtin:coin',
+    volume: 1
+  };
+  const sound = { id: 'builtin:coin', name: 'Moneda', kind: 'builtin', key: 'coin' };
+
+  const ttsStreakTracker = createStreakTracker();
+  const soundStreakTracker = createStreakTracker();
+
+  const soundPerStreak = false;
+  const ttsPerStreak = true;
+
+  const allowCombos = soundPerStreak || ttsPerStreak;
+  assert.equal(allowCombos, true);
+
+  function processGiftPacket(pkt, time) {
+    const event = normalizeTikTokEvent(
+      'gift',
+      {
+        user: { uniqueId: 'fan_combo', userId: '888' },
+        giftId: 5655,
+        repeatCount: pkt.repeatCount,
+        repeatEnd: pkt.repeatEnd,
+        groupId: pkt.groupId || '',
+        gift: { type: 1, name: 'Rosa', diamondCount: 1 }
+      },
+      time,
+      { playEveryStreak: allowCombos, streakTracker: ttsStreakTracker }
+    );
+
+    assert.notEqual(event, null);
+
+    const soundTracked = soundStreakTracker.process(
+      {
+        userId: event.userId,
+        username: event.username,
+        giftId: event.giftId,
+        giftName: event.giftName,
+        groupId: event.groupId,
+        giftType: event.giftType,
+        repeatCount: event.repeatCount,
+        repeatEnd: event.repeatEnd
+      },
+      time,
+      { playEveryStreak: soundPerStreak }
+    );
+
+    const soundEvent = {
+      ...event,
+      streakDelta: soundTracked.streakDelta,
+      suppressAlert: soundTracked.suppressAlert
+    };
+
+    const suppressAlert = Boolean(
+      soundEvent.suppressAlert || (soundEvent.type === 'gift' && soundEvent.streakDelta === 0)
+    );
+
+    let alert = null;
+    if (!suppressAlert) {
+      alert = buildAlert(soundEvent, rule, { sound, playEveryStreak: soundPerStreak });
+    }
+    return { event, soundEvent, alert };
+  }
+
+  // 1. Combo 1: racha de 5 rosas (intermedios 1, 3, 5 y cierre 5)
+  let c1Played = 0;
+  const c1Packets = [
+    { repeatCount: 1, repeatEnd: 0, time: 1000 },
+    { repeatCount: 3, repeatEnd: 0, time: 1300 },
+    { repeatCount: 5, repeatEnd: 0, time: 1600 },
+    { repeatCount: 5, repeatEnd: 1, time: 2000 }
+  ];
+  for (const pkt of c1Packets) {
+    const res = processGiftPacket(pkt, pkt.time);
+    if (res.alert) c1Played += 1;
+  }
+  // Solo debe haber sonado 1 vez al final del combo
+  assert.equal(c1Played, 1);
+
+  // 2. Paquete duplicado de cierre de Combo 1 enviado por TikTok 200ms después
+  const c1Dup = processGiftPacket({ repeatCount: 5, repeatEnd: 1 }, 2200);
+  assert.equal(c1Dup.alert, null);
+
+  // 3. Combo 2 del mismo usuario 1.5s después (dentro de la ventana de cierre): 1 rosa, 2 rosas
+  let c2Played = 0;
+  const c2Packets = [
+    { repeatCount: 1, repeatEnd: 0, time: 3500 },
+    { repeatCount: 2, repeatEnd: 1, time: 3800 }
+  ];
+  for (const pkt of c2Packets) {
+    const res = processGiftPacket(pkt, pkt.time);
+    if (res.alert) c2Played += 1;
+  }
+  // El segundo combo DEBE sonar 1 vez y NO ser silenciado por el combo anterior
+  assert.equal(c2Played, 1);
+
+  // 4. Regalo individual directo enviado 1s después: repeatCount 1, repeatEnd 1
+  const singleRes = processGiftPacket({ repeatCount: 1, repeatEnd: 1 }, 4800);
+  assert.notEqual(singleRes.alert, null);
+  assert.equal(singleRes.alert.sound.repeat, 1);
+
+  // 5. Cierre duplicado del regalo individual directo 200ms después
+  const singleDup = processGiftPacket({ repeatCount: 1, repeatEnd: 1 }, 5000);
+  assert.equal(singleDup.alert, null);
+});

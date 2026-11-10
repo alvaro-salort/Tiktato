@@ -16,7 +16,21 @@ function createStreakTracker() {
 
   return {
     streaks,
-    process({ userId = '', username = '', giftId = '', giftName = '', groupId = '', giftType = 0, repeatCount = 1, repeatEnd = true }, now = Date.now()) {
+    process(
+      {
+        userId = '',
+        username = '',
+        giftId = '',
+        giftName = '',
+        groupId = '',
+        giftType = 0,
+        repeatCount = 1,
+        repeatEnd = true
+      },
+      now = Date.now(),
+      options = {}
+    ) {
+      const playEveryStreak = options.playEveryStreak !== false;
       const count = Math.max(1, Number(repeatCount) || 1);
       evictStale(now);
       const actor = String(userId || username || 'anon');
@@ -28,13 +42,25 @@ function createStreakTracker() {
       const isFinal = Boolean(repeatEnd);
 
       if (!prev) {
+        const soundPlayed = !playEveryStreak && isFinal;
         streaks.set(key, {
           lastRepeatCount: count,
           closed: isFinal,
           closedAt: isFinal ? now : 0,
           groupId: gid,
-          lastSeen: now
+          lastSeen: now,
+          soundPlayed
         });
+        if (!playEveryStreak) {
+          return {
+            streakKey: key,
+            isActive: !isFinal,
+            isFinal,
+            streakDelta: isFinal ? 1 : 0,
+            totalCount: count,
+            suppressAlert: !isFinal
+          };
+        }
         return {
           streakKey: key,
           isActive: !isFinal,
@@ -48,7 +74,7 @@ function createStreakTracker() {
       if (prev.closed) {
         const hasDistinctGroupId = Boolean(gid && prev.groupId && gid !== prev.groupId);
         const withinClosingWindow = (now - prev.closedAt) < CLOSING_WINDOW_MS;
-        const isDuplicateClosing = isFinal && !hasDistinctGroupId && withinClosingWindow && count <= prev.lastRepeatCount;
+        const isDuplicateClosing = isFinal && !hasDistinctGroupId && withinClosingWindow && count === prev.lastRepeatCount;
 
         if (isDuplicateClosing) {
           prev.lastSeen = now;
@@ -63,13 +89,25 @@ function createStreakTracker() {
         }
 
         // Nuevo combo o donación posterior
+        const soundPlayed = !playEveryStreak && isFinal;
         streaks.set(key, {
           lastRepeatCount: count,
           closed: isFinal,
           closedAt: isFinal ? now : 0,
           groupId: gid || prev.groupId,
-          lastSeen: now
+          lastSeen: now,
+          soundPlayed
         });
+        if (!playEveryStreak) {
+          return {
+            streakKey: key,
+            isActive: !isFinal,
+            isFinal,
+            streakDelta: isFinal ? 1 : 0,
+            totalCount: count,
+            suppressAlert: !isFinal
+          };
+        }
         return {
           streakKey: key,
           isActive: !isFinal,
@@ -83,13 +121,26 @@ function createStreakTracker() {
       // prev.closed es false (racha activa en curso)
       const prevCount = prev.lastRepeatCount;
       const delta = Math.max(0, count - prevCount);
-      streaks.set(key, {
-        lastRepeatCount: count,
-        closed: isFinal,
-        closedAt: isFinal ? now : 0,
-        groupId: gid || prev.groupId,
-        lastSeen: now
-      });
+      const shouldPlaySound = !playEveryStreak && isFinal && !prev.soundPlayed;
+      if (shouldPlaySound) {
+        prev.soundPlayed = true;
+      }
+      prev.lastRepeatCount = count;
+      prev.closed = isFinal;
+      prev.closedAt = isFinal ? now : 0;
+      if (gid) prev.groupId = gid;
+      prev.lastSeen = now;
+
+      if (!playEveryStreak) {
+        return {
+          streakKey: key,
+          isActive: !isFinal,
+          isFinal,
+          streakDelta: shouldPlaySound ? 1 : 0,
+          totalCount: count,
+          suppressAlert: !shouldPlaySound
+        };
+      }
 
       return {
         streakKey: key,
@@ -339,7 +390,8 @@ function normalizeTikTokEvent(type, data, now = Date.now(), options = {}) {
           repeatCount,
           repeatEnd
         },
-        now
+        now,
+        { playEveryStreak }
       );
       streakDelta = tracked.streakDelta;
       suppressAlert = tracked.suppressAlert;

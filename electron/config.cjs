@@ -567,6 +567,28 @@ function hasPendingConfigSave(userDataDir) {
   return pendingConfigSaves.size > 0 || inFlightConfigSaves.size > 0;
 }
 
+async function importSoundAsync(userDataDir, sourcePath, displayName) {
+  const stats = await fs.promises.stat(sourcePath);
+  if (!stats.isFile()) throw new Error('El archivo seleccionado no es válido.');
+  if (stats.size > MAX_SOUND_BYTES) throw new Error('El sonido supera el límite de 30 MB.');
+  const extension = path.extname(sourcePath).toLowerCase();
+  if (!AUDIO_EXTENSIONS.has(extension)) {
+    throw new Error('Formato no compatible. Usa MP3, WAV, OGG, M4A, AAC, FLAC o WEBM.');
+  }
+  ensureDirectories(userDataDir);
+  const id = makeId('sound');
+  const filename = `${id}${extension}`;
+  await fs.promises.copyFile(sourcePath, path.join(soundsDir(userDataDir), filename));
+  return {
+    id,
+    name: String(displayName || path.basename(sourcePath, extension)).trim().slice(0, 80) || 'Sonido',
+    filename,
+    mime: mimeForExtension(extension),
+    size: stats.size,
+    createdAt: new Date().toISOString()
+  };
+}
+
 function importSound(userDataDir, sourcePath, displayName) {
   const stats = fs.statSync(sourcePath);
   if (!stats.isFile()) throw new Error('El archivo seleccionado no es válido.');
@@ -660,7 +682,7 @@ function publicConfig(config, { overlayUrl } = {}) {
     jar: publicJar(config),
     tts: config.tts || createDefaultConfig().tts,
     rules: config.rules,
-    sounds: Object.assign(config.sounds, {
+    sounds: Object.assign([...(config.sounds || [])], {
       playEveryStreak: config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak ?? true
     }),
     soundsPlayEveryStreak: config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak ?? true
@@ -680,6 +702,7 @@ module.exports = {
   flushConfigSave,
   hasPendingConfigSave,
   importSound,
+  importSoundAsync,
   loadConfig,
   normalizeConfig,
   normalizeJar,

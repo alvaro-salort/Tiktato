@@ -2030,6 +2030,80 @@ function wireEvents() {
   );
 }
 
+function setupUpdater() {
+  const banner = $('#updateBanner');
+  const title = $('#updateBannerTitle');
+  const desc = $('#updateBannerDesc');
+  const btnDownload = $('#btnUpdateDownload');
+  const btnInstall = $('#btnUpdateInstall');
+  const btnDismiss = $('#btnUpdateDismiss');
+  const progressWrap = $('#updateProgressWrap');
+  const progressBar = $('#updateProgressBar');
+
+  if (!banner || !api?.onUpdateStatus) return;
+
+  btnDownload?.addEventListener('click', async () => {
+    btnDownload.disabled = true;
+    btnDownload.textContent = 'Descargando…';
+    if (progressWrap) progressWrap.hidden = false;
+    try {
+      await api.downloadUpdate?.();
+    } catch (err) {
+      btnDownload.disabled = false;
+      btnDownload.textContent = 'Descargar';
+      showToast(err.message || 'Error al descargar la actualización', 'error');
+    }
+  });
+
+  btnInstall?.addEventListener('click', () => {
+    btnInstall.disabled = true;
+    btnInstall.textContent = 'Instalando…';
+    api.installUpdate?.();
+  });
+
+  btnDismiss?.addEventListener('click', () => {
+    banner.hidden = true;
+  });
+
+  api.onUpdateStatus((info) => {
+    if (!info) return;
+    if (info.status === 'available') {
+      banner.hidden = false;
+      if (title) title.textContent = `Nueva versión ${info.version || ''} disponible`;
+      if (desc) desc.textContent = 'Hay una actualización lista para instalar.';
+      if (btnDownload) {
+        btnDownload.hidden = false;
+        btnDownload.disabled = false;
+        btnDownload.textContent = 'Descargar';
+      }
+      if (btnInstall) btnInstall.hidden = true;
+      if (progressWrap) progressWrap.hidden = true;
+    } else if (info.status === 'downloading') {
+      banner.hidden = false;
+      const pct = Math.round(Number(info.percent || 0));
+      if (desc) desc.textContent = `Descargando actualización: ${pct}%`;
+      if (progressWrap) progressWrap.hidden = false;
+      if (progressBar) progressBar.style.width = `${pct}%`;
+    } else if (info.status === 'ready') {
+      banner.hidden = false;
+      if (title) title.textContent = `Versión ${info.version || ''} lista`;
+      if (desc) desc.textContent = 'Descarga completada. Reinicia para aplicar los cambios.';
+      if (btnDownload) btnDownload.hidden = true;
+      if (progressWrap) progressWrap.hidden = true;
+      if (btnInstall) {
+        btnInstall.hidden = false;
+        btnInstall.disabled = false;
+      }
+    } else if (info.status === 'error') {
+      if (btnDownload) {
+        btnDownload.disabled = false;
+        btnDownload.textContent = 'Reintentar';
+      }
+      if (progressWrap) progressWrap.hidden = true;
+    }
+  });
+}
+
 function setupTabs() {
   const tabs = $$('[role="tab"][data-tab]');
   if (tabs.length === 0) return;
@@ -2079,6 +2153,7 @@ function setupTabs() {
 
 async function init() {
   setupTabs();
+  setupUpdater();
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     window.speechSynthesis.onvoiceschanged = () => {
       const currentVoiceId = state?.tts?.voiceId || (state?.tts?.voiceProvider === 'google' ? `google:${state?.tts?.voiceLanguage || 'es-ES'}` : 'local');

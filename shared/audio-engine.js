@@ -101,6 +101,7 @@ export class SoundEngine {
 
   async preview(sound, volume = 1) {
     if (!sound) return;
+    this.queue = Promise.resolve();
     this.stopAll();
     const safeVolume = Math.max(0, Math.min(2, Number(volume) || 0));
     await this.unlock();

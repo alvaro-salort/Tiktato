@@ -110,6 +110,12 @@ npm run dist
 
 Los binarios resultantes se generarán en la carpeta `dist/`.
 
+### Notas sobre la versión Portable y Actualizaciones
+
+- **Auto-actualizaciones**: La versión instalada con NSIS (`Tiktato-Setup-*.exe`) se actualiza automáticamente de forma diferencial mediante GitHub Releases sin necesidad de privilegios de administrador (UAC). La versión portable no puede auto-actualizarse debido a que Windows mantiene el `.exe` bloqueado mientras está en ejecución.
+- **Portabilidad real de datos**: Para que la configuración viaje con la versión portable (ej. en un pendrive USB), crea una carpeta llamada `tiktato-data` al lado del ejecutable `Tiktato-Portable-*.exe`. Si la carpeta existe, Tiktato guardará su configuración, sonidos y registros allí en lugar de `%APPDATA%\tiktato`.
+- **Seguridad de sesión TikTok (DPAPI)**: Las credenciales de sesión opcional (`sessionid` y `tt-target-idc`) se cifran mediante `safeStorage` (DPAPI de Windows). Si copias la carpeta `tiktato-data` a otra computadora, Windows no podrá descifrar la clave y deberás volver a iniciar sesión mediante el código QR.
+
 ## Licencia
 
 Distribuido bajo la licencia **GNU General Public License v3.0**. Consulta el archivo [LICENSE](LICENSE) para más detalles.

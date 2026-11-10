@@ -288,7 +288,12 @@ class TikTokService extends EventEmitter {
       return event;
     }
 
-    if (event.msgId && this.#rememberMsgId(event.msgId)) {
+    const dedupKey =
+      event.msgId ||
+      (event.type && (event.userId || event.username)
+        ? `${event.type}:${event.userId || event.username}:${event.createTime || event.timestamp || ''}`
+        : '');
+    if (dedupKey && this.#rememberMsgId(dedupKey)) {
       return null;
     }
 

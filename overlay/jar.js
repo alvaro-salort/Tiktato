@@ -728,9 +728,15 @@ function resetJar() {
 let isInitialLoad = true;
 const processedEventKeys = new Set();
 
+let lastGeometryKey = '';
+
 /* ───────── APLICAR CONFIGURACIÓN ───────── */
 function applyConfig(cfg) {
   if (!cfg) return;
+  const newGeomKey = `${cfg.scale ?? currentConfig.scale}|${cfg.xOffset ?? currentConfig.xOffset}|${cfg.yOffset ?? currentConfig.yOffset}`;
+  const geomChanged = newGeomKey !== lastGeometryKey;
+  lastGeometryKey = newGeomKey;
+
   currentConfig = {
     ...currentConfig,
     ...cfg
@@ -750,7 +756,9 @@ function applyConfig(cfg) {
   }
   isInitialLoad = false;
 
-  rebuildJarContainer();
+  if (geomChanged) {
+    rebuildJarContainer();
+  }
   updateTotalCoinsHud();
   renderCurrentLeaderboardItem();
   startLeaderboardCarousel();

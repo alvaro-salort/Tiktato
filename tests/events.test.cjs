@@ -217,6 +217,43 @@ test('combo tras combo en la misma sesión dispara de nuevo en el primer golpe d
   assert.equal(c2_end.suppressAlert, true);
 });
 
+test('un regalo posterior de menor cantidad dentro de la ventana de cierre no es suprimido como cierre duplicado del combo previo', () => {
+  const streakTracker = createStreakTracker();
+  const base = {
+    user: { uniqueId: 'marcos', userId: '789' },
+    giftId: 5655,
+    gift: { type: 1, name: 'Rosa', diamondCount: 1 }
+  };
+
+  // Combo previo de 5 rosas que finaliza en t = 1000
+  const c1 = normalizeTikTokEvent(
+    'gift',
+    { ...base, repeatCount: 5, repeatEnd: 1 },
+    1000,
+    { playEveryStreak: true, streakTracker }
+  );
+  assert.equal(c1.suppressAlert, false);
+
+  // Cierre duplicado legítimo del combo previo (mismo repeatCount 5 a los 300ms)
+  const dup = normalizeTikTokEvent(
+    'gift',
+    { ...base, repeatCount: 5, repeatEnd: 1 },
+    1300,
+    { playEveryStreak: true, streakTracker }
+  );
+  assert.equal(dup.suppressAlert, true);
+
+  // Nueva donación de 1 rosa a los 2500ms (dentro de la ventana de 4s del combo de 5)
+  const c2 = normalizeTikTokEvent(
+    'gift',
+    { ...base, repeatCount: 1, repeatEnd: 1 },
+    2500,
+    { playEveryStreak: true, streakTracker }
+  );
+  assert.equal(c2.suppressAlert, false);
+  assert.equal(c2.streakDelta, 1);
+});
+
 test('una racha de 5 rosas calcula streakDelta incremental y reproduce 5 veces en total', () => {
   const streakTracker = createStreakTracker();
   const rule = {

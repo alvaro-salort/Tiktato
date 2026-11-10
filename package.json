@@ -1,6 +1,6 @@
 {
   "name": "tiktato",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "TikTato es una aplicación de escritorio de código abierto para streamers de TikTok LIVE que permite automatizar y configurar alertas de sonido, overlays para OBS y TikTok LIVE Studio, leer los mensajes del chat con voz (TTS), interactuar con la audiencia y crear salas de juego interactivas.",
   "main": "electron/main.cjs",
   "author": {
@@ -38,6 +38,8 @@
     "release": "electron-builder --win nsis portable --publish always"
   },
   "dependencies": {
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.11",
     "matter-js": "^0.20.0",
     "piratetok-live-js": "^0.3.0",
     "ws": "^8.22.1"
