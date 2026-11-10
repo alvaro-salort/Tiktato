@@ -17,7 +17,7 @@
 
 También puedes ejecutarlo desde el código fuente con `npm install` y `npm start`.
 
-<img width="1361" height="696" alt="image" src="https://github.com/user-attachments/assets/bd3532b8-9c55-4fb2-817c-8087c860410c" />
+<img width="1365" height="692" alt="image" src="https://github.com/user-attachments/assets/1b781f02-0c57-4c35-82e8-2d9637f7d8ca" />
 
 ![Panel de Tiktato](docs/dashboard.png)
 
