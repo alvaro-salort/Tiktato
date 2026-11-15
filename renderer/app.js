@@ -13,6 +13,7 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 let state = null;
 let toastTimer = null;
+let toastHideTimer = null;
 let editingRuleId = null;
 
 const EVENT_LABELS = {
@@ -126,8 +127,59 @@ function formatBytes(bytes) {
 }
 
 function showToast(message, kind = 'info') {
-  // Las notificaciones toast de cada acción fueron desactivadas a petición del usuario
-  return;
+  // Solo se muestran los errores: las confirmaciones de éxito ya se ven en la UI.
+  if (kind !== 'error') return;
+  const toast = $('#toast');
+  if (!toast) return;
+  if (toastTimer) window.clearTimeout(toastTimer);
+  if (toastHideTimer) window.clearTimeout(toastHideTimer);
+  toastTimer = null;
+  toastHideTimer = null;
+  toast.textContent = message;
+  toast.classList.add('is-error');
+  // Si hay un diálogo abierto, el aviso debe vivir dentro de él para quedar por encima.
+  const host = document.querySelector('dialog[open]') || document.body;
+  if (toast.parentElement !== host) host.appendChild(toast);
+  toast.hidden = false;
+  window.requestAnimationFrame(() => toast.classList.add('is-visible'));
+  toastTimer = window.setTimeout(() => {
+    toast.classList.remove('is-visible');
+    toastHideTimer = window.setTimeout(() => {
+      toast.hidden = true;
+      toast.classList.remove('is-error');
+      toastHideTimer = null;
+    }, 200);
+  }, 5000);
+}
+
+function confirmAction({ title = 'Confirmar acción', message = '', acceptLabel = 'Aceptar' } = {}) {
+  const dialog = $('#confirmDialog');
+  if (!dialog) return Promise.resolve(window.confirm(message || title));
+  const titleEl = $('#confirmDialogTitle');
+  const textEl = $('#confirmDialogText');
+  const accept = $('#btnConfirmAccept');
+  const cancel = $('#btnConfirmCancel');
+  if (titleEl) titleEl.textContent = title;
+  if (textEl) textEl.textContent = message;
+  if (accept) accept.textContent = acceptLabel;
+
+  let settled = false;
+  return new Promise((resolve) => {
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      accept?.removeEventListener('click', onAccept);
+      dialog.removeEventListener('close', onClose);
+      if (dialog.open) dialog.close();
+      resolve(value);
+    };
+    const onAccept = () => finish(true);
+    const onClose = () => finish(false);
+    accept?.addEventListener('click', onAccept);
+    dialog.addEventListener('close', onClose);
+    dialog.showModal();
+    cancel?.focus();
+  });
 }
 
 function setError(message) {
@@ -317,11 +369,6 @@ function updateStatus(status) {
   }
   const viewers = $('#statViewers');
   if (viewers) viewers.textContent = formatNumber(status.viewerCount || 0);
-
-  const sideCard = $('#sidebarStatusCard');
-  if (sideCard) {
-    sideCard.style.display = 'none';
-  }
 }
 
 function setInputValue(selector, value) {
@@ -358,6 +405,10 @@ function render(nextState) {
   $('#overlayGiftImage').checked = state.overlay.showGiftImage;
   $('#autoConnect').checked = state.autoConnect;
   $('#playInDashboard').checked = state.playInDashboard;
+  const themeSelect = $('#themeSelect');
+  if (themeSelect && document.activeElement !== themeSelect) {
+    themeSelect.value = ['light', 'dark', 'auto'].includes(state.theme) ? state.theme : 'auto';
+  }
   $('#masterVolume').value = Math.round(state.masterVolume * 100);
   $('#volumeValue').textContent = `${Math.round(state.masterVolume * 100)}%`;
   $('#sessionState').textContent = state.hasSession
@@ -369,8 +420,6 @@ function render(nextState) {
   $('#statFollows').textContent = formatNumber(state.stats.follows);
 
   if (state.appVersion) {
-    const verEl = $('#appVersion') || document.querySelector('.footer-version');
-    if (verEl) verEl.textContent = `v${state.appVersion}`;
     const sideVer = $('#sidebarVersion');
     if (sideVer) sideVer.textContent = `v${state.appVersion}`;
   }
@@ -520,13 +569,13 @@ function renderGiftQuickList() {
             ${soundOptionsHtml(rule.soundId)}
           </select>
           <div class="gift-rule-actions">
-            <button class="icon-btn" data-gift-rule-action="test" type="button" title="Escuchar sonido de ${escapeHtml(title)}">
+            <button class="icon-btn" data-gift-rule-action="test" type="button" title="Escuchar sonido de ${escapeHtml(title)}" aria-label="Escuchar sonido de ${escapeHtml(title)}">
               ${iconSvg('play')}
             </button>
-            <button class="icon-btn" data-gift-rule-action="edit" type="button" title="Personalizar opciones y volumen de ${escapeHtml(title)}">
+            <button class="icon-btn" data-gift-rule-action="edit" type="button" title="Personalizar opciones y volumen de ${escapeHtml(title)}" aria-label="Personalizar opciones y volumen de ${escapeHtml(title)}">
               ${iconSvg('edit')}
             </button>
-            <button class="icon-btn" data-gift-rule-action="delete" type="button" title="Quitar sonido de ${escapeHtml(title)}">
+            <button class="icon-btn" data-gift-rule-action="delete" type="button" title="Quitar sonido de ${escapeHtml(title)}" aria-label="Quitar sonido de ${escapeHtml(title)}">
               ${iconSvg('trash')}
             </button>
           </div>
@@ -555,7 +604,7 @@ function renderQuickRules() {
           ${soundOptionsHtml(soundId)}
         </select>
         <div class="gift-rule-actions">
-          <button class="icon-btn" data-quick-preview type="button" title="Escuchar sonido">
+          <button class="icon-btn" data-quick-preview type="button" title="Escuchar sonido" aria-label="Escuchar sonido">
             ${iconSvg('play')}
           </button>
           <label class="switch" title="${enabled ? 'Desactivar' : 'Activar'}">
@@ -612,9 +661,9 @@ function renderRules() {
           <span class="rule-sound">${escapeHtml(soundName(rule.soundId))}</span>
           <span class="rule-meta">${meta}</span>
           <span class="rule-actions">
-            <button class="icon-btn" data-action="test" type="button" title="Escuchar sonido">${iconSvg('play')}</button>
-            <button class="icon-btn" data-action="edit" type="button" title="Editar">${iconSvg('edit')}</button>
-            <button class="icon-btn" data-action="delete" type="button" title="Eliminar">${iconSvg('trash')}</button>
+            <button class="icon-btn" data-action="test" type="button" title="Escuchar sonido" aria-label="Escuchar sonido">${iconSvg('play')}</button>
+            <button class="icon-btn" data-action="edit" type="button" title="Editar" aria-label="Editar">${iconSvg('edit')}</button>
+            <button class="icon-btn" data-action="delete" type="button" title="Eliminar" aria-label="Eliminar">${iconSvg('trash')}</button>
           </span>
         </div>
       `;
@@ -957,8 +1006,8 @@ function renderSounds() {
           <span class="sound-emoji">${iconSvg('music')}</span>
           <span class="sound-name" title="${escapeHtml(sound.name)}">${escapeHtml(sound.name)}</span>
           <span class="sound-size">${formatBytes(sound.size)}</span>
-          <button class="icon-btn" data-sound-action="play" type="button" title="Reproducir">${iconSvg('play')}</button>
-          <button class="icon-btn" data-sound-action="delete" type="button" title="Eliminar">${iconSvg('trash')}</button>
+          <button class="icon-btn" data-sound-action="play" type="button" title="Reproducir" aria-label="Reproducir">${iconSvg('play')}</button>
+          <button class="icon-btn" data-sound-action="delete" type="button" title="Eliminar" aria-label="Eliminar">${iconSvg('trash')}</button>
         </div>
       `
     )
@@ -995,8 +1044,8 @@ function renderActivity() {
           }</span>
           <span class="activity-user">${escapeHtml(item.displayName || item.username)}</span>
           <span class="activity-detail">${detail}${item.test ? ' <em>(prueba)</em>' : ''}</span>
-          <span class="activity-coins">${item.coins > 0 ? `${formatNumber(item.coins)} monedas` : '—'}</span>
-          <span class="activity-sound ${item.played ? '' : 'is-muted'}">${item.played ? escapeHtml(item.soundName) : 'sin sonido'}</span>
+          <span class="activity-coins">${item.coins > 0 ? `${formatNumber(item.coins)} ${item.coins === 1 ? 'moneda' : 'monedas'}` : '—'}</span>
+          ${item.played && item.soundName ? `<span class="activity-sound">${escapeHtml(item.soundName)}</span>` : ''}
         </div>
       `;
     })
@@ -1230,6 +1279,33 @@ function wireEvents() {
 
   $('#btnSettings').addEventListener('click', () => openDialog('#settingsDialog'));
   $('#btnHelp').addEventListener('click', () => openDialog('#helpDialog'));
+  $('#btnToggleTestTools')?.addEventListener('click', () => {
+    const toolbar = $('#activityTestToolbar');
+    if (!toolbar) return;
+    const opening = toolbar.hidden;
+    toolbar.hidden = !opening;
+    $('#btnToggleTestTools').setAttribute('aria-expanded', String(opening));
+  });
+  $('#btnTheme')?.addEventListener('click', () => {
+    stopThemeClock();
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    if (state) state.theme = next;
+    applyTheme(next);
+    persistTheme(next);
+  });
+  $('#themeSelect')?.addEventListener('change', (event) => {
+    const value = event.target.value;
+    if (state) state.theme = value;
+    if (value === 'auto') {
+      storeThemePreference('auto');
+      applyTheme(autoTheme(), { persist: false });
+      watchThemeClock();
+    } else {
+      stopThemeClock();
+      applyTheme(value);
+    }
+    persistTheme(value);
+  });
   $('#btnAdvancedRules').addEventListener('click', () => openDialog('#rulesDialog'));
   $('#btnSounds').addEventListener('click', () => openDialog('#soundsDialog'));
   $('#btnOverlaySettings').addEventListener('click', () => openDialog('#overlayDialog'));
@@ -1332,7 +1408,12 @@ function wireEvents() {
       return;
     }
     if (action === 'delete') {
-      if (!confirm('¿Eliminar esta regla?')) return;
+      const confirmed = await confirmAction({
+        title: 'Eliminar regla',
+        message: 'Esta regla dejará de sonar. ¿Querés eliminarla?',
+        acceptLabel: 'Eliminar'
+      });
+      if (!confirmed) return;
       await saveRules(
         state.rules.filter((item) => item.id !== rule.id),
         `Regla de ${rule.giftName || 'regalo'} eliminada`
@@ -1494,7 +1575,12 @@ function wireEvents() {
   });
 
   $('#btnClearSession').addEventListener('click', async () => {
-    if (!confirm('¿Borrar las cookies de TikTok guardadas?')) return;
+    const confirmed = await confirmAction({
+      title: 'Borrar sesión de TikTok',
+      message: 'Se borrarán las cookies guardadas y tendrás que iniciar sesión otra vez.',
+      acceptLabel: 'Borrar sesión'
+    });
+    if (!confirmed) return;
     await api.logoutTikTok();
     await updateSettings({ clearSession: true }, 'Sesión borrada');
   });
@@ -1558,7 +1644,12 @@ function wireEvents() {
   });
 
   $('#btnResetJar').addEventListener('click', async () => {
-    if (!confirm('¿Reiniciar el frasco a cero?')) return;
+    const confirmed = await confirmAction({
+      title: 'Vaciar frasco',
+      message: 'Se reiniciarán las monedas, los regalos y el ranking de donantes.',
+      acceptLabel: 'Vaciar frasco'
+    });
+    if (!confirmed) return;
     state = await api.resetJar();
     render(state);
     showToast('Frasco reiniciado');
@@ -1609,7 +1700,6 @@ function wireEvents() {
   overlayField('#overlayDuration', (input) => ({ durationMs: Number(input.value) }));
   overlayField('#overlayGiftImage', (input) => ({ showGiftImage: input.checked }));
 
-  $('#btnAddRule').addEventListener('click', () => openRuleForm());
   $('#btnCancelRule').addEventListener('click', closeRuleForm);
   $('#ruleEventType').addEventListener('change', toggleGiftFields);
 
@@ -1764,7 +1854,12 @@ function wireEvents() {
       return;
     }
     if (action === 'delete') {
-      if (!confirm(`¿Eliminar la regla de ${rule.giftName || EVENT_LABELS[rule.eventType]}?`)) return;
+      const confirmed = await confirmAction({
+        title: 'Eliminar regla',
+        message: `Se eliminará la regla de ${rule.giftName || EVENT_LABELS[rule.eventType]}.`,
+        acceptLabel: 'Eliminar'
+      });
+      if (!confirmed) return;
       await saveRules(state.rules.filter((item) => item.id !== rule.id), 'Regla eliminada');
       return;
     }
@@ -1790,7 +1885,12 @@ function wireEvents() {
     if (!sound) return;
     const action = event.target.closest('[data-sound-action]')?.dataset.soundAction;
     if (action === 'delete') {
-      if (!confirm(`¿Eliminar "${sound.name}"? Las reglas que lo usen pasarán a Moneda.`)) return;
+      const confirmed = await confirmAction({
+        title: 'Eliminar sonido',
+        message: `Se eliminará "${sound.name}". Las reglas que lo usen pasarán a Moneda.`,
+        acceptLabel: 'Eliminar'
+      });
+      if (!confirmed) return;
       const result = await api.deleteSound(sound.id);
       if (!result.ok) {
         showToast(result.error || 'No se pudo eliminar', 'error');
@@ -1966,8 +2066,8 @@ function wireEvents() {
     await audio.unlock();
     const currentVoiceId = state?.tts?.voiceId || (state?.tts?.voiceProvider === 'google' ? `google:${state?.tts?.voiceLanguage || 'es-ES'}` : 'local');
     ttsQueue.enqueue({
-      text: '¡Hola! La voz y el texto a voz de Tiktato están funcionando en directo.',
-      username: 'Tiktato',
+      text: '¡Hola! La voz y el texto a voz de TikTato están funcionando en directo.',
+      username: 'TikTato',
       type: 'test',
       voiceId: currentVoiceId,
       voiceProvider: state?.tts?.voiceProvider || 'google',
@@ -2104,6 +2204,105 @@ function setupUpdater() {
   });
 }
 
+const THEME_STORAGE_KEY = 'tiktato.theme';
+const NIGHT_START_HOUR = 20;
+const NIGHT_END_HOUR = 7;
+let themeClock = null;
+
+function isNightTime(date = new Date()) {
+  const hour = date.getHours();
+  return hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR;
+}
+
+function autoTheme() {
+  return isNightTime() ? 'dark' : 'light';
+}
+
+function currentTheme() {
+  return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+}
+
+function readThemePreference() {
+  try {
+    const value = localStorage.getItem(THEME_STORAGE_KEY);
+    return value === 'dark' || value === 'light' || value === 'auto' ? value : '';
+  } catch {
+    return '';
+  }
+}
+
+function storeThemePreference(value) {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, value);
+  } catch {
+    // Sin localStorage el tema se mantiene solo durante esta sesión.
+  }
+}
+
+function syncThemeToggle() {
+  const button = $('#btnTheme');
+  if (!button) return;
+  const dark = currentTheme() === 'dark';
+  const preference = readThemePreference();
+  const auto = preference === 'auto' || preference === '';
+  const label = $('#themeLabel');
+  if (label) label.textContent = dark ? 'Modo claro' : 'Modo oscuro';
+  const badge = $('#themeAutoBadge');
+  if (badge) badge.hidden = !auto;
+  button.title = auto
+    ? 'Automático (oscuro de 20:00 a 07:00). Clic para fijar un tema.'
+    : dark
+      ? 'Cambiar a tema claro'
+      : 'Cambiar a tema oscuro';
+}
+
+function applyTheme(theme, { persist = true } = {}) {
+  const next = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  if (persist) storeThemePreference(next);
+  syncThemeToggle();
+}
+
+async function persistTheme(theme) {
+  try {
+    await api.updateSettings({ theme });
+  } catch {
+    // El tema ya se aplicó; localStorage lo recuerda para la próxima apertura.
+  }
+}
+
+function stopThemeClock() {
+  if (themeClock === null) return;
+  window.clearInterval(themeClock);
+  themeClock = null;
+}
+
+/* En modo automático revisa cada minuto si cambió el día o la noche. */
+function watchThemeClock() {
+  if (themeClock !== null) return;
+  themeClock = window.setInterval(() => {
+    if (readThemePreference() !== 'auto') {
+      stopThemeClock();
+      return;
+    }
+    const next = autoTheme();
+    if (next !== currentTheme()) applyTheme(next, { persist: false });
+  }, 60_000);
+}
+
+function applyConfiguredTheme() {
+  const configured = state?.theme;
+  if (configured === 'light' || configured === 'dark') {
+    stopThemeClock();
+    applyTheme(configured);
+    return;
+  }
+  // "auto" (o sin preferencia): manda la hora del equipo.
+  storeThemePreference('auto');
+  applyTheme(autoTheme(), { persist: false });
+  watchThemeClock();
+}
+
 function setupTabs() {
   const tabs = $$('[role="tab"][data-tab]');
   if (tabs.length === 0) return;
@@ -2153,6 +2352,7 @@ function setupTabs() {
 
 async function init() {
   setupTabs();
+  syncThemeToggle();
   setupUpdater();
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     window.speechSynthesis.onvoiceschanged = () => {
@@ -2161,12 +2361,13 @@ async function init() {
     };
   }
   if (!api) {
-    setError('Esta interfaz debe abrirse dentro de Tiktato (Electron).');
+    setError('Esta interfaz debe abrirse dentro de TikTato (Electron).');
     return;
   }
   try {
     state = await api.bootstrap();
     render(state);
+    applyConfiguredTheme();
     wireEvents();
   } catch (error) {
     setError(error.message || 'No se pudo iniciar la interfaz.');

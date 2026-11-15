@@ -5,18 +5,18 @@
 product
 
 ## Users
-Streamers pequeños y medianos de TikTok LIVE, hispanohablantes, en Windows. Abren Tiktato antes del directo, conectan su usuario, configuran sonidos por regalo, el overlay de OBS, el frasco y la voz (TTS), y luego lo dejan abierto en segundo plano mientras transmiten. Vuelven a la ventana solo para comprobar que está conectado, probar un sonido o ajustar algo rápido.
+Streamers pequeños y medianos de TikTok LIVE, hispanohablantes, en Windows. Abren TikTato antes del directo, conectan su usuario, configuran sonidos por regalo, el overlay de OBS, el frasco y la voz (TTS), y luego lo dejan abierto en segundo plano mientras transmiten. Vuelven a la ventana solo para comprobar que está conectado, probar un sonido o ajustar algo rápido.
 
 ## Product Purpose
 Alternativa local y gratuita (sin cuenta, sin suscripción, sin paywall) a las alertas de sonido: escuchar eventos del LIVE (regalos, follows, shares, likes, chat) y reproducir sonidos, mostrar un overlay en OBS, llenar un frasco de donaciones y leer mensajes con voz. Éxito: el streamer configura todo en pocos minutos, entiende de un vistazo si está conectado y nunca tiene que buscar dónde estaba una opción.
 
 ## Brand Personality
-Cálida, clara, confiable. Cercana como un amigo que te ayuda a montar el stream (la papa con auriculares), pero ordenada y seria como una herramienta en la que confías durante un directo en vivo. Tono en español rioplatense/neutro, directo, sin jerga técnica innecesaria.
+Cálida, clara, confiable. Cercana como un amigo que te ayuda a montar el stream (la papa dentro del anillo REC), pero ordenada y seria como una herramienta en la que confías durante un directo en vivo. Tono en español rioplatense/neutro, directo, sin jerga técnica innecesaria.
 
 ## Anti-references
 - Interfaz oscura, densa, con menús laterales enormes y decenas de opciones a la vista.
 - Dashboards de streaming oscuros "gamer" (neón sobre negro).
-- Cualquier tema oscuro: Tiktato es siempre claro.
+- Un modo oscuro frío o gamer: el tema oscuro de TikTato es cálido y sobrio, y el claro sigue siendo el aspecto por defecto de la marca.
 - Plantillas SaaS genéricas (métricas gigantes, gradientes, tarjetas idénticas).
 
 ## Design Principles
@@ -25,6 +25,7 @@ Cálida, clara, confiable. Cercana como un amigo que te ayuda a montar el stream
 3. Probar es gratis: cada sonido, voz u overlay se puede probar al instante desde donde se configura.
 4. Calidez sin ruido: la personalidad viene del logo, el tono y los acentos, no de decoración.
 5. Herramienta de fondo: lo que se mira durante el LIVE (estado, actividad) debe ser compacto y tranquilo.
+6. Tema a elección: por defecto sigue la hora del equipo (oscuro de noche, claro de día); si la persona elige claro u oscuro a mano, esa elección manda.
 
 ## Accessibility & Inclusion
 WCAG 2.1 AA: contraste ≥4.5:1 en texto, foco visible en todos los controles, navegación por teclado en diálogos, respeto de `prefers-reduced-motion`. Estados nunca comunicados solo por color (siempre texto + color).

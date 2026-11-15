@@ -44,7 +44,10 @@ test('editar regla desde el diálogo modal avanzado cierra el modal para no bloq
 });
 
 test('eliminar regla en giftQuickList pide confirmación previa al usuario', () => {
-  assert.match(appJs, /if\s*\(!confirm\(['"]¿Eliminar esta regla\?['"]\)\)\s*return;/);
+  assert.match(appJs, /await confirmAction\(\{[\s\S]*?title: 'Eliminar regla'/);
+  assert.match(appJs, /if \(!confirmed\) return;/);
+  assert.match(indexHtml, /id="confirmDialog"/);
+  assert.match(indexHtml, /id="btnConfirmAccept" class="btn btn-danger-solid"/);
 });
 
 test('los chips presets abren el formulario de regla sin guardar silenciosamente en disco', () => {

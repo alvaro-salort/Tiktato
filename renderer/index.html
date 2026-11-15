@@ -7,22 +7,32 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; media-src 'self' http://127.0.0.1:* http://localhost:* https://www.google.com https://*.google.com https: data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tiktato · Sonidos y alertas para TikTok LIVE</title>
+    <title>TikTato · Sonidos y alertas para TikTok LIVE</title>
+    <script src="theme-init.js"></script>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="app app-layout">
       <!-- TOAST GLOBAL DE NOTIFICACIONES -->
-      <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+      <div id="toast" class="toast" role="alert" aria-live="assertive" hidden></div>
 
       <!-- MENÚ LATERAL DE SECCIONES (SIDEBAR) -->
       <aside class="app-sidebar" aria-label="Navegación principal">
         <div class="sidebar-brand">
-          <img class="sidebar-logo" src="assets/logo.png" alt="Logo de Tiktato" />
+          <img class="sidebar-logo" src="assets/logo.png" alt="Logo de TikTato" />
           <div class="sidebar-brand-text">
-            <h1 class="sidebar-brand-name">Tiktato</h1>
+            <h1 class="sidebar-brand-name">TikTato</h1>
             <span id="sidebarVersion" class="sidebar-badge-version">v1.1.0</span>
           </div>
+        </div>
+
+        <div class="sidebar-status-wrap">
+          <div id="statusPill" class="status-pill status-disconnected">
+            <span class="status-dot"></span>
+            <span id="statusLabel">Desconectado</span>
+          </div>
+          <span id="liveBadge" class="badge-live" style="display: none;">LIVE</span>
+          <span id="connectionMessage" class="connection-message sidebar-connection-message"></span>
         </div>
 
         <nav class="sidebar-nav" role="tablist" aria-label="Secciones de la aplicación">
@@ -91,6 +101,12 @@
         </nav>
 
         <div class="sidebar-foot">
+          <button id="btnTheme" class="btn-sidebar" type="button" title="Cambiar a tema oscuro">
+            <svg class="icon theme-icon-moon" viewBox="0 0 256 256" aria-hidden="true"><path d="M216,112.11a96,96,0,1,1-104-96,96.16,96.16,0,0,0,104,96Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            <svg class="icon theme-icon-sun" viewBox="0 0 256 256" aria-hidden="true"><circle cx="128" cy="128" r="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="128" y1="32" x2="128" y2="16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="128" y1="240" x2="128" y2="224" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="32" y1="128" x2="16" y2="128" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="240" y1="128" x2="224" y2="128" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="60" y1="60" x2="48" y2="48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="196" y1="60" x2="208" y2="48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="60" y1="196" x2="48" y2="208" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="196" y1="196" x2="208" y2="208" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            <span id="themeLabel">Modo oscuro</span>
+            <span id="themeAutoBadge" class="sidebar-theme-auto" hidden>AUTO</span>
+          </button>
           <button id="btnSettings" class="btn-sidebar" type="button" title="Ajustes de audio y app">
             <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,80a48,48,0,1,0,48,48A48,48,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z" fill="currentColor"/><path d="M232,120H214.28a86.69,86.69,0,0,0-8.31-20l12.56-12.56a8,8,0,0,0,0-11.31l-17-17a8,8,0,0,0-11.31,0L177.66,71.69a86.69,86.69,0,0,0-20-8.31V45.65A8,8,0,0,0,150,37.66H126a8,8,0,0,0-7.66,8v17.73a86.69,86.69,0,0,0-20,8.31L85.78,59.14a8,8,0,0,0-11.31,0l-17,17a8,8,0,0,0,0,11.31L70,99.98a86.69,86.69,0,0,0-8.31,20H44a8,8,0,0,0-8,8v24a8,8,0,0,0,8,8H61.69a86.69,86.69,0,0,0,8.31,20L57.44,192.54a8,8,0,0,0,0,11.31l17,17a8,8,0,0,0,11.31,0L98.31,208.29a86.69,86.69,0,0,0,20,8.31v17.75a8,8,0,0,0,7.66,8h24a8,8,0,0,0,8-7.66V216.6a86.69,86.69,0,0,0,20-8.31l12.56,12.56a8,8,0,0,0,11.31,0l17-17a8,8,0,0,0,0-11.31l-12.56-12.56a86.69,86.69,0,0,0,8.31-20H232a8,8,0,0,0,8-8V128A8,8,0,0,0,232,120Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
             <span>Ajustes</span>
@@ -121,7 +137,7 @@
             </div>
             <button id="btnUpdateDownload" class="btn btn-sm btn-primary" type="button">Descargar</button>
             <button id="btnUpdateInstall" class="btn btn-sm btn-success" type="button" hidden>Reiniciar e instalar</button>
-            <button id="btnUpdateDismiss" class="icon-btn" type="button" title="Cerrar aviso">
+            <button id="btnUpdateDismiss" class="icon-btn" type="button" title="Cerrar aviso" aria-label="Cerrar aviso">
               <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
             </button>
           </div>
@@ -137,20 +153,11 @@
               <form id="connectForm" class="connect-form">
                 <label class="input-prefix" for="username">
                   <span class="prefix-symbol" aria-hidden="true">@</span>
-                  <input id="username" name="username" autocomplete="off" placeholder="usuario" maxlength="80" />
+                  <input id="username" name="username" autocomplete="off" placeholder="usuario" maxlength="80" aria-label="Usuario de TikTok LIVE" />
                 </label>
                 <button id="btnConnect" class="btn btn-primary" type="submit">Conectar</button>
                 <button id="btnDisconnect" class="btn btn-ghost" type="button" disabled>Desconectar</button>
               </form>
-
-              <div class="status-strip">
-                <div id="statusPill" class="status-pill status-disconnected">
-                  <span class="status-dot"></span>
-                  <span id="statusLabel">Desconectado</span>
-                </div>
-                <span id="liveBadge" class="badge-live" style="display: none;">LIVE</span>
-                <span id="connectionMessage" class="connection-message"></span>
-              </div>
             </div>
 
             <div class="banner-stats">
@@ -207,7 +214,7 @@
                 <div class="gift-presets-wrap">
                   <div class="gift-presets-header">
                     <span class="gift-presets-title">Personalización rápida de regalos</span>
-                    <span class="gift-presets-hint">Toca cualquier regalo para personalizar su sonido y volumen. Los configurados aparecen con ✓</span>
+                    <span class="gift-presets-hint">Toca cualquier regalo para personalizar su sonido y volumen.</span>
                   </div>
                   <div id="giftPresets" class="gift-presets" aria-label="Regalos rápidos"></div>
                 </div>
@@ -268,7 +275,7 @@
                       <span>Sonido</span>
                       <div class="sound-select-row">
                         <select id="ruleSound"></select>
-                        <button id="btnPreviewRuleSound" class="btn btn-icon btn-tiny" type="button" title="Probar sonido">
+                        <button id="btnPreviewRuleSound" class="btn btn-icon btn-tiny" type="button" title="Probar sonido" aria-label="Probar sonido">
                           <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><polygon points="80 40 200 128 80 216 80 40" fill="currentColor"/></svg>
                         </button>
                       </div>
@@ -292,7 +299,6 @@
               <footer class="card-foot">
                 <button id="btnSounds" class="btn btn-ghost btn-small" type="button">Biblioteca de sonidos</button>
                 <button id="btnImportSound" class="btn btn-ghost btn-small" type="button">Añadir sonido</button>
-                <button id="btnAddRule" class="btn btn-primary btn-small" type="button">+ Nueva regla</button>
               </footer>
             </section>
 
@@ -308,9 +314,13 @@
                     <p>Historial de eventos en directo.</p>
                   </div>
                 </div>
+                <button id="btnToggleTestTools" class="btn btn-tiny btn-ghost" type="button" aria-expanded="false" aria-controls="activityTestToolbar">
+                  <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><polygon points="80 40 200 128 80 216 80 40" fill="currentColor"/></svg>
+                  Probar
+                </button>
               </header>
 
-              <div class="test-toolbar" role="group" aria-label="Enviar evento de prueba">
+              <div id="activityTestToolbar" class="test-toolbar" role="group" aria-label="Enviar evento de prueba" hidden>
                 <span class="test-label">Probar:</span>
                 <button class="btn btn-tiny" data-test="gift" type="button">Regalo</button>
                 <button class="btn btn-tiny" data-test="follow" type="button">Follow</button>
@@ -633,17 +643,16 @@
         </div>
 
         <footer class="footer">
-          <span>Tiktato · Software libre y gratuito para TikTok LIVE</span>
-          <span id="appVersion" class="footer-version"></span>
+          <span>TikTato · Software libre y gratuito para TikTok LIVE</span>
         </footer>
       </div>
     </div>
 
     <!-- DIÁLOGOS MODALES RESTILIZADOS -->
-    <dialog id="helpDialog" class="dialog dialog-small">
+    <dialog id="helpDialog" class="dialog dialog-small" aria-labelledby="helpDialogTitle">
       <div class="dialog-head">
         <div>
-          <h2>Ayuda para conectar</h2>
+          <h2 id="helpDialogTitle">Ayuda para conectar</h2>
         </div>
         <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg></button>
       </div>
@@ -679,7 +688,7 @@
 
       <label class="checkline dialog-check">
         <input id="autoConnect" type="checkbox" />
-        <span>Conectar automáticamente al abrir Tiktato</span>
+        <span>Conectar automáticamente al abrir TikTato</span>
       </label>
 
       <div class="dialog-foot">
@@ -688,10 +697,10 @@
       </div>
     </dialog>
 
-    <dialog id="rulesDialog" class="dialog dialog-wide">
+    <dialog id="rulesDialog" class="dialog dialog-wide" aria-labelledby="rulesDialogTitle">
       <div class="dialog-head">
         <div>
-          <h2>Reglas y sonidos de eventos</h2>
+          <h2 id="rulesDialogTitle">Reglas y sonidos de eventos</h2>
         </div>
         <div class="dialog-head-actions">
           <button id="btnImportSoundFromRules" class="btn btn-ghost btn-small" type="button">Subir MP3</button>
@@ -706,10 +715,10 @@
       </div>
     </dialog>
 
-    <dialog id="soundsDialog" class="dialog">
+    <dialog id="soundsDialog" class="dialog" aria-labelledby="soundsDialogTitle">
       <div class="dialog-head">
         <div>
-          <h2>Biblioteca de sonidos</h2>
+          <h2 id="soundsDialogTitle">Biblioteca de sonidos</h2>
         </div>
         <div class="dialog-head-actions">
           <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg></button>
@@ -726,10 +735,10 @@
       </div>
     </dialog>
 
-    <dialog id="overlayDialog" class="dialog dialog-small">
+    <dialog id="overlayDialog" class="dialog dialog-small" aria-labelledby="overlayDialogTitle">
       <div class="dialog-head">
         <div>
-          <h2>Personalizar overlay de alertas</h2>
+          <h2 id="overlayDialogTitle">Personalizar overlay de alertas</h2>
         </div>
         <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg></button>
       </div>
@@ -765,10 +774,10 @@
       </div>
     </dialog>
 
-    <dialog id="jarDialog" class="dialog dialog-small">
+    <dialog id="jarDialog" class="dialog dialog-small" aria-labelledby="jarDialogTitle">
       <div class="dialog-head">
         <div>
-          <h2>Personalizar frasco</h2>
+          <h2 id="jarDialogTitle">Personalizar frasco</h2>
         </div>
         <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg></button>
       </div>
@@ -868,13 +877,25 @@
       </div>
     </dialog>
 
-    <dialog id="settingsDialog" class="dialog dialog-small">
+    <dialog id="settingsDialog" class="dialog dialog-small" aria-labelledby="settingsDialogTitle">
       <div class="dialog-head">
         <div>
-          <h2>Audio y aplicación</h2>
+          <h2 id="settingsDialogTitle">Audio y aplicación</h2>
         </div>
         <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg></button>
       </div>
+
+      <div class="section-label">Apariencia</div>
+      <label class="field">
+        <span>Tema de la interfaz</span>
+        <select id="themeSelect">
+          <option value="auto">Automático (según la hora)</option>
+          <option value="light">Claro</option>
+          <option value="dark">Oscuro</option>
+        </select>
+      </label>
+
+      <div style="margin: 16px 0; border-top: 1px solid var(--line);"></div>
 
       <label class="field">
         <span>Volumen general <strong id="volumeValue">80%</strong></span>
@@ -902,6 +923,22 @@
       <div class="dialog-foot">
         <button id="btnOpenData" class="btn btn-ghost" type="button">Carpeta de datos</button>
         <button class="btn btn-primary" data-close type="button">Listo</button>
+      </div>
+    </dialog>
+
+    <dialog id="confirmDialog" class="dialog dialog-small" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogText">
+      <div class="dialog-head">
+        <div>
+          <h2 id="confirmDialogTitle">Confirmar acción</h2>
+        </div>
+        <button class="icon-button" data-close type="button" aria-label="Cerrar"><svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><line x1="200" y1="56" x2="56" y2="200" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="200" y1="200" x2="56" y2="56" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg></button>
+      </div>
+
+      <p id="confirmDialogText" class="dialog-text"></p>
+
+      <div class="dialog-foot">
+        <button id="btnConfirmCancel" class="btn btn-ghost" type="button" data-close>Cancelar</button>
+        <button id="btnConfirmAccept" class="btn btn-danger-solid" type="button">Eliminar</button>
       </div>
     </dialog>
 

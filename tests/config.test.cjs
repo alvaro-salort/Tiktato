@@ -31,6 +31,17 @@ test('crea una configuración con reglas iniciales y token de overlay', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('el tema por defecto es automático y solo acepta valores válidos', () => {
+  const dir = tempDir();
+  assert.equal(loadConfig(dir).theme, 'auto');
+  assert.equal(normalizeConfig({ theme: 'dark' }).theme, 'dark');
+  assert.equal(normalizeConfig({ theme: 'light' }).theme, 'light');
+  assert.equal(normalizeConfig({ theme: 'auto' }).theme, 'auto');
+  assert.equal(normalizeConfig({ theme: 'blue' }).theme, 'auto');
+  assert.equal(normalizeConfig({}).theme, 'auto');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('permite guardar una lista vacía de reglas', () => {
   const dir = tempDir();
   const config = loadConfig(dir);

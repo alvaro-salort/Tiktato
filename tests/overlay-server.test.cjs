@@ -44,7 +44,7 @@ test('sirve health, overlay y config protegida', async () => {
 
     const overlay = await fetch(`http://127.0.0.1:${server.port}/overlay`);
     assert.equal(overlay.status, 200);
-    assert.match(await overlay.text(), /Tiktato Overlay/);
+    assert.match(await overlay.text(), /TikTato Overlay/);
 
     const denied = await fetch(`http://127.0.0.1:${server.port}/api/config`);
     assert.equal(denied.status, 401);

@@ -1,4 +1,4 @@
-# Tiktato
+# TikTato
 
 [![Versión](https://img.shields.io/github/v/release/alvaro-salort/Tiktato?style=for-the-badge&logo=github&logoColor=white&color=2ea44f&label=VERSION)](https://github.com/alvaro-salort/Tiktato/releases/latest)
 [![Descargas](https://img.shields.io/github/downloads/alvaro-salort/Tiktato/total?style=for-the-badge&logo=windows&logoColor=white&color=0078D4&label=DESCARGAS)](https://github.com/alvaro-salort/Tiktato/releases)
@@ -12,18 +12,26 @@
 
 ## Descargar
 
-- [Instalador de Windows v1.1.0 (`Tiktato-Setup-1.1.0.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
-- [Versión portable v1.1.0 (`Tiktato-Portable-1.1.0.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+- [Instalador de Windows v1.3.0 (`Tiktato-Setup-1.3.0.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+- [Versión portable v1.3.0 (`Tiktato-Portable-1.3.0.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
 
 También puedes ejecutarlo desde el código fuente con `npm install` y `npm start`.
 
-<img width="1361" height="696" alt="image" src="https://github.com/user-attachments/assets/bd3532b8-9c55-4fb2-817c-8087c860410c" />
+![Panel principal de TikTato en tema claro](docs/dashboard.png)
 
-![Panel de Tiktato](docs/dashboard.png)
+![El mismo panel en modo oscuro](docs/dashboard-dark.png)
+
+## Novedades de la versión 1.3.0
+
+- **Nuevo nombre e identidad**: TikTato estrena logo (la papa dentro del anillo REC) en la app, el instalador, los overlays y el icono de Windows.
+- **Modo oscuro automático**: el tema sigue la hora del equipo (oscuro de 20:00 a 07:00). Podés fijar claro u oscuro desde la barra lateral o en **Ajustes → Apariencia**; la elección se recuerda entre sesiones.
+- **Estado de conexión siempre visible**: el indicador Conectado / Desconectado se movió a la barra lateral, junto al logo, para verlo desde cualquier pestaña.
+- **Interfaz más clara**: mejor jerarquía de botones, acciones de sonido consolidadas, visor de actividad a la misma altura que la tarjeta de sonidos, textos más legibles y confirmaciones propias para acciones destructivas.
+- **Errores visibles**: los fallos de guardado, importación o copiado ahora se muestran como aviso flotante; las confirmaciones de éxito quedan en el estado de la interfaz para no interrumpir.
 
 ## Qué incluye
 
-- **Menú lateral con 4 secciones dedicadas**: Navegación ágil y accesible entre *Sonidos y Alertas*, *Overlay de Alertas*, *Frasco de Donaciones* y *Voz del Chat (TTS)*, con personalización rápida de regalos destacados, barra de estado único y controles organizados.
+- **Menú lateral con 4 secciones dedicadas**: Navegación ágil y accesible entre *Sonidos y Alertas*, *Overlay de Alertas*, *Frasco de Donaciones* y *Voz del Chat (TTS)*, con personalización rápida de regalos destacados, estado de conexión fijo en la barra lateral y controles organizados.
 - **Conexión directa y resiliente**: Conéctate a tu TikTok LIVE simplemente con tu nombre de usuario, con validación estricta de sala en vivo (`status === 2`), respaldo por scraping de perfil y detección en tiempo real de pausas, reanudaciones y cortes del directo.
 - **Reglas de sonido personalizables**: Asigna sonidos específicos a **regalos**, **follows**, **shares**, **likes**, **suscripciones / superfans** y **entradas al directo**.
 - **Manejo preciso de rachas de regalos**: Opción activable para que una racha de $N$ regalos (ej. 5 rosas) reproduzca $N$ veces su sonido asignado una detrás de otra, evitando duplicados cuando se envía un único regalo.
@@ -37,16 +45,17 @@ También puedes ejecutarlo desde el código fuente con `npm install` y `npm star
   - Embudos de rebote superiores para impedir expulsión accidental.
   - Carrusel rotativo de máximos donantes (*Leaderboard*) con medallas e insignias.
   - Alerta emergente en cada donación y partículas de celebración al alcanzar la meta.
-  - **Modo Ventana Nativa para TikTok LIVE Studio**: Permite abrir el Frasco en una ventana dedicada (`Tiktato - Frasco`) con selector rápido de fondo (**Verde Chroma**, **Oscuro**, **Azul Chroma**, **Magenta** o **Transparente**) para quienes transmiten directamente desde TikTok LIVE Studio sin OBS.
+  - **Modo Ventana Nativa para TikTok LIVE Studio**: Permite abrir el Frasco en una ventana dedicada (`TikTato - Frasco`) con selector rápido de fondo (**Verde Chroma**, **Oscuro**, **Azul Chroma**, **Magenta** o **Transparente**) para quienes transmiten directamente desde TikTok LIVE Studio sin OBS.
   - Modo de calibración/prueba con HUD interactivo (`/jar?test=1`).
 - **Voz para Chat y Regalos (TTS)**:
   - Selector de dialectos naturales de Google (España, LatAm, México, Argentina, EE.UU.) y compatibilidad automática con todas las voces del sistema instaladas en Windows.
   - **Lectura opcional del nombre de usuario**: Elige si el TTS lee el nombre del espectador antes del mensaje (`Usuario: hola`) o directamente el mensaje (`hola`), sin muletillas innecesarias.
   - **Filtros opcionales de chat por rol/nivel**: Por defecto lee todos los mensajes del chat (ideal para canales en crecimiento), con opción de restringir la lectura solo a **Moderadores**, **Suscriptores / Superfans**, **Mensajes destacados**, **Amigos**, **Seguidores**, **Donadores** (nivel mínimo configurable) o **Miembros del club**.
-  - **Moderación automática en vivo**: Si un moderador borra un mensaje o banea a un usuario en TikTok LIVE, Tiktato cancela y elimina automáticamente sus mensajes de la cola de voz.
+  - **Moderación automática en vivo**: Si un moderador borra un mensaje o banea a un usuario en TikTok LIVE, TikTato cancela y elimina automáticamente sus mensajes de la cola de voz.
   - **Control de historial (backlog)**: Lee como máximo los últimos 5 mensajes y evita repetir mensajes ya leídos tras reconexiones.
   - Cola inteligente con **auto-ducking** (atenúa los efectos sonoros mientras habla el TTS) y filtro anti-spam.
 - **Seguridad y privacidad**: URLs locales protegidas mediante tokens únicos. Credenciales de sesión cifradas localmente con el llavero seguro de Windows (`safeStorage`).
+- **Tema claro y oscuro automático**: por defecto sigue la hora del equipo (oscuro de 20:00 a 07:00); podés fijar claro u oscuro desde la barra lateral o en **Ajustes → Apariencia**, y la elección se recuerda entre sesiones.
 
 ![Overlay de alertas](docs/overlay.png)
 
@@ -69,6 +78,7 @@ Tiktato/
 │   ├── index.html          # Panel de control de escritorio con menú lateral
 │   ├── styles.css          # Estilos Bento / Material 3 y componentes de UI
 │   ├── app.js              # Lógica de la interfaz de usuario, navegación y gráficos
+│   ├── theme-init.js       # Aplica el tema claro u oscuro antes del primer pintado
 │   └── assets/             # Logo, íconos y tipografías Nunito y Fredoka
 ├── overlay/
 │   ├── overlay.html        # Página web transparente para OBS Browser Source
@@ -80,7 +90,7 @@ Tiktato/
 ├── shared/
 │   ├── audio-engine.js     # Motor de audio Web Audio API / HTML5 Audio con ducking y volumen > 100%
 │   └── tts-engine.js       # Motor de síntesis de voz (Google TTS + Web Speech API fallback)
-├── tests/                  # 91 pruebas unitarias automáticas con el runner nativo de Node.js
+├── tests/                  # 94 pruebas unitarias automáticas con el runner nativo de Node.js
 └── package.json            # Scripts, dependencias y configuración de electron-builder
 ```
 
@@ -113,7 +123,7 @@ Los binarios resultantes se generarán en la carpeta `dist/`.
 ### Notas sobre la versión Portable y Actualizaciones
 
 - **Auto-actualizaciones**: La versión instalada con NSIS (`Tiktato-Setup-*.exe`) se actualiza automáticamente de forma diferencial mediante GitHub Releases sin necesidad de privilegios de administrador (UAC). La versión portable no puede auto-actualizarse debido a que Windows mantiene el `.exe` bloqueado mientras está en ejecución.
-- **Portabilidad real de datos**: Para que la configuración viaje con la versión portable (ej. en un pendrive USB), crea una carpeta llamada `tiktato-data` al lado del ejecutable `Tiktato-Portable-*.exe`. Si la carpeta existe, Tiktato guardará su configuración, sonidos y registros allí en lugar de `%APPDATA%\tiktato`.
+- **Portabilidad real de datos**: Para que la configuración viaje con la versión portable (ej. en un pendrive USB), crea una carpeta llamada `tiktato-data` al lado del ejecutable `Tiktato-Portable-*.exe`. Si la carpeta existe, TikTato guardará su configuración, sonidos y registros allí en lugar de `%APPDATA%\tiktato`.
 - **Seguridad de sesión TikTok (DPAPI)**: Las credenciales de sesión opcional (`sessionid` y `tt-target-idc`) se cifran mediante `safeStorage` (DPAPI de Windows). Si copias la carpeta `tiktato-data` a otra computadora, Windows no podrá descifrar la clave y deberás volver a iniciar sesión mediante el código QR.
 
 ## Licencia

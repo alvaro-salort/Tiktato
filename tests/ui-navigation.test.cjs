@@ -216,23 +216,22 @@ test('fase 1: contraste WCAG 2.1 AA, desacoplamiento de input numérico tts y m�
   assert.match(stylesCss, /\.metric-value small\s*\{[^}]*margin-top:\s*1px;/);
 });
 
-test('fase 2: maquetación split-view en 2 columnas y card-activity fija con sticky', () => {
+test('fase 2: maquetación split-view en 2 columnas con tarjetas de igual altura', () => {
   // Grid de 2 columnas en escritorio
   assert.match(stylesCss, /\.sounds-workspace-grid\s*\{[^}]*display:\s*grid;/);
   assert.match(stylesCss, /\.sounds-workspace-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*7fr\)\s*minmax\(320px,\s*5fr\);/);
   assert.match(stylesCss, /\.sounds-workspace-grid\s*\{[^}]*gap:\s*16px;/);
-  assert.match(stylesCss, /\.sounds-workspace-grid\s*\{[^}]*align-items:\s*start;/);
+  assert.match(stylesCss, /\.sounds-workspace-grid\s*\{[^}]*align-items:\s*stretch;/);
   assert.match(stylesCss, /\.sounds-workspace-grid\s*\{[^}]*width:\s*100%;/);
 
-  // Sticky para card-activity
-  assert.match(stylesCss, /\.sounds-workspace-grid \.card-activity\s*\{[^}]*position:\s*sticky;/);
-  assert.match(stylesCss, /\.sounds-workspace-grid \.card-activity\s*\{[^}]*top:\s*16px;/);
-  assert.match(stylesCss, /\.sounds-workspace-grid \.card-activity\s*\{[^}]*max-height:\s*calc\(100vh - 120px\);/);
-  assert.match(stylesCss, /\.sounds-workspace-grid \.card-activity\s*\{[^}]*overflow-y:\s*auto;/);
+  // La actividad acompaña la altura de la tarjeta de sonidos y ya no es sticky
+  assert.match(stylesCss, /\.sounds-workspace-grid \.card-activity\s*\{[^}]*min-height:\s*380px;/);
+  assert.match(stylesCss, /\.sounds-workspace-grid \.card-activity\s*\{[^}]*max-height:\s*none;/);
+  assert.doesNotMatch(stylesCss, /\.sounds-workspace-grid \.card-activity\s*\{[^}]*position:\s*sticky;/);
 
-  // Responsive a 1 columna bajo 960px con posición estática
-  assert.match(stylesCss, /@media\s*\(max-width:\s*960px\)\s*\{[\s\S]*?\.sounds-workspace-grid[^}]*grid-template-columns:\s*1fr;/);
-  assert.match(stylesCss, /@media\s*\(max-width:\s*960px\)\s*\{[\s\S]*?\.sounds-workspace-grid \.card-activity[^}]*position:\s*static;/);
+  // Responsive a 1 columna bajo 1150px
+  assert.match(stylesCss, /@media\s*\(max-width:\s*1150px\)\s*\{[\s\S]*?\.sounds-workspace-grid[^}]*grid-template-columns:\s*1fr;/);
+  assert.match(stylesCss, /@media\s*\(max-width:\s*1150px\)\s*\{[\s\S]*?\.sounds-workspace-grid \.card-activity[^}]*height:\s*auto;/);
 
   // Eliminación de código muerto span 12
   assert.doesNotMatch(stylesCss, /\.card-sounds\s*\{[^}]*grid-column:\s*span 12;/);

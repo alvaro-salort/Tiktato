@@ -649,6 +649,10 @@ function applySettings(patch) {
     syncTikTokStreakOption();
   }
 
+  if (patch.theme === 'light' || patch.theme === 'dark' || patch.theme === 'auto') {
+    config.theme = patch.theme;
+  }
+
   if (typeof patch.sessionId === 'string' && patch.sessionId.trim()) {
     config.sessionIdEncrypted = encryptSecret(patch.sessionId.trim());
   }
@@ -661,6 +665,7 @@ function applySettings(patch) {
   }
 
   config = saveConfig(app.getPath('userData'), config);
+  if (patch.theme !== undefined) applyWindowTheme();
 }
 
 async function restartOverlayIfPortChanged(previousPort) {
@@ -815,6 +820,30 @@ async function logoutTikTok() {
 
 let whenReadyTimestamp = 0;
 
+const THEME_BACKGROUNDS = {
+  light: '#fff8f5',
+  dark: '#140f0b'
+};
+
+const NIGHT_START_HOUR = 20;
+const NIGHT_END_HOUR = 7;
+
+function isNightTime(date = new Date()) {
+  const hour = date.getHours();
+  return hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR;
+}
+
+function resolveThemeBackground(theme) {
+  const dark = theme === 'dark' || (theme !== 'light' && isNightTime());
+  return dark ? THEME_BACKGROUNDS.dark : THEME_BACKGROUNDS.light;
+}
+
+function applyWindowTheme() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setBackgroundColor(resolveThemeBackground(config.theme));
+  }
+}
+
 function createWindow() {
   const smokeScreenshot = (process.env.TIKTATO_SMOKE_SCREENSHOT || '').trim();
   mainWindow = new BrowserWindow({
@@ -822,10 +851,10 @@ function createWindow() {
     height: 860,
     minWidth: 980,
     minHeight: 680,
-    backgroundColor: '#fff8f5',
+    backgroundColor: resolveThemeBackground(config.theme),
     show: false,
     autoHideMenuBar: true,
-    title: 'Tiktato',
+    title: 'TikTato',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -1135,7 +1164,7 @@ function registerIpc() {
     const bg = String(opts?.bg || 'green');
     const url = jarUrl();
     if (!url) {
-      return { ok: false, error: 'El servidor del frasco no está activo. Reinicia Tiktato.' };
+      return { ok: false, error: 'El servidor del frasco no está activo. Reinicia TikTato.' };
     }
     if (jarStudioWindow && !jarStudioWindow.isDestroyed()) {
       jarStudioWindow.focus();
@@ -1149,7 +1178,7 @@ function registerIpc() {
       autoHideMenuBar: true,
       transparent: true,
       backgroundColor: '#00000000',
-      title: 'Tiktato - Frasco',
+      title: 'TikTato - Frasco',
       icon: path.join(__dirname, '..', 'build', 'icon.png'),
       webPreferences: {
         contextIsolation: true,
@@ -1246,7 +1275,7 @@ function wireTikTok() {
 
 async function bootstrap() {
   initLogger();
-  logger.info(`Tiktato ${app.getVersion()} iniciando en ${app.getPath('userData')}`);
+  logger.info(`TikTato ${app.getVersion()} iniciando en ${app.getPath('userData')}`);
   config = loadConfig(app.getPath('userData'));
   loadGiftsCatalog(app.getPath('userData'));
   refreshGiftsCatalog(app.getPath('userData'))
@@ -1289,7 +1318,7 @@ if (!singleInstance) {
     return bootstrap();
   }).catch((error) => {
     logger.error('[app] error fatal al iniciar', error);
-    dialog.showErrorBox('Tiktato no pudo iniciar', String(error?.stack || error));
+    dialog.showErrorBox('TikTato no pudo iniciar', String(error?.stack || error));
     app.quit();
   });
 

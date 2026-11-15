@@ -60,6 +60,7 @@ function createDefaultConfig() {
     autoConnect: false,
     masterVolume: 0.8,
     playInDashboard: false,
+    theme: 'auto',
     sessionIdEncrypted: '',
     ttTargetIdcEncrypted: '',
     overlay: {
@@ -359,6 +360,7 @@ function normalizeConfig(input) {
     autoConnect: source.autoConnect === true,
     masterVolume: clampNumber(source.masterVolume, defaults.masterVolume, 0, 1),
     playInDashboard: source.playInDashboard === true,
+    theme: ['light', 'dark', 'auto'].includes(source.theme) ? source.theme : defaults.theme,
     sessionIdEncrypted: String(source.sessionIdEncrypted || ''),
     ttTargetIdcEncrypted: String(source.ttTargetIdcEncrypted || ''),
     overlay: {
@@ -669,6 +671,7 @@ function publicConfig(config, { overlayUrl } = {}) {
     autoConnect: config.autoConnect,
     masterVolume: config.masterVolume,
     playInDashboard: config.playInDashboard,
+    theme: config.theme,
     hasSession: Boolean(config.sessionIdEncrypted),
     overlay: {
       port: config.overlay.port,

@@ -888,7 +888,7 @@ function setupTestMode() {
     { value: 1, giftName: 'Rosa', repeatCount: 1, username: 'RosaFan' },
     { value: 1, giftName: 'Rosa', repeatCount: 5, username: 'ComboFan' },
     { value: 5, giftName: 'Dedo Corazón', repeatCount: 1, username: 'Corazonero' },
-    { value: 99, giftName: 'Gorra Tiktato', repeatCount: 1, username: 'ModGamer' },
+    { value: 99, giftName: 'Gorra TikTato', repeatCount: 1, username: 'ModGamer' },
     { value: 500, giftName: 'Máquina de dinero', repeatCount: 1, username: 'DonanteTop' },
     { value: 1000, giftName: 'Galaxia', repeatCount: 1, username: 'ElenaLive' }
   ];
