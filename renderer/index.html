@@ -548,6 +548,15 @@
 
                 <div class="section-label" style="margin-top: 18px;">Voz y volumen</div>
                 <div class="field-compact-stack">
+                  <div class="field">
+                    <span>Proveedor TTS</span>
+                    <div id="ttsProviderTabs" class="tts-provider-tabs" role="group" aria-label="Proveedor de voz TTS">
+                      <button class="tts-provider-pill is-active" data-tts-provider="google" type="button">Google</button>
+                      <button class="tts-provider-pill" data-tts-provider="local" type="button">Local</button>
+                      <button class="tts-provider-pill" data-tts-provider="fish" type="button">Fish Audio (API Key propia)</button>
+                    </div>
+                  </div>
+
                   <label class="field">
                     <span>Proveedor y tipo de voz</span>
                     <select id="ttsVoiceProvider" aria-label="Elegir voz">
@@ -556,10 +565,13 @@
                         <option value="google:es-US">Google Español (Latinoamérica)</option>
                         <option value="google:es-MX">Google Español (México)</option>
                         <option value="google:es-AR">Google Español (Argentina)</option>
-                        <option value="google:en-US">Google English (US)</option>
+                        <!-- <option value="google:en-US">Google English (US)</option> -->
                       </optgroup>
                       <optgroup id="ttsLocalVoicesGroup" label="Voces del sistema (Windows)">
                         <option value="local">Predeterminada del sistema</option>
+                      </optgroup>
+                      <optgroup label="Fish Audio (API Key propia)">
+                        <option value="fish">Fish Audio (API Key propia)</option>
                       </optgroup>
                     </select>
                   </label>
@@ -632,6 +644,98 @@
                   </div>
                 </div>
               </div>
+
+              <!-- CONFIGURACIÓN Y EXPLORADOR DE VOCES FISH AUDIO (BYOK) -->
+              <section id="ttsFishConfigBox" class="fish-config-section" hidden>
+                <div class="fish-header-row">
+                  <div class="fish-title-wrap">
+                    <div class="section-label">Fish Audio · API Key propia</div>
+                    <p class="field-hint">
+                      Usa tu propia clave gratuita de Fish Audio para desbloquear voces de personajes y clones. Se guarda cifrada en tu equipo y nunca se expone al overlay.
+                      <a class="fish-key-link" href="https://fish.audio/app/developers/get-started/" target="_blank" rel="noopener noreferrer">Obtener API Key gratuita ↗</a>
+                    </p>
+                  </div>
+                  <div class="fish-header-actions">
+                    <span id="ttsFishKeyStatus" class="chip">SIN API KEY</span>
+                    <button id="btnClearFishCache" class="btn btn-tiny btn-ghost" type="button" title="Limpiar caché de audios generados">Limpiar caché</button>
+                  </div>
+                </div>
+
+                <div class="fish-key-controls">
+                  <div class="fish-key-input-wrap">
+                    <input
+                      id="ttsFishApiKey"
+                      type="password"
+                      autocomplete="off"
+                      placeholder="Pega tu API Key de Fish Audio…"
+                      aria-label="API Key de Fish Audio"
+                    />
+                    <button id="btnToggleFishKey" class="icon-btn" type="button" title="Mostrar u ocultar API Key" aria-label="Mostrar u ocultar API Key">
+                      <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,56C48,56,16,128,16,128s32,72,112,72,112-72,112-72S208,56,128,56Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><circle cx="128" cy="128" r="36" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+                    </button>
+                  </div>
+                  <button id="btnSaveFishKey" class="btn btn-primary btn-small" type="button">Guardar clave</button>
+                  <button id="btnTestFishKey" class="btn btn-secondary btn-small" type="button">Probar conexión</button>
+                  <button id="btnClearFishKey" class="btn btn-ghost btn-small" type="button" hidden>Borrar</button>
+                </div>
+
+                <div class="fish-selected-bar">
+                  <div class="fish-selected-info">
+                    <span id="ttsFishSelectedAvatar" class="fish-avatar" aria-hidden="true">FA</span>
+                    <div class="fish-selected-copy">
+                      <strong id="ttsFishSelectedName">Selecciona una voz de Fish Audio</strong>
+                      <small id="ttsFishSelectedId">Sin reference_id activo</small>
+                    </div>
+                  </div>
+                  <div class="fish-manual-ref-group">
+                    <input
+                      id="ttsFishReferenceId"
+                      type="text"
+                      autocomplete="off"
+                      maxlength="80"
+                      placeholder="Pegar reference_id personalizado…"
+                      aria-label="Pegar reference_id personalizado de Fish Audio"
+                    />
+                    <button id="btnApplyFishRef" class="btn btn-ghost btn-small" type="button">Usar ID</button>
+                  </div>
+                </div>
+
+                <div class="fish-explorer-toolbar">
+                  <div class="fish-search-wrap">
+                    <input
+                      id="ttsFishSearch"
+                      type="search"
+                      autocomplete="off"
+                      placeholder="Buscar voces, personajes o celebridades…"
+                      aria-label="Buscar voces en Fish Audio"
+                    />
+                  </div>
+                  <select id="ttsFishLangFilter" class="fish-lang-select" aria-label="Filtrar idioma de voces Fish Audio">
+                    <option value="es" selected>Español (es)</option>
+                    <!-- Otros idiomas comentados por ahora:
+                    <option value="">Todos los idiomas</option>
+                    <option value="en">English (en)</option>
+                    <option value="pt">Português (pt)</option>
+                    <option value="it">Italiano (it)</option>
+                    <option value="ja">日本語 (ja)</option>
+                    -->
+                  </select>
+                  <button id="btnSearchFishVoices" class="btn btn-secondary btn-small" type="button">Buscar</button>
+                </div>
+
+                <div id="ttsFishCategoryTabs" class="fish-category-tabs" role="group" aria-label="Categorías de voces Fish Audio">
+                  <button class="fish-cat-pill is-active" data-fish-category="all" type="button">Todas</button>
+                  <button class="fish-cat-pill" data-fish-category="everyday" type="button">Cotidianas</button>
+                  <button class="fish-cat-pill" data-fish-category="characters" type="button">Personajes</button>
+                  <button class="fish-cat-pill" data-fish-category="celebrities" type="button">Celebridades</button>
+                  <button class="fish-cat-pill" data-fish-category="accents" type="button">Acentos</button>
+                  <button class="fish-cat-pill" data-fish-category="singing" type="button">Canto</button>
+                  <button class="fish-cat-pill" data-fish-category="self" type="button">Mis voces</button>
+                </div>
+
+                <div id="ttsFishVoicesStatus" class="fish-voices-status" hidden></div>
+                <div id="ttsFishVoicesGrid" class="fish-voices-grid" role="listbox" aria-label="Catálogo de voces de Fish Audio"></div>
+              </section>
             </div>
 
             <footer class="card-foot">

@@ -63,6 +63,7 @@ function createDefaultConfig() {
     theme: 'auto',
     sessionIdEncrypted: '',
     ttTargetIdcEncrypted: '',
+    fishApiKeyEncrypted: '',
     overlay: {
       port: 3477,
       token: crypto.randomBytes(24).toString('hex'),
@@ -107,6 +108,8 @@ function createDefaultConfig() {
       voiceProvider: 'google',
       voiceLanguage: 'es-ES',
       voiceId: 'google:es-ES',
+      fishVoiceName: '',
+      fishModel: 's2.1-pro-free',
       ducking: true,
       duckingLevel: 0.25,
       antiSpam: true,
@@ -302,7 +305,7 @@ function normalizeJar(input) {
 function normalizeTts(input) {
   const defaults = createDefaultConfig().tts;
   const tts = input && typeof input === 'object' ? input : {};
-  const voiceProvider = ['google', 'local'].includes(tts.voiceProvider)
+  const voiceProvider = ['google', 'local', 'fish'].includes(tts.voiceProvider)
     ? tts.voiceProvider
     : defaults.voiceProvider;
 
@@ -315,7 +318,9 @@ function normalizeTts(input) {
     volume: clampNumber(tts.volume, defaults.volume, 0, 1),
     voiceProvider,
     voiceLanguage: String(tts.voiceLanguage || defaults.voiceLanguage).slice(0, 20),
-    voiceId: String(tts.voiceId || defaults.voiceId || 'google:es-ES').slice(0, 100),
+    voiceId: String(tts.voiceId || defaults.voiceId || 'google:es-ES').slice(0, 120),
+    fishVoiceName: String(tts.fishVoiceName || '').trim().slice(0, 100),
+    fishModel: String(tts.fishModel || defaults.fishModel || 's2.1-pro-free').trim().slice(0, 60) || 's2.1-pro-free',
     ducking: tts.ducking !== false,
     duckingLevel: clampNumber(tts.duckingLevel, defaults.duckingLevel, 0, 1),
     antiSpam: tts.antiSpam !== undefined ? Boolean(tts.antiSpam) : true,
@@ -352,7 +357,7 @@ function normalizeConfig(input) {
     : [];
   sounds.playEveryStreak = soundsPlayEveryStreak;
 
-  return {
+  const result = {
     ...defaults,
     ...source,
     version: 1,
@@ -363,6 +368,7 @@ function normalizeConfig(input) {
     theme: ['light', 'dark', 'auto'].includes(source.theme) ? source.theme : defaults.theme,
     sessionIdEncrypted: String(source.sessionIdEncrypted || ''),
     ttTargetIdcEncrypted: String(source.ttTargetIdcEncrypted || ''),
+    fishApiKeyEncrypted: String(source.fishApiKeyEncrypted || ''),
     overlay: {
       ...defaults.overlay,
       ...overlay,
@@ -384,6 +390,8 @@ function normalizeConfig(input) {
     sounds,
     soundsPlayEveryStreak
   };
+  delete result.fishApiKey;
+  return result;
 }
 
 function configPath(userDataDir) {
@@ -673,6 +681,7 @@ function publicConfig(config, { overlayUrl } = {}) {
     playInDashboard: config.playInDashboard,
     theme: config.theme,
     hasSession: Boolean(config.sessionIdEncrypted),
+    hasFishApiKey: Boolean(config.fishApiKeyEncrypted),
     overlay: {
       port: config.overlay.port,
       position: config.overlay.position,
@@ -683,7 +692,7 @@ function publicConfig(config, { overlayUrl } = {}) {
     },
     overlayUrl: overlayUrl || '',
     jar: publicJar(config),
-    tts: config.tts || createDefaultConfig().tts,
+    tts: normalizeTts(config.tts),
     rules: config.rules,
     sounds: Object.assign([...(config.sounds || [])], {
       playEveryStreak: config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak ?? true

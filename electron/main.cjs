@@ -26,6 +26,7 @@ const { getActiveCatalog, loadGiftsCatalog, refreshGiftsCatalog } = require('./g
 const { OverlayServer } = require('./overlay-server.cjs');
 const { TikTokService } = require('./tiktok-service.cjs');
 const { setupAutoUpdater } = require('./updater.cjs');
+const { FishAudioService } = require('./fish-audio.cjs');
 
 const isDev = process.argv.includes('--dev');
 const MAX_ACTIVITY = 40;
@@ -48,6 +49,7 @@ let config = null;
 let overlayServer = null;
 let tiktok = null;
 let updaterApi = null;
+let fishAudio = null;
 let logFile = '';
 let quitting = false;
 const TIKTOK_LOGIN_PARTITION = 'persist:tiktok-login';
@@ -56,6 +58,8 @@ const BROWSER_UA =
 
 const cooldowns = new Map();
 const soundStreakTracker = createStreakTracker();
+const jarStreakTracker = createStreakTracker();
+let jarEventSeq = 0;
 const recentActivity = [];
 const stats = {
   gifts: 0,
@@ -223,6 +227,10 @@ function credentials() {
     sessionId: decryptSecret(config.sessionIdEncrypted),
     ttTargetIdc: decryptSecret(config.ttTargetIdcEncrypted)
   };
+}
+
+function getFishApiKey() {
+  return decryptSecret(config?.fishApiKeyEncrypted || '');
 }
 
 function soundUrl(sound) {
@@ -419,13 +427,49 @@ function registerActivity(event, alert) {
 
 function addToJar(event) {
   if (event.type !== 'gift') return;
-  if (event.repeatEnd === false) return;
   if (!shouldPassJarFilter(config.jar, event)) return;
 
-  const coinsAdded = Math.max(0, Number(event.coins) || 0);
+  const repeatCountTotal = Math.max(1, Number(event.repeatCount) || 1);
+  const coinsPerGift = Math.max(
+    0,
+    Number(
+      event.coinsPerGift ??
+      (event.coins ? Math.round(Number(event.coins) / repeatCountTotal) : 0)
+    ) || 0
+  );
+
+  let delta = repeatCountTotal;
+  let isNewStreak = true;
+  if (!event.test) {
+    const tracked = jarStreakTracker.process(
+      {
+        userId: event.userId,
+        username: event.username,
+        giftId: event.giftId,
+        giftName: event.giftName,
+        groupId: event.groupId,
+        msgId: event.msgId,
+        giftType: event.giftType,
+        repeatCount: repeatCountTotal,
+        repeatEnd: event.repeatEnd
+      },
+      Date.now(),
+      { playEveryStreak: true }
+    );
+    delta = tracked.streakDelta;
+    isNewStreak = tracked.isNewStreak;
+    if (delta <= 0) return;
+  } else if (event.streakDelta !== undefined) {
+    delta = Math.max(0, Number(event.streakDelta) || 0);
+    if (delta <= 0) return;
+  }
+
+  const coinsAdded = Math.max(0, coinsPerGift * delta);
 
   if (!event.test) {
-    config.jar.currentGifts += 1;
+    if (isNewStreak) {
+      config.jar.currentGifts += 1;
+    }
     config.jar.currentCoins += coinsAdded;
 
     config.jar.topDonors = updateTopDonorsList(config.jar.topDonors, {
@@ -436,29 +480,41 @@ function addToJar(event) {
     });
 
     if (config.jar.showRecentGifts) {
-      config.jar.recentGifts.unshift({
-        name: event.giftName || 'Regalo',
-        imageUrl: event.giftImageUrl || '',
-        coins: coinsAdded,
-        username: event.username || '',
-        at: new Date().toISOString()
-      });
-      config.jar.recentGifts = config.jar.recentGifts.slice(0, 8);
+      const giftLabel = event.giftName || 'Regalo';
+      const donorName = event.username || '';
+      if (
+        !isNewStreak &&
+        config.jar.recentGifts[0] &&
+        config.jar.recentGifts[0].name === giftLabel &&
+        config.jar.recentGifts[0].username === donorName
+      ) {
+        config.jar.recentGifts[0].coins += coinsAdded;
+        config.jar.recentGifts[0].at = new Date().toISOString();
+      } else {
+        config.jar.recentGifts.unshift({
+          name: giftLabel,
+          imageUrl: event.giftImageUrl || '',
+          coins: coinsAdded,
+          username: donorName,
+          at: new Date().toISOString()
+        });
+        config.jar.recentGifts = config.jar.recentGifts.slice(0, 8);
+      }
     }
     config = scheduleSaveConfig(app.getPath('userData'), config);
     updateJarOverlay();
   }
 
-  const value =
-    event.coinsPerGift ||
-    (event.repeatCount ? Math.round(coinsAdded / event.repeatCount) : coinsAdded) ||
-    1;
+  const value = Math.max(1, coinsPerGift || 1);
+  jarEventSeq += 1;
   const jarPayload = {
-    id: event.msgId || 'jar_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    id: `jar_${Date.now()}_${jarEventSeq}_${Math.random().toString(36).slice(2, 6)}`,
+    giftId: event.giftId || '',
     value,
     giftPictureUrl: event.giftImageUrl || '',
     giftName: event.giftName || 'Regalo',
-    repeatCount: Math.max(1, Number(event.repeatCount) || 1),
+    repeatCount: delta,
+    comboTotal: repeatCountTotal,
     username: event.username || 'alguien',
     displayName: event.displayName || event.username || 'Alguien',
     profilePictureUrl: event.avatarUrl || '',
@@ -514,6 +570,7 @@ function processEvent(event) {
           giftId: event.giftId,
           giftName: event.giftName,
           groupId: event.groupId,
+          msgId: event.msgId,
           giftType: event.giftType,
           repeatCount: event.repeatCount,
           repeatEnd: event.repeatEnd
@@ -584,7 +641,7 @@ function syncTikTokStreakOption() {
   const allowCombos =
     Boolean(config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak ?? true) ||
     Boolean(config.tts?.playEveryStreak !== false);
-  tiktok?.setOptions({ playEveryStreak: allowCombos });
+  tiktok?.setOptions({ playEveryStreak: allowCombos, emitAllPackets: true });
 }
 
 function applySettings(patch) {
@@ -662,6 +719,14 @@ function applySettings(patch) {
   if (patch.clearSession === true) {
     config.sessionIdEncrypted = '';
     config.ttTargetIdcEncrypted = '';
+  }
+
+  if (typeof patch.fishApiKey === 'string') {
+    const trimmed = patch.fishApiKey.trim();
+    config.fishApiKeyEncrypted = trimmed ? encryptSecret(trimmed) : '';
+  }
+  if (patch.clearFishApiKey === true) {
+    config.fishApiKeyEncrypted = '';
   }
 
   config = saveConfig(app.getPath('userData'), config);
@@ -1181,6 +1246,7 @@ function registerIpc() {
       title: 'TikTato - Frasco',
       icon: path.join(__dirname, '..', 'build', 'icon.png'),
       webPreferences: {
+        preload: path.join(__dirname, 'jar-studio-preload.cjs'),
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
@@ -1233,7 +1299,15 @@ function registerIpc() {
     return { ok: true, state: publicState() };
   });
 
+  ipcMain.on('jar:close-studio', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win && !win.isDestroyed() && win === jarStudioWindow) {
+      win.close();
+    }
+  });
+
   ipcMain.handle('jar:reset', () => {
+    jarStreakTracker.reset();
     config.jar.currentCoins = 0;
     config.jar.currentGifts = 0;
     config.jar.recentGifts = [];
@@ -1250,6 +1324,58 @@ function registerIpc() {
     return { ok: true };
   });
 
+  ipcMain.handle('tts:fish-set-key', (_event, payload) => {
+    const raw = typeof payload === 'string' ? payload : payload?.apiKey;
+    const trimmed = String(raw || '').trim();
+    config.fishApiKeyEncrypted = trimmed ? encryptSecret(trimmed) : '';
+    config = saveConfig(app.getPath('userData'), config);
+    sendState({ includeGifts: false });
+    return {
+      ok: true,
+      hasFishApiKey: Boolean(config.fishApiKeyEncrypted)
+    };
+  });
+
+  ipcMain.handle('tts:fish-test-key', async (_event, payload) => {
+    const raw = typeof payload === 'string' ? payload : payload?.apiKey;
+    const candidate = String(raw || '').trim() || getFishApiKey();
+    if (!fishAudio) {
+      fishAudio = new FishAudioService({ userDataDir: app.getPath('userData'), logger });
+    }
+    return fishAudio.testApiKey(candidate);
+  });
+
+  ipcMain.handle('tts:fish-list-voices', async (_event, query = {}) => {
+    if (!fishAudio) {
+      fishAudio = new FishAudioService({ userDataDir: app.getPath('userData'), logger });
+    }
+    return fishAudio.listVoices({
+      ...(query && typeof query === 'object' ? query : {}),
+      apiKey: getFishApiKey()
+    });
+  });
+
+  ipcMain.handle('tts:fish-synthesize', async (_event, payload = {}) => {
+    if (!fishAudio) {
+      fishAudio = new FishAudioService({ userDataDir: app.getPath('userData'), logger });
+    }
+    const req = payload && typeof payload === 'object' ? payload : {};
+    return fishAudio.synthesize({
+      apiKey: getFishApiKey(),
+      text: req.text,
+      referenceId: req.referenceId,
+      model: req.model || config?.tts?.fishModel,
+      speed: req.speed
+    });
+  });
+
+  ipcMain.handle('tts:fish-clear-cache', async () => {
+    if (!fishAudio) {
+      fishAudio = new FishAudioService({ userDataDir: app.getPath('userData'), logger });
+    }
+    return fishAudio.clearCache();
+  });
+
   ipcMain.handle('update:check', () => updaterApi?.check());
   ipcMain.handle('update:download', () => updaterApi?.download());
   ipcMain.handle('update:install', () => updaterApi?.install());
@@ -1264,6 +1390,7 @@ function wireTikTok() {
       acquireStreamResources();
     } else if (status.state === 'disconnected' || status.state === 'error') {
       soundStreakTracker.reset();
+      jarStreakTracker.reset();
       releaseStreamResources();
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1277,6 +1404,7 @@ async function bootstrap() {
   initLogger();
   logger.info(`TikTato ${app.getVersion()} iniciando en ${app.getPath('userData')}`);
   config = loadConfig(app.getPath('userData'));
+  fishAudio = new FishAudioService({ userDataDir: app.getPath('userData'), logger });
   loadGiftsCatalog(app.getPath('userData'));
   refreshGiftsCatalog(app.getPath('userData'))
     .then(() => sendState())

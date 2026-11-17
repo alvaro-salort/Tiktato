@@ -5,7 +5,13 @@ const api = window.tiktato;
 const audio = new SoundEngine();
 const ttsQueue = new TTSQueue({
   soundEngine: audio,
-  onStateChange: (stateData) => updateTtsQueueUI(stateData)
+  onStateChange: (stateData) => updateTtsQueueUI(stateData),
+  fishSynthesizer: async ({ text, referenceId, model }) => {
+    if (!api?.fishSynthesize) {
+      return { ok: false, error: 'Síntesis de Fish Audio no disponible' };
+    }
+    return api.fishSynthesize({ text, referenceId, model });
+  }
 });
 
 const $ = (selector) => document.querySelector(selector);
@@ -775,7 +781,7 @@ function renderJar() {
   if (selWrap) selWrap.hidden = jar.giftType !== 'selectedGifts';
 }
 
-function populateVoiceOptions(selectedVoiceId) {
+function populateVoiceOptions(selectedVoiceId, activeProvider = '') {
   const select = $('#ttsVoiceProvider');
   const localGroup = $('#ttsLocalVoicesGroup');
   if (!select || !localGroup) return;
@@ -794,8 +800,352 @@ function populateVoiceOptions(selectedVoiceId) {
     }
   }
 
-  if (selectedVoiceId && select) {
-    select.value = selectedVoiceId;
+  const targetValue =
+    activeProvider === 'fish' || String(selectedVoiceId || '').startsWith('fish:')
+      ? 'fish'
+      : selectedVoiceId;
+  if (targetValue && select) {
+    select.value = targetValue;
+  }
+}
+
+const FISH_CATEGORY_LABELS = {
+  all: 'Todas',
+  everyday: 'Cotidiana',
+  characters: 'Personaje',
+  celebrities: 'Celebridad',
+  accents: 'Acento',
+  singing: 'Canto',
+  self: 'Propia'
+};
+
+let fishVoices = [];
+let fishVoicesLoading = false;
+let fishVoicesLoadedOnce = false;
+let fishVoicesStatusMessage = '';
+let lastFishGridSig = '';
+let fishCategory = 'all';
+let fishLanguage = 'es';
+let fishSearchQuery = '';
+let fishKeyTestState = null;
+let fishKeyTestMessage = '';
+let fishKeyCredit = null;
+let fishPreviewAudio = null;
+let fishPreviewVoiceId = '';
+let fishSearchDebounce = null;
+let fishVoicesReqSeq = 0;
+
+function fishInitials(name) {
+  const words = String(name || 'FA').trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return `${words[0][0]}${words[1][0]}`.toUpperCase();
+  return String(words[0] || 'FA').slice(0, 2).toUpperCase();
+}
+
+function fishAvatarStyle(seed) {
+  let hash = 0;
+  const text = String(seed || 'fish');
+  for (let i = 0; i < text.length; i += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+  const hue = Math.abs(hash) % 360;
+  return `background: hsl(${hue}, 65%, 88%); color: hsl(${hue}, 70%, 24%);`;
+}
+
+function stopFishPreview() {
+  if (fishPreviewAudio) {
+    try {
+      fishPreviewAudio.pause();
+      fishPreviewAudio.src = '';
+    } catch {}
+    fishPreviewAudio = null;
+  }
+  if (fishPreviewVoiceId) {
+    fishPreviewVoiceId = '';
+    renderFishVoicesGrid();
+  }
+}
+
+async function previewFishVoice(voice) {
+  if (!voice?.referenceId) return;
+  if (fishPreviewVoiceId === voice.referenceId) {
+    stopFishPreview();
+    return;
+  }
+  stopFishPreview();
+
+  const volume = Math.max(0.15, Math.min(1, Number(state?.tts?.volume ?? 0.8)));
+  fishPreviewVoiceId = voice.referenceId;
+  renderFishVoicesGrid();
+
+  const playUrl = (src) => {
+    if (fishPreviewVoiceId !== voice.referenceId) return;
+    const player = new Audio(src);
+    player.volume = volume;
+    fishPreviewAudio = player;
+    const clear = () => {
+      if (fishPreviewAudio === player) {
+        fishPreviewAudio = null;
+        fishPreviewVoiceId = '';
+        renderFishVoicesGrid();
+      }
+    };
+    player.addEventListener('ended', clear, { once: true });
+    player.addEventListener('error', () => {
+      clear();
+      showToast('No se pudo reproducir la vista previa de esta voz', 'error');
+    }, { once: true });
+    player.play().catch(() => {
+      clear();
+      showToast('No se pudo reproducir el audio de vista previa', 'error');
+    });
+  };
+
+  if (state?.hasFishApiKey && api?.fishSynthesize) {
+    try {
+      const sampleText = voice.languages?.includes('en') && !voice.languages?.includes('es')
+        ? 'Hello! This is a preview of this Fish Audio voice.'
+        : 'Hola, así suena esta voz en TikTato.';
+      const res = await api.fishSynthesize({
+        text: sampleText,
+        referenceId: voice.referenceId,
+        model: state?.tts?.fishModel
+      });
+      if (fishPreviewVoiceId !== voice.referenceId) return;
+      if (res?.ok && res.audioBase64) {
+        playUrl(`data:${res.contentType || 'audio/mpeg'};base64,${res.audioBase64}`);
+        return;
+      }
+      if (voice.sampleAudioUrl) {
+        if (res?.error) showToast(res.error, 'error');
+        playUrl(voice.sampleAudioUrl);
+        return;
+      }
+      fishPreviewVoiceId = '';
+      renderFishVoicesGrid();
+      showToast(res?.error || 'No se pudo generar la vista previa', 'error');
+      return;
+    } catch (err) {
+      if (fishPreviewVoiceId !== voice.referenceId) return;
+      if (voice.sampleAudioUrl) {
+        playUrl(voice.sampleAudioUrl);
+        return;
+      }
+      fishPreviewVoiceId = '';
+      renderFishVoicesGrid();
+      showToast(err?.message || 'Error al previsualizar voz', 'error');
+      return;
+    }
+  }
+
+  if (voice.sampleAudioUrl) {
+    playUrl(voice.sampleAudioUrl);
+  } else {
+    fishPreviewVoiceId = '';
+    renderFishVoicesGrid();
+    showToast('Configura tu API Key de Fish Audio para escuchar esta voz.', 'error');
+  }
+}
+
+function renderFishVoicesGrid() {
+  const grid = $('#ttsFishVoicesGrid');
+  const statusEl = $('#ttsFishVoicesStatus');
+  if (!grid) return;
+
+  const activeVoiceId = String(state?.tts?.voiceId || '');
+  const activeRef = activeVoiceId.startsWith('fish:') ? activeVoiceId.slice(5) : '';
+
+  if (fishVoicesLoading && fishVoices.length === 0) {
+    if (statusEl) {
+      statusEl.hidden = false;
+      statusEl.textContent = 'Buscando voces en Fish Audio…';
+    }
+    if (lastFishGridSig !== 'loading') {
+      lastFishGridSig = 'loading';
+      grid.innerHTML = '';
+    }
+    return;
+  }
+
+  if (fishVoices.length === 0) {
+    const emptyMsg =
+      fishVoicesStatusMessage ||
+      (fishCategory === 'self' && !state?.hasFishApiKey
+        ? 'Guarda tu API Key de Fish Audio para listar tus propias voces.'
+        : 'No se encontraron voces con esos filtros. También puedes pegar cualquier reference_id manualmente arriba.');
+    if (statusEl) {
+      statusEl.hidden = false;
+      statusEl.textContent = emptyMsg;
+    }
+    const emptySig = `empty:${emptyMsg}`;
+    if (lastFishGridSig !== emptySig) {
+      lastFishGridSig = emptySig;
+      grid.innerHTML = '';
+    }
+    return;
+  }
+
+  if (statusEl) {
+    if (fishVoicesStatusMessage) {
+      statusEl.hidden = false;
+      statusEl.textContent = fishVoicesStatusMessage;
+    } else {
+      statusEl.hidden = true;
+      statusEl.textContent = '';
+    }
+  }
+
+  const nextSig = `${activeRef}|${fishPreviewVoiceId}|${fishVoices.map((v) => `${v.referenceId}:${v.name}`).join(',')}`;
+  if (nextSig === lastFishGridSig) return;
+  lastFishGridSig = nextSig;
+
+  grid.innerHTML = fishVoices
+    .map((voice) => {
+      const isSelected = activeRef === voice.referenceId;
+      const isPreviewing = fishPreviewVoiceId === voice.referenceId;
+      const catLabel = FISH_CATEGORY_LABELS[voice.category] || voice.category || 'Voz';
+      const langs = Array.isArray(voice.languages) && voice.languages.length > 0
+        ? voice.languages.slice(0, 3).map((l) => l.toUpperCase()).join(' · ')
+        : '';
+      return `
+        <article class="fish-voice-card ${isSelected ? 'is-selected' : ''}" data-fish-ref="${escapeHtml(voice.referenceId)}">
+          <div class="fish-voice-card-head">
+            <span class="fish-avatar" style="${fishAvatarStyle(voice.name)}" aria-hidden="true">${escapeHtml(fishInitials(voice.name))}</span>
+            <div class="fish-voice-meta">
+              <strong class="fish-voice-name" title="${escapeHtml(voice.name)}">${escapeHtml(voice.name)}</strong>
+              <div class="fish-voice-badges">
+                ${voice.recommended ? '<span class="fish-badge fish-badge-recommended">★ Recomendada</span>' : ''}
+                <span class="fish-badge">${escapeHtml(catLabel)}</span>
+                ${langs ? `<span class="fish-badge">${escapeHtml(langs)}</span>` : ''}
+              </div>
+            </div>
+          </div>
+          ${voice.description ? `<p class="fish-voice-desc">${escapeHtml(voice.description)}</p>` : ''}
+          <div class="fish-voice-actions">
+            <button class="btn btn-ghost btn-small" data-fish-action="preview" type="button">
+              ${isPreviewing ? '⏹ Detener' : '▶ Escuchar'}
+            </button>
+            <button class="btn ${isSelected ? 'btn-primary' : 'btn-secondary'} btn-small" data-fish-action="select" type="button">
+              ${isSelected ? '✓ Activa' : 'Seleccionar'}
+            </button>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+}
+
+async function loadFishVoices() {
+  if (!api?.fishListVoices) return;
+  const reqSeq = ++fishVoicesReqSeq;
+  fishVoicesLoading = true;
+  fishVoicesLoadedOnce = true;
+  const statusEl = $('#ttsFishVoicesStatus');
+  if (statusEl && fishVoices.length === 0) {
+    statusEl.hidden = false;
+    statusEl.textContent = 'Cargando catálogo de voces de Fish Audio…';
+  }
+  try {
+    const res = await api.fishListVoices({
+      query: fishSearchQuery,
+      category: fishCategory === 'self' ? 'all' : fishCategory,
+      language: fishLanguage,
+      selfOnly: fishCategory === 'self'
+    });
+    if (reqSeq !== fishVoicesReqSeq) return;
+    fishVoices = Array.isArray(res?.voices) ? res.voices : [];
+    if (res?.error) {
+      fishVoicesStatusMessage = res.error;
+    } else if (res?.warning) {
+      fishVoicesStatusMessage = fishVoices.length > 0
+        ? `${res.warning} (mostrando voces populares locales).`
+        : res.warning;
+    } else if (res?.needsApiKey) {
+      fishVoicesStatusMessage = fishVoices.length > 0
+        ? 'Mostrando voces populares de ejemplo. Guarda tu API Key gratuita arriba para buscar en todo el catálogo de Fish Audio.'
+        : 'No hay voces locales con esos filtros. Guarda tu API Key gratuita arriba para buscar en todo el catálogo de Fish Audio.';
+    } else {
+      fishVoicesStatusMessage = '';
+    }
+  } catch (err) {
+    if (reqSeq !== fishVoicesReqSeq) return;
+    fishVoicesStatusMessage = err?.message || 'No se pudieron cargar las voces de Fish Audio.';
+  } finally {
+    if (reqSeq === fishVoicesReqSeq) {
+      fishVoicesLoading = false;
+      lastFishGridSig = '';
+      renderFishVoicesGrid();
+    }
+  }
+}
+
+function renderFishSection(activeProvider) {
+  const box = $('#ttsFishConfigBox');
+  const tabs = $$('#ttsProviderTabs [data-tts-provider]');
+  for (const btn of tabs) {
+    const active = btn.dataset.ttsProvider === activeProvider;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-pressed', String(active));
+  }
+  if (!box) return;
+  box.hidden = activeProvider !== 'fish';
+  if (activeProvider !== 'fish') return;
+
+  const hasKey = Boolean(state?.hasFishApiKey);
+  const keyBadge = $('#ttsFishKeyStatus');
+  const clearBtn = $('#btnClearFishKey');
+  const keyInput = $('#ttsFishApiKey');
+  if (clearBtn) clearBtn.hidden = !hasKey;
+  if (keyInput) {
+    keyInput.placeholder = hasKey
+      ? 'API Key guardada cifrada (pega otra para reemplazar)…'
+      : 'Pega tu API Key de Fish Audio…';
+  }
+  if (keyBadge) {
+    if (fishKeyTestState === 'testing') {
+      keyBadge.textContent = 'PROBANDO…';
+      keyBadge.className = 'chip';
+      keyBadge.title = '';
+    } else if (fishKeyTestState === 'valid') {
+      keyBadge.textContent = 'CONEXIÓN VERIFICADA';
+      keyBadge.className = 'chip is-ok';
+      keyBadge.title = fishKeyCredit !== null && fishKeyCredit !== undefined ? `Crédito disponible: ${fishKeyCredit}` : '';
+    } else if (fishKeyTestState === 'invalid') {
+      keyBadge.textContent = 'CLAVE INVÁLIDA';
+      keyBadge.className = 'chip is-error';
+      keyBadge.title = fishKeyTestMessage || '';
+    } else if (hasKey) {
+      keyBadge.textContent = 'API KEY GUARDADA';
+      keyBadge.className = 'chip is-ok';
+      keyBadge.title = '';
+    } else {
+      keyBadge.textContent = 'SIN API KEY';
+      keyBadge.className = 'chip';
+      keyBadge.title = '';
+    }
+  }
+
+  const voiceId = String(state?.tts?.voiceId || '');
+  const activeRef = voiceId.startsWith('fish:') ? voiceId.slice(5) : '';
+  const matchedVoice = fishVoices.find((v) => v.referenceId === activeRef);
+  const selectedName =
+    state?.tts?.fishVoiceName ||
+    matchedVoice?.name ||
+    (activeRef ? 'Voz personalizada de Fish Audio' : 'Selecciona una voz de Fish Audio');
+
+  const avatarEl = $('#ttsFishSelectedAvatar');
+  const nameEl = $('#ttsFishSelectedName');
+  const idEl = $('#ttsFishSelectedId');
+  if (avatarEl) {
+    avatarEl.textContent = activeRef ? fishInitials(selectedName) : 'FA';
+    avatarEl.setAttribute('style', activeRef ? fishAvatarStyle(selectedName) : '');
+  }
+  if (nameEl) nameEl.textContent = selectedName;
+  if (idEl) idEl.textContent = activeRef ? `reference_id: ${activeRef}` : 'Sin reference_id activo';
+
+  if (!fishVoicesLoadedOnce && !fishVoicesLoading) {
+    loadFishVoices();
+  } else {
+    renderFishVoicesGrid();
   }
 }
 
@@ -866,9 +1216,24 @@ function renderTTS() {
   setInputChecked('#ttsAllowMember', Boolean(tts.allowMember));
   setInputValue('#ttsMinMemberLevel', tts.minMemberLevel ?? 1);
 
-  const currentVoiceId = tts.voiceId || (tts.voiceProvider === 'google' ? `google:${tts.voiceLanguage || 'es-ES'}` : 'local');
-  populateVoiceOptions(currentVoiceId);
-  if (providerSelect) providerSelect.value = currentVoiceId;
+  const currentVoiceId =
+    tts.voiceId ||
+    (tts.voiceProvider === 'google'
+      ? `google:${tts.voiceLanguage || 'es-ES'}`
+      : tts.voiceProvider === 'fish'
+        ? 'fish:'
+        : 'local');
+  const activeProvider =
+    tts.voiceProvider === 'fish' || String(currentVoiceId).startsWith('fish:')
+      ? 'fish'
+      : tts.voiceProvider === 'local' || String(currentVoiceId).startsWith('local')
+        ? 'local'
+        : 'google';
+  populateVoiceOptions(currentVoiceId, activeProvider);
+  if (providerSelect) {
+    providerSelect.value = activeProvider === 'fish' ? 'fish' : currentVoiceId;
+  }
+  renderFishSection(activeProvider);
 
   const volPercent = Math.round((tts.volume ?? 0.8) * 100);
   if (volumeSlider) volumeSlider.value = volPercent;
@@ -953,6 +1318,7 @@ function handleIncomingEventForTTS(event) {
       voiceId: ttsSettings.voiceId,
       voiceProvider: ttsSettings.voiceProvider || 'google',
       voiceLanguage: ttsSettings.voiceLanguage || 'es-ES',
+      fishModel: ttsSettings.fishModel || undefined,
       volume: (state.masterVolume ?? 0.8) * (ttsSettings.volume ?? 0.8),
       ducking: ttsSettings.ducking !== false,
       duckingLevel: ttsSettings.duckingLevel ?? 0.25,
@@ -975,6 +1341,7 @@ function handleIncomingEventForTTS(event) {
       voiceId: ttsSettings.voiceId,
       voiceProvider: ttsSettings.voiceProvider || 'google',
       voiceLanguage: ttsSettings.voiceLanguage || 'es-ES',
+      fishModel: ttsSettings.fishModel || undefined,
       volume: (state.masterVolume ?? 0.8) * (ttsSettings.volume ?? 0.8),
       ducking: ttsSettings.ducking !== false,
       duckingLevel: ttsSettings.duckingLevel ?? 0.25,
@@ -2032,15 +2399,254 @@ function wireEvents() {
     saveTtsPatch({ minMemberLevel: val });
   });
 
+  const selectFishProvider = () => {
+    const existingVoiceId = String(state?.tts?.voiceId || '');
+    if (existingVoiceId.startsWith('fish:') && existingVoiceId.length > 5) {
+      saveTtsPatch({ voiceProvider: 'fish', voiceId: existingVoiceId });
+      return;
+    }
+    const defaultFish = fishVoices[0] || {
+      referenceId: '47d00a02c75f47b7877fe925ab66b5f2',
+      name: 'Babidi'
+    };
+    saveTtsPatch({
+      voiceProvider: 'fish',
+      voiceId: `fish:${defaultFish.referenceId}`,
+      fishVoiceName: defaultFish.name
+    });
+  };
+
+  $('#ttsProviderTabs')?.addEventListener('click', (e) => {
+    const pill = e.target.closest('[data-tts-provider]');
+    if (!pill) return;
+    const provider = pill.dataset.ttsProvider;
+    if (provider === 'fish') {
+      selectFishProvider();
+    } else if (provider === 'local') {
+      stopFishPreview();
+      saveTtsPatch({ voiceProvider: 'local', voiceLanguage: 'es-ES', voiceId: 'local' });
+    } else {
+      stopFishPreview();
+      const lang = state?.tts?.voiceLanguage || 'es-ES';
+      saveTtsPatch({ voiceProvider: 'google', voiceLanguage: lang, voiceId: `google:${lang}` });
+    }
+  });
+
   $('#ttsVoiceProvider')?.addEventListener('change', (e) => {
     const val = e.target.value;
-    if (val.startsWith('google:')) {
+    if (val === 'fish') {
+      selectFishProvider();
+    } else if (val.startsWith('google:')) {
+      stopFishPreview();
       const lang = val.split(':')[1] || 'es-ES';
       saveTtsPatch({ voiceProvider: 'google', voiceLanguage: lang, voiceId: val });
-    } else if (val.startsWith('local:')) {
+    } else if (val.startsWith('local')) {
+      stopFishPreview();
       saveTtsPatch({ voiceProvider: 'local', voiceLanguage: 'es-ES', voiceId: val });
     } else {
+      stopFishPreview();
       saveTtsPatch({ voiceProvider: val, voiceId: val });
+    }
+  });
+
+  $('#btnToggleFishKey')?.addEventListener('click', () => {
+    const input = $('#ttsFishApiKey');
+    if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+  });
+
+  $('#ttsFishApiKey')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      $('#btnSaveFishKey')?.click();
+    }
+  });
+
+  $('#btnSaveFishKey')?.addEventListener('click', async () => {
+    const input = $('#ttsFishApiKey');
+    const raw = String(input?.value || '').trim();
+    if (!raw) {
+      showToast('Pega tu API Key de Fish Audio antes de guardar.', 'error');
+      input?.focus();
+      return;
+    }
+    try {
+      const res = await api.fishSetApiKey(raw);
+      if (input) {
+        input.value = '';
+        input.type = 'password';
+      }
+      fishKeyTestState = null;
+      fishKeyTestMessage = '';
+      fishKeyCredit = null;
+      if (state) state.hasFishApiKey = Boolean(res?.hasFishApiKey);
+      renderTTS();
+      loadFishVoices();
+    } catch (err) {
+      showToast(err?.message || 'No se pudo guardar la API Key', 'error');
+    }
+  });
+
+  $('#btnTestFishKey')?.addEventListener('click', async () => {
+    const input = $('#ttsFishApiKey');
+    const typed = String(input?.value || '').trim();
+    if (!typed && !state?.hasFishApiKey) {
+      showToast('Pega tu API Key de Fish Audio para probar la conexión.', 'error');
+      input?.focus();
+      return;
+    }
+    fishKeyTestState = 'testing';
+    fishKeyTestMessage = '';
+    fishKeyCredit = null;
+    renderFishSection('fish');
+    try {
+      const res = await api.fishTestKey(typed);
+      if (res?.valid) {
+        if (typed) {
+          await api.fishSetApiKey(typed);
+          if (input) {
+            input.value = '';
+            input.type = 'password';
+          }
+          if (state) state.hasFishApiKey = true;
+        }
+        fishKeyTestState = 'valid';
+        fishKeyTestMessage = '';
+        fishKeyCredit = res?.credit ?? null;
+        loadFishVoices();
+      } else {
+        fishKeyTestState = 'invalid';
+        fishKeyTestMessage = res?.error || 'API Key inválida';
+        fishKeyCredit = null;
+        showToast(fishKeyTestMessage, 'error');
+      }
+    } catch (err) {
+      fishKeyTestState = 'invalid';
+      fishKeyTestMessage = err?.message || 'Error al probar conexión';
+      fishKeyCredit = null;
+      showToast(fishKeyTestMessage, 'error');
+    }
+    renderFishSection('fish');
+  });
+
+  $('#btnClearFishKey')?.addEventListener('click', async () => {
+    const confirmed = await confirmAction({
+      title: 'Borrar API Key de Fish Audio',
+      message: 'Se eliminará tu clave guardada de este equipo.',
+      acceptLabel: 'Borrar clave'
+    });
+    if (!confirmed) return;
+    await api.fishSetApiKey('');
+    fishKeyTestState = null;
+    fishKeyTestMessage = '';
+    fishKeyCredit = null;
+    if (state) state.hasFishApiKey = false;
+    renderTTS();
+    loadFishVoices();
+  });
+
+  $('#btnClearFishCache')?.addEventListener('click', async () => {
+    const btn = $('#btnClearFishCache');
+    ttsQueue.clearAudioCache();
+    try {
+      await api.fishClearCache?.();
+      if (btn) {
+        const orig = btn.textContent;
+        btn.textContent = 'Caché limpia';
+        btn.disabled = true;
+        window.setTimeout(() => {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }, 1800);
+      }
+    } catch (err) {
+      showToast(err?.message || 'No se pudo limpiar la caché de Fish Audio', 'error');
+    }
+  });
+
+  const applyManualFishRef = () => {
+    const input = $('#ttsFishReferenceId');
+    const raw = String(input?.value || '').trim();
+    const urlMatch = raw.match(
+      /fish\.audio\/(?:(?:[a-z]{2}(?:-[a-z]{2,4})?\/)?m\/|[^?#]*[?&]modelId=)([a-zA-Z0-9_-]{8,64})/i
+    );
+    const refId = urlMatch
+      ? urlMatch[1]
+      : (raw.startsWith('fish:') ? raw.slice(5).trim() : raw);
+    if (!/^[a-zA-Z0-9_-]{8,64}$/.test(refId)) {
+      showToast('Introduce un reference_id válido de Fish Audio.', 'error');
+      input?.focus();
+      return;
+    }
+    const found = fishVoices.find((v) => v.referenceId === refId);
+    saveTtsPatch({
+      voiceProvider: 'fish',
+      voiceId: `fish:${refId}`,
+      fishVoiceName: found?.name || 'Voz personalizada'
+    });
+    if (input) input.value = '';
+  };
+
+  $('#btnApplyFishRef')?.addEventListener('click', applyManualFishRef);
+  $('#ttsFishReferenceId')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyManualFishRef();
+    }
+  });
+
+  $('#ttsFishSearch')?.addEventListener('input', (e) => {
+    fishSearchQuery = String(e.target.value || '').trim();
+    window.clearTimeout(fishSearchDebounce);
+    fishSearchDebounce = window.setTimeout(() => {
+      loadFishVoices();
+    }, 300);
+  });
+
+  $('#ttsFishSearch')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      window.clearTimeout(fishSearchDebounce);
+      fishSearchQuery = String(e.target.value || '').trim();
+      loadFishVoices();
+    }
+  });
+
+  $('#btnSearchFishVoices')?.addEventListener('click', () => {
+    fishSearchQuery = String($('#ttsFishSearch')?.value || '').trim();
+    loadFishVoices();
+  });
+
+  $('#ttsFishLangFilter')?.addEventListener('change', (e) => {
+    fishLanguage = String(e.target.value || '').trim();
+    loadFishVoices();
+  });
+
+  $('#ttsFishCategoryTabs')?.addEventListener('click', (e) => {
+    const pill = e.target.closest('[data-fish-category]');
+    if (!pill) return;
+    fishCategory = pill.dataset.fishCategory || 'all';
+    for (const btn of $$('#ttsFishCategoryTabs [data-fish-category]')) {
+      btn.classList.toggle('is-active', btn === pill);
+    }
+    loadFishVoices();
+  });
+
+  $('#ttsFishVoicesGrid')?.addEventListener('click', (e) => {
+    const card = e.target.closest('[data-fish-ref]');
+    if (!card) return;
+    const refId = card.dataset.fishRef;
+    const voice = fishVoices.find((v) => v.referenceId === refId);
+    if (!voice) return;
+    const action = e.target.closest('[data-fish-action]')?.dataset.fishAction;
+    if (action === 'preview') {
+      previewFishVoice(voice);
+    } else if (action === 'select') {
+      saveTtsPatch({
+        voiceProvider: 'fish',
+        voiceId: `fish:${voice.referenceId}`,
+        fishVoiceName: voice.name
+      });
     }
   });
 
@@ -2063,8 +2669,12 @@ function wireEvents() {
   });
 
   $('#btnTestTTS')?.addEventListener('click', async () => {
+    stopFishPreview();
     await audio.unlock();
     const currentVoiceId = state?.tts?.voiceId || (state?.tts?.voiceProvider === 'google' ? `google:${state?.tts?.voiceLanguage || 'es-ES'}` : 'local');
+    if (state?.tts?.voiceProvider === 'fish' && !state?.hasFishApiKey) {
+      showToast('Configura tu API Key de Fish Audio para usar esta voz (reproduciendo respaldo).', 'error');
+    }
     ttsQueue.enqueue({
       text: '¡Hola! La voz y el texto a voz de TikTato están funcionando en directo.',
       username: 'TikTato',
@@ -2072,6 +2682,7 @@ function wireEvents() {
       voiceId: currentVoiceId,
       voiceProvider: state?.tts?.voiceProvider || 'google',
       voiceLanguage: state?.tts?.voiceLanguage || 'es-ES',
+      fishModel: state?.tts?.fishModel || undefined,
       volume: (state?.masterVolume ?? 0.8) * (state?.tts?.volume ?? 0.8),
       ducking: state?.tts?.ducking !== false,
       duckingLevel: state?.tts?.duckingLevel ?? 0.25,
@@ -2087,6 +2698,7 @@ function wireEvents() {
   });
 
   $('#btnClearTTS')?.addEventListener('click', () => {
+    stopFishPreview();
     if (ttsQueue.isMuted) {
       ttsQueue.mute(false);
       showToast('Voz reanudada');
@@ -2357,7 +2969,7 @@ async function init() {
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     window.speechSynthesis.onvoiceschanged = () => {
       const currentVoiceId = state?.tts?.voiceId || (state?.tts?.voiceProvider === 'google' ? `google:${state?.tts?.voiceLanguage || 'es-ES'}` : 'local');
-      populateVoiceOptions(currentVoiceId);
+      populateVoiceOptions(currentVoiceId, state?.tts?.voiceProvider);
     };
   }
   if (!api) {

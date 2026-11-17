@@ -254,5 +254,47 @@ test('flushConfigSave persiste incluso si writeConfigAsync ya está en vuelo al 
   }
 });
 
+test('fishApiKeyEncrypted se guarda en config local y nunca se expone en publicConfig', () => {
+  const dir = tempDir();
+  try {
+    const initial = loadConfig(dir);
+    assert.equal(initial.fishApiKeyEncrypted, '');
+    const initialPublic = publicConfig(initial);
+    assert.equal(initialPublic.hasFishApiKey, false);
+    assert.equal('fishApiKeyEncrypted' in initialPublic, false);
+    assert.equal('fishApiKey' in initialPublic, false);
+    assert.equal('fishApiKey' in initialPublic.tts, false);
+
+    const saved = saveConfig(dir, {
+      ...initial,
+      fishApiKey: 'sk_should_never_persist_plain',
+      fishApiKeyEncrypted: 'enc:secret_payload_123',
+      tts: {
+        ...initial.tts,
+        voiceProvider: 'fish',
+        voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8',
+        fishVoiceName: 'Goku',
+        fishApiKey: 'sk_nested_leak'
+      }
+    });
+
+    assert.equal('fishApiKey' in saved, false);
+    assert.equal('fishApiKey' in saved.tts, false);
+    assert.equal(saved.fishApiKeyEncrypted, 'enc:secret_payload_123');
+    assert.equal(saved.tts.voiceProvider, 'fish');
+    assert.equal(saved.tts.voiceId, 'fish:9f850ee9ada24b20a6866825eaefd3f8');
+    assert.equal(saved.tts.fishVoiceName, 'Goku');
+    assert.equal(saved.tts.fishModel, 's2.1-pro-free');
+
+    const pub = publicConfig(saved);
+    assert.equal(pub.hasFishApiKey, true);
+    assert.equal('fishApiKeyEncrypted' in pub, false);
+    assert.equal('fishApiKey' in pub, false);
+    assert.equal('fishApiKey' in pub.tts, false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 
 

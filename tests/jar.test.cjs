@@ -369,7 +369,740 @@ test('main.cjs e index.html incluyen protecciones de navegación, bytedance://, 
   assert.match(mainContent, /recentActivity\.find/);
   assert.match(mainContent, /transparent:\s*true/);
   assert.match(mainContent, /masterVolume:\s*Number/);
+  assert.match(mainContent, /jarStreakTracker/);
+  assert.match(mainContent, /jar:close-studio/);
   assert.match(indexHtml, /Content-Security-Policy/);
   assert.match(indexHtml, /object-src 'none'/);
 });
+
+function createJarVmSandbox({ search = '?studio=1', pathname = '/jar', hidden = false, windowWidth = 800, windowHeight = 800 } = {}) {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const vm = require('node:vm');
+
+  const jarCode = fs.readFileSync(path.join(__dirname, '..', 'overlay', 'jar.js'), 'utf8');
+  const worldBodies = [];
+  const engineListeners = {};
+  const renderListeners = {};
+  const elements = new Map();
+
+  const makeEl = (id = '') => {
+    const listeners = {};
+    const classes = new Set();
+    const el = {
+      id,
+      hidden: id === 'testHud' || id === 'studioHud',
+      textContent: '',
+      src: '',
+      dataset: {},
+      style: { width: '', transform: '', setProperty: () => {} },
+      classList: {
+        add: (...c) => c.forEach((x) => classes.add(x)),
+        remove: (...c) => c.forEach((x) => classes.delete(x)),
+        toggle: (c, force) => {
+          if (force === undefined) {
+            if (classes.has(c)) classes.delete(c);
+            else classes.add(c);
+          } else if (force) {
+            classes.add(c);
+          } else {
+            classes.delete(c);
+          }
+        },
+        contains: (c) => classes.has(c)
+      },
+      addEventListener: (type, fn) => {
+        if (!listeners[type]) listeners[type] = [];
+        listeners[type].push(fn);
+      },
+      click: () => {
+        for (const fn of listeners.click || []) fn({ target: el });
+      },
+      dispatchEvent: (evt) => {
+        for (const fn of listeners[evt.type] || []) fn(evt);
+      },
+      closest: (sel) => (sel === `#${id}` ? el : null)
+    };
+    return el;
+  };
+
+  const getEl = (selector) => {
+    if (!elements.has(selector)) {
+      elements.set(selector, makeEl(selector.replace(/^#/, '')));
+    }
+    return elements.get(selector);
+  };
+
+  const ctxOps = [];
+  const mockCtx = {
+    save: () => ctxOps.push('save'),
+    restore: () => ctxOps.push('restore'),
+    beginPath: () => ctxOps.push('beginPath'),
+    arc: () => ctxOps.push('arc'),
+    fill: () => ctxOps.push('fill'),
+    stroke: () => ctxOps.push('stroke'),
+    createRadialGradient: () => ({ addColorStop: () => {} }),
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1
+  };
+  const mockRender = { canvas: {}, options: {}, context: mockCtx, textures: {} };
+  const mockMatter = {
+    Engine: {
+      create: () => ({ world: { bodies: worldBodies } })
+    },
+    Render: {
+      create: () => mockRender,
+      run: () => {}
+    },
+    Runner: {
+      create: () => ({}),
+      run: () => {},
+      stop: () => {}
+    },
+    Bodies: {
+      rectangle: (x, y, w, h, opts = {}) => ({ x, y, w, h, isStatic: Boolean(opts.isStatic) }),
+      circle: (x, y, r, opts = {}) => ({
+        position: { x, y },
+        velocity: { x: 0, y: 0 },
+        circleRadius: r,
+        isStatic: false,
+        isSleeping: false,
+        render: opts.render || {}
+      })
+    },
+    Body: {
+      setVelocity: (body, vel) => {
+        body.velocity = { ...vel };
+      }
+    },
+    Composite: {
+      add: (_world, item) => {
+        if (Array.isArray(item)) worldBodies.push(...item);
+        else worldBodies.push(item);
+      },
+      remove: (_world, item) => {
+        const idx = worldBodies.indexOf(item);
+        if (idx !== -1) worldBodies.splice(idx, 1);
+      },
+      allBodies: () => [...worldBodies]
+    },
+    Events: {
+      on: (target, eventName, cb) => {
+        if (target === mockRender) {
+          if (!renderListeners[eventName]) renderListeners[eventName] = [];
+          renderListeners[eventName].push(cb);
+        } else {
+          if (!engineListeners[eventName]) engineListeners[eventName] = [];
+          engineListeners[eventName].push(cb);
+        }
+      }
+    },
+    Sleeping: {
+      set: (body, sleeping) => {
+        body.isSleeping = sleeping;
+      }
+    }
+  };
+
+  class MockImage {
+    constructor() {
+      this.naturalWidth = 64;
+      this.naturalHeight = 64;
+    }
+    set src(val) {
+      this._src = val;
+      if (this.onload) this.onload();
+    }
+    get src() {
+      return this._src;
+    }
+  }
+
+  let studioCloseCalled = 0;
+  let windowCloseCalled = 0;
+  let fakeNow = 1_000_000;
+
+  class FakeDate extends Date {
+    constructor(...args) {
+      if (args.length === 0) super(fakeNow);
+      else super(...args);
+    }
+    static now() {
+      return fakeNow;
+    }
+  }
+
+  const activeIntervals = new Map();
+  let nextIntervalId = 1;
+
+  const sandbox = {
+    location: { search, pathname, protocol: 'http:', host: '127.0.0.1:3477' },
+    URLSearchParams,
+    document: {
+      hidden,
+      body: makeEl('body'),
+      documentElement: makeEl('html'),
+      querySelector: (sel) => getEl(sel),
+      querySelectorAll: () => [],
+      addEventListener: () => {}
+    },
+    window: {
+      innerWidth: windowWidth,
+      innerHeight: windowHeight,
+      addEventListener: () => {},
+      close: () => {
+        windowCloseCalled += 1;
+      },
+      tiktatoStudio: {
+        close: () => {
+          studioCloseCalled += 1;
+        }
+      }
+    },
+    Image: MockImage,
+    WebSocket: class {
+      addEventListener() {}
+      close() {}
+    },
+    fetch: async () => ({ ok: false }),
+    Matter: mockMatter,
+    Intl,
+    Math,
+    Number,
+    String,
+    Boolean,
+    Array,
+    Set,
+    Map,
+    Date: FakeDate,
+    console,
+    setTimeout: () => 1,
+    clearTimeout: () => {},
+    setInterval: (fn, ms) => {
+      const id = nextIntervalId++;
+      activeIntervals.set(id, { fn, ms });
+      return id;
+    },
+    clearInterval: (id) => {
+      activeIntervals.delete(id);
+    }
+  };
+
+  vm.createContext(sandbox);
+  vm.runInContext(
+    `${jarCode}\n;globalThis.__jarApi = {
+      enqueueGift, processQueueTick, resetJar, applyConfig, spawnGift, mergeBodies, canBodiesMerge,
+      buildJarBodies, computeSpawnPosition, computeRadius, computeQueueDelayMs, getVisibleDonors,
+      updateLeaderboardWithGift, buildRehydrationPlan,
+      getCoins: () => currentCoinsTotal,
+      getDynamicBodies: () => dynamicBodies,
+      getMergeEffects: () => mergeEffects,
+      getQueue: () => giftQueue,
+      getTopDonors: () => topDonorsList,
+      getLeaderboardIndex: () => currentLeaderboardIndex,
+      setDocHidden: (val) => { document.hidden = val; },
+      advanceNow: (ms) => { fakeNow += ms; }
+    };`,
+    sandbox
+  );
+
+  sandbox.__jarApi.triggerCollisionStart = (pairs) =>
+    (engineListeners.collisionStart || []).forEach((fn) => fn({ pairs }));
+  sandbox.__jarApi.triggerCollisionActive = (pairs) =>
+    (engineListeners.collisionActive || []).forEach((fn) => fn({ pairs }));
+  sandbox.__jarApi.triggerAfterRender = () =>
+    (renderListeners.afterRender || []).forEach((fn) => fn());
+
+  return {
+    api: sandbox.__jarApi,
+    worldBodies,
+    elements,
+    getEl,
+    ctxOps,
+    activeIntervals,
+    getStudioCloseCalled: () => studioCloseCalled,
+    getWindowCloseCalled: () => windowCloseCalled,
+    advanceNow: (ms) => {
+      fakeNow += ms;
+    }
+  };
+}
+
+test('fusión estilo Suika Game: une regalos idénticos del mismo nivel, evita doble fusión/explosión, respeta tope y dibuja destello limpio', () => {
+  const { api, worldBodies, ctxOps, advanceNow } = createJarVmSandbox();
+  api.applyConfig({ currentCoins: 0, scale: 1.0, giftScale: 1.0 });
+
+  // 3 rosas iguales en el frasco
+  api.enqueueGift({ giftId: '5655', value: 1, giftName: 'Rosa', repeatCount: 3, username: 'ana' });
+  api.processQueueTick();
+  api.processQueueTick();
+  api.processQueueTick();
+
+  assert.equal(api.getCoins(), 3);
+  assert.equal(api.getDynamicBodies().length, 3);
+  const [b1, b2, b3] = api.getDynamicBodies();
+  const baseRadius = b1.circleRadius;
+
+  // Antes de expirar cooldown, no debe fusionar
+  api.triggerCollisionStart([{ bodyA: b1, bodyB: b2 }]);
+  assert.equal(api.getDynamicBodies().length, 3);
+
+  // Tras expirar cooldown, colisión simultánea (b1,b2) y (b2,b3) solo debe fusionar 1 par (sin doble fusión de b2)
+  advanceNow(200);
+  api.triggerCollisionStart([
+    { bodyA: b1, bodyB: b2 },
+    { bodyA: b2, bodyB: b3 }
+  ]);
+  assert.equal(api.getDynamicBodies().length, 2);
+  assert.equal(api.getCoins(), 3);
+
+  const merged = api.getDynamicBodies().find((b) => b.jarMeta.mergeTier === 1);
+  const untouched = api.getDynamicBodies().find((b) => b.jarMeta.mergeTier === 0);
+  assert.ok(merged, 'Debe existir una esfera fusionada de nivel 1');
+  assert.ok(untouched, 'b3 debe permanecer en nivel 0');
+  assert.ok(merged.circleRadius > baseRadius, 'La esfera fusionada debe crecer de tamaño');
+  assert.equal(merged.jarMeta.mergeCount, 2);
+
+  // Nivel 1 y nivel 0 NO deben fusionarse aunque colisionen tras el cooldown
+  advanceNow(200);
+  api.triggerCollisionStart([{ bodyA: merged, bodyB: untouched }]);
+  assert.equal(api.getDynamicBodies().length, 2);
+
+  // Regalos distintos tampoco se fusionan
+  api.enqueueGift({ giftId: '6064', value: 1, giftName: 'GG', repeatCount: 1, username: 'leo' });
+  api.processQueueTick();
+  const gg = api.getDynamicBodies().find((b) => b.jarMeta.giftKey.includes('6064'));
+  advanceNow(200);
+  api.triggerCollisionStart([{ bodyA: untouched, bodyB: gg }]);
+  assert.equal(api.getDynamicBodies().length, 3);
+
+  // Efecto visual en afterRender se dibuja sin textos ni errores y se limpia tras su duración
+  assert.equal(api.getMergeEffects().length, 1);
+  api.triggerAfterRender();
+  assert.ok(ctxOps.includes('arc'));
+  advanceNow(500);
+  api.triggerAfterRender();
+  assert.equal(api.getMergeEffects().length, 0);
+
+  // Tope de tamaño/nivel: dos TikTok Universe (R=98) no se fusionan por encima de maxSafeR
+  api.resetJar();
+  api.enqueueGift({ giftId: '44999_u', value: 44999, giftName: 'TikTok Universe', repeatCount: 2, username: 'vip' });
+  api.processQueueTick();
+  api.processQueueTick();
+  const [u1, u2] = api.getDynamicBodies();
+  advanceNow(300);
+  api.triggerCollisionStart([{ bodyA: u1, bodyB: u2 }]);
+  assert.equal(api.getDynamicBodies().length, 2);
+  assert.equal(worldBodies.filter((b) => !b.isStatic).length, 2);
+});
+
+test('el spawn en 800x600 y 560x720 siempre queda por debajo del techo físico incluso para Universo y scale 2.0', () => {
+  const { api } = createJarVmSandbox();
+  const scenarios = [
+    { width: 800, height: 600, scale: 1.0, coins: 1 },
+    { width: 800, height: 600, scale: 1.0, coins: 1000 },
+    { width: 800, height: 600, scale: 1.0, coins: 44999 },
+    { width: 560, height: 720, scale: 1.0, coins: 44999 },
+    { width: 800, height: 600, scale: 2.0, coins: 44999 }
+  ];
+
+  for (const sc of scenarios) {
+    const cfg = { scale: sc.scale, giftScale: 1.0, xOffset: 0, yOffset: 0 };
+    const bodies = api.buildJarBodies(sc.width, sc.height, cfg);
+    // Encontrar techo físico (el muro estático más alto)
+    const topWall = bodies.reduce((highest, b) => (b.y < highest.y ? b : highest), bodies[0]);
+    const ceilingBottomEdge = topWall.y + topWall.h / 2;
+
+    const R = api.computeRadius(sc.coins, sc.scale, 1.0);
+    const pos = api.computeSpawnPosition(R, sc.width, sc.height, cfg);
+    const sphereTopEdge = pos.y - R;
+    assert.ok(
+      sphereTopEdge > ceilingBottomEdge,
+      `Escenario ${sc.width}x${sc.height} scale=${sc.scale} coins=${sc.coins}: sphereTop=${sphereTopEdge} debe ser > ceilingBottom=${ceilingBottomEdge}`
+    );
+  }
+});
+
+test('cola adaptativa acelera cuando >20, acota cola en segundo plano sin perder monedas y rehidrata al recargar', () => {
+  const { api, getEl } = createJarVmSandbox({ search: '', pathname: '/jar', hidden: false });
+
+  // Cola adaptativa
+  assert.equal(api.computeQueueDelayMs(5), 200);
+  assert.ok(api.computeQueueDelayMs(25) < 200);
+  assert.ok(api.computeQueueDelayMs(250) <= 28);
+
+  // Rehidratación inicial al abrir con currentCoins > 0 y meta
+  api.applyConfig({
+    currentCoins: 3780,
+    goalCoins: 5000,
+    recentGifts: [
+      { name: 'Galaxia', coins: 1000, imageUrl: 'https://example.com/galaxy.png' },
+      { name: 'Rosa', coins: 1, imageUrl: 'https://example.com/rose.png' }
+    ],
+    topDonors: [
+      { username: 'u1', totalCoins: 100 },
+      { username: 'u2', totalCoins: 90 },
+      { username: 'u3', totalCoins: 80 },
+      { username: 'u4', totalCoins: 70 },
+      { username: 'u5', totalCoins: 60 },
+      { username: 'u6', totalCoins: 50 }
+    ],
+    numberOfRanks: 'top3'
+  });
+
+  assert.equal(api.getCoins(), 3780);
+  assert.ok(api.getDynamicBodies().length > 0 && api.getDynamicBodies().length <= 45);
+  assert.equal(getEl('#goalCoinsTarget').textContent, '5000');
+  assert.match(getEl('#goalProgressBar').style.transform, /^scaleX\(/);
+  assert.equal(getEl('#jarTotalCoins').classList.contains('is-goal-reached'), false);
+
+  // Al cambiar numberOfRanks a top10 en applyConfig, no se perdieron los donantes #4-#6
+  assert.equal(api.getVisibleDonors().length, 3);
+  api.applyConfig({ numberOfRanks: 'top10' });
+  assert.equal(api.getVisibleDonors().length, 6);
+
+  // Al alcanzar la meta se activa is-goal-reached y animación discreta
+  api.enqueueGift({ giftId: '1000_g', value: 1500, giftName: 'Mega', repeatCount: 1, username: 'whale' });
+  api.processQueueTick();
+  assert.equal(api.getCoins(), 5280);
+  assert.equal(getEl('#jarTotalCoins').classList.contains('is-goal-reached'), true);
+  assert.equal(getEl('#jarTotalCoins').classList.contains('is-goal-just-reached'), true);
+
+  // En segundo plano (document.hidden && !isStudioMode), acota giftQueue a 500 conservando monedas
+  api.resetJar();
+  api.setDocHidden(true);
+  api.enqueueGift({ giftId: '5655', value: 2, giftName: 'Rosa', repeatCount: 600, username: 'spammer' });
+  assert.equal(api.getQueue().length, 500);
+  assert.equal(api.getCoins(), 200); // 100 items condensados (100 * 2)
+  api.setDocHidden(false);
+  while (api.getQueue().length > 0) {
+    api.processQueueTick();
+  }
+  assert.equal(api.getCoins(), 1200); // 600 * 2 íntegros
+});
+
+test('jar.css oculta [hidden] correctamente, Studio tiene botón Cerrar funcional y MODO PRUEBA solo aparece en test/preview', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+
+  const jarCss = fs.readFileSync(path.join(__dirname, '..', 'overlay', 'jar.css'), 'utf8');
+  const jarHtml = fs.readFileSync(path.join(__dirname, '..', 'overlay', 'jar.html'), 'utf8');
+
+  assert.match(jarCss, /\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}/);
+  assert.match(jarCss, /-webkit-app-region:\s*drag;/);
+  assert.match(jarCss, /-webkit-app-region:\s*no-drag;/);
+  assert.match(jarHtml, /id="btnStudioClose"/);
+  assert.match(jarHtml, /id="goalProgressBar"/);
+
+  // En Studio mode: testHud permanece hidden, studioHud visible, y btnStudioClose cierra
+  const studioVm = createJarVmSandbox({ search: '?studio=1&bg=green', pathname: '/jar' });
+  assert.equal(studioVm.getEl('#studioHud').hidden, false);
+  assert.equal(studioVm.getEl('#testHud').hidden, true);
+  studioVm.getEl('#studioHud').dispatchEvent({
+    type: 'click',
+    target: studioVm.getEl('#btnStudioClose')
+  });
+  assert.equal(studioVm.getStudioCloseCalled(), 1);
+
+  // Toggle de pruebas en Studio muestra testHud y sus botones funcionan
+  studioVm.getEl('#studioHud').dispatchEvent({
+    type: 'click',
+    target: studioVm.getEl('#btnStudioToggleTest')
+  });
+  assert.equal(studioVm.getEl('#testHud').hidden, false);
+  studioVm.getEl('#btnTestRose').click();
+  assert.equal(studioVm.api.getQueue().length, 1);
+
+  // En Test mode (/jar/test): testHud visible y botones funcionales
+  const testVm = createJarVmSandbox({ search: '', pathname: '/jar/test' });
+  assert.equal(testVm.getEl('#testHud').hidden, false);
+  assert.equal(testVm.getEl('#studioHud').hidden, true);
+  testVm.getEl('#btnTestCombo').click();
+  assert.equal(testVm.api.getQueue().length, 10);
+  testVm.getEl('#btnTestReset').click();
+  assert.equal(testVm.api.getQueue().length, 0);
+});
+
+test('TikTokService no descarta múltiples rosas ni actualizaciones de racha con mismo msgId o createTime, e integra streakTracker para el frasco', () => {
+  const { TikTokService } = require('../electron/tiktok-service.cjs');
+  const { createStreakTracker } = require('../electron/events.cjs');
+
+  const service = new TikTokService();
+  // Incluso con playEveryStreak: false (sonidos/TTS apagados), emitAllPackets: true permite emitir al frasco
+  service.setOptions({ playEveryStreak: false, emitAllPackets: true });
+  const received = [];
+  service.on('event', (ev) => received.push(ev));
+
+  // Racha compartiendo el mismo msgId y createTime
+  service.ingestEvent('gift', {
+    msgId: 'streak_777',
+    createTime: 1700000000,
+    user: { id: 'u1', uniqueId: 'ana', nickname: 'Ana' },
+    giftId: 5655,
+    repeatCount: 1,
+    repeatEnd: 0,
+    gift: { type: 1, name: 'Rosa', diamondCount: 1 }
+  });
+  service.ingestEvent('gift', {
+    msgId: 'streak_777',
+    createTime: 1700000000,
+    user: { id: 'u1', uniqueId: 'ana', nickname: 'Ana' },
+    giftId: 5655,
+    repeatCount: 3,
+    repeatEnd: 0,
+    gift: { type: 1, name: 'Rosa', diamondCount: 1 }
+  });
+  service.ingestEvent('gift', {
+    msgId: 'streak_777',
+    createTime: 1700000000,
+    user: { id: 'u1', uniqueId: 'ana', nickname: 'Ana' },
+    giftId: 5655,
+    repeatCount: 3,
+    repeatEnd: 1,
+    gift: { type: 1, name: 'Rosa', diamondCount: 1 }
+  });
+  // Replay exacto en reconexión del paquete de cierre: debe deduplicarse
+  service.ingestEvent('gift', {
+    msgId: 'streak_777',
+    createTime: 1700000000,
+    user: { id: 'u1', uniqueId: 'ana', nickname: 'Ana' },
+    giftId: 5655,
+    repeatCount: 3,
+    repeatEnd: 1,
+    gift: { type: 1, name: 'Rosa', diamondCount: 1 }
+  });
+
+  // Dos rosas individuales sin msgId en el mismo segundo (createTime igual)
+  service.ingestEvent('gift', {
+    createTime: 1700000001,
+    user: { id: 'u1', uniqueId: 'ana', nickname: 'Ana' },
+    giftId: 5655,
+    repeatCount: 1,
+    repeatEnd: 1,
+    groupId: 'g_a',
+    gift: { type: 1, name: 'Rosa', diamondCount: 1 }
+  });
+  service.ingestEvent('gift', {
+    createTime: 1700000001,
+    user: { id: 'u1', uniqueId: 'ana', nickname: 'Ana' },
+    giftId: 5655,
+    repeatCount: 1,
+    repeatEnd: 1,
+    groupId: 'g_b',
+    gift: { type: 1, name: 'Rosa', diamondCount: 1 }
+  });
+
+  assert.equal(received.length, 5);
+  assert.equal(received[0].suppressAlert, true);
+  assert.equal(received[1].suppressAlert, true);
+  assert.equal(received[2].suppressAlert, false);
+
+  // El jarStreakTracker procesa en tiempo real con playEveryStreak: true dando suma exacta (3 + 1 + 1 = 5)
+  const jarTracker = createStreakTracker();
+  let jarCoins = 0;
+  for (const ev of received) {
+    const res = jarTracker.process(
+      {
+        userId: ev.userId,
+        username: ev.username,
+        giftId: ev.giftId,
+        giftName: ev.giftName,
+        groupId: ev.groupId,
+        msgId: ev.msgId,
+        giftType: ev.giftType,
+        repeatCount: ev.repeatCount,
+        repeatEnd: ev.repeatEnd
+      },
+      1000,
+      { playEveryStreak: true }
+    );
+    jarCoins += res.streakDelta * ev.coinsPerGift;
+  }
+  assert.equal(jarCoins, 5);
+
+  // Dos regalos individuales seguidos con distinto msgId dentro de 4s no deben suprimirse como cierre duplicado
+  const t2 = createStreakTracker();
+  const r1 = t2.process({ userId: 'u2', giftId: '5655', msgId: 'm1', repeatCount: 1, repeatEnd: 1 }, 1000, { playEveryStreak: true });
+  const r2 = t2.process({ userId: 'u2', giftId: '5655', msgId: 'm2', repeatCount: 1, repeatEnd: 1 }, 1500, { playEveryStreak: true });
+  assert.equal(r1.streakDelta, 1);
+  assert.equal(r2.streakDelta, 1);
+});
+
+test('collisionActive fusiona esferas que quedaron en contacto tras expirar cooldown y mergeBodies respeta paredes del cuello', () => {
+  const { api, advanceNow } = createJarVmSandbox({ windowWidth: 800, windowHeight: 800 });
+  api.applyConfig({ currentCoins: 0, scale: 1.0, giftScale: 1.0 });
+
+  api.enqueueGift({ giftId: '5655', value: 1, giftName: 'Rosa', repeatCount: 2, username: 'ana' });
+  api.processQueueTick();
+  api.processQueueTick();
+  const [rA, rB] = api.getDynamicBodies();
+
+  // Tocan durante el cooldown -> collisionStart no fusiona aún
+  api.triggerCollisionStart([{ bodyA: rA, bodyB: rB }]);
+  assert.equal(api.getDynamicBodies().length, 2);
+
+  // Siguen en contacto cuando expira el cooldown -> collisionActive sí fusiona
+  advanceNow(150);
+  api.triggerCollisionActive([{ bodyA: rA, bodyB: rB }]);
+  assert.equal(api.getDynamicBodies().length, 1);
+
+  // Fusión dentro del cuello (y < Yc - 115 = 285): debe acotarse dentro de Xc ± (104 - nextR)
+  api.resetJar();
+  const bLeft = api.spawnGift(
+    { giftId: '1000_g', singleValue: 1000, giftName: 'Galaxia' },
+    { spawnPos: { x: 310, y: 240 }, mergeCooldownMs: 0 }
+  );
+  const bRight = api.spawnGift(
+    { giftId: '1000_g', singleValue: 1000, giftName: 'Galaxia' },
+    { spawnPos: { x: 315, y: 245 }, mergeCooldownMs: 0 }
+  );
+  const mergedNeck = api.mergeBodies(bLeft, bRight);
+  assert.ok(mergedNeck);
+  assert.ok(
+    mergedNeck.position.x - mergedNeck.circleRadius >= 400 - 104 - 0.01,
+    `mergedNeck X (${mergedNeck.position.x}) - R (${mergedNeck.circleRadius}) no debe invadir pared izquierda del cuello`
+  );
+});
+
+test('applyConfig en cada regalo no reinicia el temporizador del carrusel del Leaderboard', () => {
+  const { api, activeIntervals } = createJarVmSandbox({ search: '', pathname: '/jar' });
+  api.applyConfig({
+    currentCoins: 300,
+    leaderboardDuration: 5,
+    topDonors: [
+      { username: 'ana', displayName: 'Ana', totalCoins: 200 },
+      { username: 'leo', displayName: 'Leo', totalCoins: 100 }
+    ]
+  });
+  assert.equal(api.getLeaderboardIndex(), 0);
+  const carouselEntry = Array.from(activeIntervals.values()).find((it) => it.ms === 100);
+  assert.ok(carouselEntry, 'Debe existir el intervalo de 100ms del carrusel');
+
+  // Avanzar 4s (40 ticks de 100ms) mientras llegan actualizaciones config/jar por nuevos regalos
+  for (let i = 0; i < 40; i += 1) {
+    carouselEntry.fn();
+    if (i === 20) {
+      api.applyConfig({ currentCoins: 301, leaderboardDuration: 5 });
+    }
+  }
+  assert.equal(api.getLeaderboardIndex(), 0);
+
+  // Al completar los últimos 10 ticks (5s totales), DEBE rotar a índice 1 sin haberse reiniciado
+  for (let i = 0; i < 10; i += 1) {
+    carouselEntry.fn();
+  }
+  assert.equal(api.getLeaderboardIndex(), 1);
+});
+
+test('simulación física real con Matter.js soporta +500 rosas sin desbordar el frasco ni NaN', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const vm = require('node:vm');
+
+  const matterCode = fs.readFileSync(path.join(__dirname, '..', 'overlay', 'matter.min.js'), 'utf8');
+  const jarCode = fs.readFileSync(path.join(__dirname, '..', 'overlay', 'jar.js'), 'utf8');
+
+  let fakeNow = 2_000_000;
+  class FakeDate extends Date {
+    constructor(...args) {
+      if (args.length) super(...args);
+      else super(fakeNow);
+    }
+    static now() {
+      return fakeNow;
+    }
+  }
+
+  const makeEl = () => ({
+    hidden: false,
+    textContent: '',
+    src: '',
+    dataset: {},
+    style: { setProperty: () => {} },
+    classList: { add: () => {}, remove: () => {}, toggle: () => {} },
+    addEventListener: () => {}
+  });
+
+  const sandbox = {
+    window: {},
+    global: {},
+    self: {},
+    location: { search: '', pathname: '/jar', protocol: 'http:', host: '127.0.0.1:3477' },
+    URLSearchParams,
+    document: {
+      hidden: false,
+      body: makeEl(),
+      documentElement: makeEl(),
+      querySelector: () => makeEl(),
+      querySelectorAll: () => [],
+      addEventListener: () => {}
+    },
+    Image: class {
+      set src(_v) {}
+    },
+    WebSocket: class {
+      addEventListener() {}
+      close() {}
+    },
+    fetch: async () => ({ ok: false }),
+    Intl,
+    Math,
+    Number,
+    String,
+    Boolean,
+    Array,
+    Set,
+    Map,
+    Date: FakeDate,
+    console,
+    performance: { now: () => fakeNow },
+    setTimeout: () => 1,
+    clearTimeout: () => {},
+    setInterval: () => 1,
+    clearInterval: () => {},
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame: () => {}
+  };
+  sandbox.window = sandbox;
+  sandbox.window.innerWidth = 800;
+  sandbox.window.innerHeight = 600;
+  sandbox.window.addEventListener = () => {};
+
+  vm.createContext(sandbox);
+  vm.runInContext(matterCode, sandbox);
+  sandbox.Matter.Render.create = () => ({ canvas: {}, options: {}, context: null, textures: {} });
+  sandbox.Matter.Render.run = () => {};
+  sandbox.Matter.Runner.run = () => {};
+
+  vm.runInContext(
+    `${jarCode}\n;globalThis.__realSim = { engine, enqueueGift, processQueueTick, applyConfig, dynamicBodies, getCoins: () => currentCoinsTotal };`,
+    sandbox
+  );
+
+  const sim = sandbox.__realSim;
+  sim.applyConfig({ scale: 1.0, giftScale: 1.0, currentCoins: 0 });
+
+  for (let i = 0; i < 520; i += 1) {
+    sim.enqueueGift({ giftId: '5655', value: 1, giftName: 'Rosa', repeatCount: 1, username: `u${i % 15}` });
+    sim.processQueueTick();
+    for (let f = 0; f < 2; f += 1) {
+      fakeNow += 16.6;
+      sandbox.Matter.Engine.update(sim.engine, 16.6);
+    }
+  }
+  for (let f = 0; f < 240; f += 1) {
+    fakeNow += 16.6;
+    sandbox.Matter.Engine.update(sim.engine, 16.6);
+  }
+
+  assert.equal(sim.getCoins(), 520);
+  assert.ok(sim.dynamicBodies.length < 100, `Las fusiones Suika deben compactar 520 rosas (actual: ${sim.dynamicBodies.length})`);
+  assert.ok(sim.dynamicBodies.some((b) => b.jarMeta.mergeTier >= 3), 'Debe haber fusiones de nivel >= 3');
+  for (const body of sim.dynamicBodies) {
+    assert.ok(Number.isFinite(body.position.x) && Number.isFinite(body.position.y));
+    assert.ok(body.position.y >= 60 && body.position.y <= 520, `Esfera fuera de rango Y esperado: ${body.position.y}`);
+  }
+});
+
 

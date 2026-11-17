@@ -21,12 +21,19 @@
       <div id="jarLayerFront" class="jar-layer layer-front">
         <img src="/assets/jar-front.svg" class="jar-svg-front" alt="" aria-hidden="true" />
 
-        <!-- Contador de Monedas Totales (Cápsula superior) -->
+        <!-- Contador de Monedas Totales y Meta (Cápsula superior) -->
         <div id="jarTotalCoins" class="jar-total-coins">
-          <span class="coin-icon-wrap">
-            <img src="/assets/coin-icon.svg" class="coin-icon" alt="" />
-          </span>
-          <span id="totalCoinsCount" class="total-coins-count">0</span>
+          <div class="jar-coins-row">
+            <span class="coin-icon-wrap">
+              <img src="/assets/coin-icon.svg" class="coin-icon" alt="" />
+            </span>
+            <span id="totalCoinsCount" class="total-coins-count">0</span>
+            <span id="goalCoinsDivider" class="goal-coins-divider">/</span>
+            <span id="goalCoinsTarget" class="goal-coins-target">1.000</span>
+          </div>
+          <div id="goalProgressTrack" class="goal-progress-track" aria-hidden="true">
+            <div id="goalProgressBar" class="goal-progress-bar"></div>
+          </div>
         </div>
 
         <!-- Alerta Emergente de Regalo (Bocadillo de cómic) -->
@@ -83,13 +90,18 @@
 
       <!-- Barra flotante auto-ocultable para TikTok LIVE Studio (Captura de ventana) -->
       <div id="studioHud" class="studio-hud" hidden>
-        <span class="studio-hud-badge">LIVE STUDIO</span>
+        <span class="studio-hud-drag" title="Arrastrar ventana">
+          <span class="studio-drag-grip" aria-hidden="true">⋮⋮</span>
+          <span class="studio-hud-badge">LIVE STUDIO</span>
+        </span>
         <div class="studio-hud-actions">
           <button class="studio-bg-btn" data-bg="green" type="button" title="Fondo verde para Clave de color (Chroma Key)">Verde Chroma</button>
           <button class="studio-bg-btn" data-bg="dark" type="button" title="Fondo oscuro elegante">Oscuro</button>
           <button class="studio-bg-btn" data-bg="blue" type="button" title="Fondo azul para Clave de color">Azul Chroma</button>
           <button class="studio-bg-btn" data-bg="magenta" type="button" title="Fondo magenta para Clave de color">Magenta</button>
           <button class="studio-bg-btn" data-bg="transparent" type="button" title="Sin color de fondo">Transparente</button>
+          <button id="btnStudioToggleTest" class="studio-bg-btn studio-test-toggle" type="button" title="Mostrar u ocultar barra de pruebas">Pruebas</button>
+          <button id="btnStudioClose" class="studio-close-btn" type="button" title="Cerrar ventana">✕ Cerrar</button>
         </div>
       </div>
 

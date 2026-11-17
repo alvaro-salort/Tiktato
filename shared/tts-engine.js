@@ -87,16 +87,72 @@ export function formatGiftTTS(username, giftName, count = 1) {
 }
 
 export class TTSQueue {
-  constructor({ soundEngine = null, onStateChange = null, maxQueueSize = 5 } = {}) {
+  constructor({
+    soundEngine = null,
+    onStateChange = null,
+    maxQueueSize = 5,
+    fishSynthesizer = null,
+    maxCacheEntries = 40,
+    maxCacheBytes = 5 * 1024 * 1024
+  } = {}) {
     this.soundEngine = soundEngine;
     this.onStateChange = onStateChange || (() => {});
     this.maxQueueSize = Math.max(1, Number(maxQueueSize) || 5);
+    this.fishSynthesizer = typeof fishSynthesizer === 'function' ? fishSynthesizer : null;
+    this.maxCacheEntries = Math.max(0, Number(maxCacheEntries ?? 40));
+    this.maxCacheBytes = Math.max(0, Number(maxCacheBytes ?? 5 * 1024 * 1024));
+    this.audioCache = new Map();
+    this.audioCacheBytes = 0;
     this.queue = [];
     this.seenMsgIds = new Set();
     this.isSpeaking = false;
     this.currentItem = null;
     this.currentAbort = null;
     this.isMuted = false;
+  }
+
+  setFishSynthesizer(fn) {
+    this.fishSynthesizer = typeof fn === 'function' ? fn : null;
+  }
+
+  clearAudioCache() {
+    this.audioCache.clear();
+    this.audioCacheBytes = 0;
+  }
+
+  #getCachedAudio(key) {
+    if (!this.maxCacheEntries || !this.maxCacheBytes) return null;
+    const entry = this.audioCache.get(key);
+    if (!entry) return null;
+    this.audioCache.delete(key);
+    this.audioCache.set(key, entry);
+    return entry.src;
+  }
+
+  #setCachedAudio(key, src) {
+    if (!this.maxCacheEntries || !this.maxCacheBytes || !src) return;
+    const size = String(src).length;
+    if (size > this.maxCacheBytes) return;
+
+    if (this.audioCache.has(key)) {
+      const prev = this.audioCache.get(key);
+      this.audioCacheBytes -= prev?.size || 0;
+      this.audioCache.delete(key);
+    }
+
+    while (
+      this.audioCache.size >= this.maxCacheEntries ||
+      this.audioCacheBytes + size > this.maxCacheBytes
+    ) {
+      const oldestKey = this.audioCache.keys().next().value;
+      if (!oldestKey) break;
+      const oldest = this.audioCache.get(oldestKey);
+      this.audioCache.delete(oldestKey);
+      this.audioCacheBytes -= oldest?.size || 0;
+    }
+
+    this.audioCache.set(key, { src, size });
+    this.audioCacheBytes += size;
   }
 
   enqueue(item) {
@@ -221,17 +277,48 @@ export class TTSQueue {
       this.soundEngine.restore();
     }
 
-    const voiceId = item.voiceId || (item.voiceProvider === 'google' ? 'google:es-ES' : 'local');
-    const isGoogle = voiceId.startsWith('google:') || (!voiceId.startsWith('local:') && item.voiceProvider === 'google');
+    const voiceId = String(
+      item.voiceId ||
+        (item.voiceProvider === 'google'
+          ? 'google:es-ES'
+          : item.voiceProvider === 'fish'
+            ? 'fish:'
+            : 'local')
+    );
+    const isFish =
+      voiceId.startsWith('fish:') ||
+      (!voiceId.startsWith('google:') && !voiceId.startsWith('local:') && item.voiceProvider === 'fish');
+    const isGoogle =
+      !isFish &&
+      (voiceId.startsWith('google:') || (!voiceId.startsWith('local:') && item.voiceProvider === 'google'));
 
     try {
-      if (isGoogle) {
+      if (isFish) {
+        try {
+          await this.#speakFish(item);
+        } catch (fishError) {
+          console.warn('[tts] Fish Audio falló, intentando respaldo Google/local', fishError);
+          if (!this.isMuted) {
+            const fallbackLang = item.voiceLanguage || 'es-ES';
+            try {
+              await this.#speakGoogle({ ...item, voiceLanguage: fallbackLang });
+            } catch (googleError) {
+              console.warn('[tts] Respaldo Google Speech API v2 falló, intentando voz local', googleError);
+              if (!this.isMuted) {
+                await this.#speakLocal({ ...item, voiceLanguage: fallbackLang });
+              }
+            }
+          }
+        }
+      } else if (isGoogle) {
         const googleLang = voiceId.startsWith('google:') ? voiceId.slice(7) : (item.voiceLanguage || 'es-ES');
         try {
           await this.#speakGoogle({ ...item, voiceLanguage: googleLang });
         } catch (googleError) {
           console.warn('[tts] Google Speech API v2 falló, intentando voz local', googleError);
-          await this.#speakLocal({ ...item, voiceLanguage: googleLang });
+          if (!this.isMuted) {
+            await this.#speakLocal({ ...item, voiceLanguage: googleLang });
+          }
         }
       } else {
         await this.#speakLocal(item);
@@ -251,12 +338,81 @@ export class TTSQueue {
     }
   }
 
+  async #speakFish(item) {
+    const voiceId = String(item.voiceId || '');
+    const referenceId = String(
+      item.referenceId || (voiceId.startsWith('fish:') ? voiceId.slice(5) : '')
+    ).trim();
+    if (!referenceId) {
+      throw new Error('Falta reference_id de Fish Audio');
+    }
+
+    const speed = item.speed ?? 1;
+    const cacheKey = `${item.fishModel || 'default'}|${referenceId}|${speed}|${item.text}`;
+    let audioSrc = item.skipCache ? null : this.#getCachedAudio(cacheKey);
+
+    if (!audioSrc) {
+      if (typeof this.fishSynthesizer !== 'function') {
+        throw new Error('Sintetizador de Fish Audio no disponible');
+      }
+
+      let aborted = false;
+      let resolveAbort = null;
+      const abortPromise = new Promise((resolve) => {
+        resolveAbort = resolve;
+      });
+      this.currentAbort = () => {
+        aborted = true;
+        resolveAbort?.({ __aborted: true });
+      };
+
+      const synthPromise = Promise.resolve()
+        .then(() =>
+          this.fishSynthesizer({
+            text: item.text,
+            referenceId,
+            model: item.fishModel || undefined,
+            speed: item.speed
+          })
+        )
+        .catch((err) => ({ ok: false, error: err?.message || 'Error al sintetizar en Fish Audio' }));
+
+      let result;
+      try {
+        result = await Promise.race([synthPromise, abortPromise]);
+      } finally {
+        this.currentAbort = null;
+      }
+
+      if (aborted || result?.__aborted || this.isMuted) {
+        return;
+      }
+      if (!result || !result.ok || (!result.audioBase64 && !result.audioUrl)) {
+        throw new Error(result?.error || 'Fish Audio no devolvió audio');
+      }
+
+      audioSrc =
+        result.audioUrl ||
+        `data:${result.contentType || 'audio/mpeg'};base64,${result.audioBase64}`;
+      if (!item.skipCache) {
+        this.#setCachedAudio(cacheKey, audioSrc);
+      }
+    }
+
+    if (this.isMuted) return;
+    await this.#playAudioUrl(audioSrc, item.volume, 'No se pudo reproducir audio de Fish Audio');
+  }
+
   #speakGoogle(item) {
+    const url = buildGoogleTTSUrl(item.text, item.voiceLanguage || 'es-ES');
+    return this.#playAudioUrl(url, item.volume, 'No se pudo reproducir audio de Google TTS');
+  }
+
+  #playAudioUrl(url, volume = 0.8, errorMessage = 'No se pudo reproducir audio de TTS') {
     return new Promise((resolve, reject) => {
-      const url = buildGoogleTTSUrl(item.text, item.voiceLanguage || 'es-ES');
       const audio = new Audio(url);
       audio.preload = 'auto';
-      audio.volume = Math.max(0, Math.min(1, Number(item.volume ?? 0.8)));
+      audio.volume = Math.max(0, Math.min(1, Number(volume ?? 0.8)));
 
       let settled = false;
       let timer = null;
@@ -275,11 +431,11 @@ export class TTSQueue {
         resolve();
       };
 
-      const onError = (e) => {
+      const onError = () => {
         if (settled) return;
         settled = true;
         cleanup();
-        reject(new Error('No se pudo reproducir audio de Google TTS'));
+        reject(new Error(errorMessage));
       };
 
       this.currentAbort = () => {

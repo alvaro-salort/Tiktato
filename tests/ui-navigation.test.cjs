@@ -297,3 +297,74 @@ test('encabezado de sonidos alinea verticalmente título y acciones sin texto su
   assert.match(stylesCss, /\.card-sounds \.card-head\s*\{[^}]*justify-content:\s*space-between;/);
   assert.match(stylesCss, /\.card-sounds \.card-head\s*\{[^}]*flex-wrap:\s*wrap;/);
 });
+
+test('panel TTS incluye menú BYOK de Fish Audio con explorador de voces y sin filtrar clave', () => {
+  // Selector de proveedor con Fish Audio (API Key propia)
+  assert.match(indexHtml, /id="ttsProviderTabs"/);
+  assert.match(indexHtml, /data-tts-provider="fish"/);
+  assert.match(indexHtml, /<option value="fish">Fish Audio \(API Key propia\)<\/option>/);
+
+  // Controles BYOK: input clave, mostrar/ocultar, guardar, probar conexión, borrar, limpiar caché
+  const fishIds = [
+    'ttsFishConfigBox',
+    'ttsFishKeyStatus',
+    'ttsFishApiKey',
+    'btnToggleFishKey',
+    'btnSaveFishKey',
+    'btnTestFishKey',
+    'btnClearFishKey',
+    'btnClearFishCache',
+    'ttsFishReferenceId',
+    'btnApplyFishRef',
+    'ttsFishSearch',
+    'ttsFishLangFilter',
+    'btnSearchFishVoices',
+    'ttsFishCategoryTabs',
+    'ttsFishVoicesGrid'
+  ];
+  for (const id of fishIds) {
+    assert.ok(indexHtml.includes(`id="${id}"`), `Debe existir #${id} en index.html`);
+  }
+
+  // Categorías del explorador de voces
+  for (const cat of ['all', 'everyday', 'characters', 'celebrities', 'accents', 'singing', 'self']) {
+    assert.match(indexHtml, new RegExp(`data-fish-category="${cat}"`));
+  }
+
+  // Acciones de Preview y Seleccionar en app.js
+  assert.match(appJs, /data-fish-action="preview"/);
+  assert.match(appJs, /data-fish-action="select"/);
+  assert.match(appJs, /fishSynthesize/);
+  assert.match(appJs, /fishClearCache/);
+
+  // La API key no se llama directamente desde renderer hacia api.fish.audio ni llega al overlay público
+  assert.doesNotMatch(appJs, /api\.fish\.audio/);
+  const preloadCjs = fs.readFileSync(path.join(__dirname, '..', 'electron', 'preload.cjs'), 'utf8');
+  assert.match(preloadCjs, /tts:fish-set-key/);
+  assert.match(preloadCjs, /tts:fish-test-key/);
+  assert.match(preloadCjs, /tts:fish-list-voices/);
+  assert.match(preloadCjs, /tts:fish-synthesize/);
+  assert.match(preloadCjs, /tts:fish-clear-cache/);
+
+  const mainCjs = fs.readFileSync(path.join(__dirname, '..', 'electron', 'main.cjs'), 'utf8');
+  const overlayCfgMatch = mainCjs.match(/function updateOverlayConfig\(\)\s*\{[\s\S]*?\n\}/);
+  assert.ok(overlayCfgMatch, 'Debe existir updateOverlayConfig en main.cjs');
+  assert.doesNotMatch(overlayCfgMatch[0], /fishApiKey|hasFishApiKey|\btts\b/);
+
+  // Evita DOM thrashing en renderFishVoicesGrid y preserva mensajes de error de loadFishVoices
+  assert.match(appJs, /lastFishGridSig/);
+  assert.match(appJs, /fishVoicesStatusMessage/);
+  assert.match(appJs, /stopFishPreview\(\)/);
+  const catchPreviewMatch = appJs.match(/catch \(err\) \{\s*if \(fishPreviewVoiceId !== voice\.referenceId\) return;/);
+  assert.ok(catchPreviewMatch, 'previewFishVoice debe ignorar rechazos si el usuario cambió de vista previa');
+
+  // Enlace directo de API key, voz recomendada Babidi y solo idioma español activo
+  assert.match(indexHtml, /https:\/\/fish\.audio\/app\/developers\/get-started\//);
+  assert.match(appJs, /let fishLanguage = 'es';/);
+  assert.match(appJs, /47d00a02c75f47b7877fe925ab66b5f2/);
+  const langSelectMatch = indexHtml.match(/<select id="ttsFishLangFilter"[\s\S]*?<\/select>/);
+  assert.ok(langSelectMatch);
+  const langSelectWithoutComments = langSelectMatch[0].replace(/<!--[\s\S]*?-->/g, '');
+  assert.match(langSelectWithoutComments, /<option value="es"[^>]*>Español \(es\)<\/option>/);
+  assert.doesNotMatch(langSelectWithoutComments, /value="(en|pt|it|ja)"/);
+});

@@ -11,6 +11,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   width: 100%;
@@ -83,7 +87,7 @@ body {
   transform-origin: center center;
 }
 
-/* ───────── HUD 1: CONTADOR DE MONEDAS TOTALES ───────── */
+/* ───────── HUD 1: CONTADOR DE MONEDAS TOTALES Y META ───────── */
 .jar-total-coins {
   position: absolute;
   top: 50%;
@@ -95,16 +99,44 @@ body {
     scale(var(--scale));
   transform-origin: center bottom;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
+  padding: 6px 16px 8px;
   border-radius: 9999px;
   background: rgba(30, 26, 28, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(12px);
-  transition: transform 180ms ease-out;
+  overflow: hidden;
+  transition: transform 180ms ease-out, border-color 260ms ease-out, box-shadow 260ms ease-out;
   pointer-events: auto;
+}
+
+.jar-total-coins.is-goal-reached {
+  border-color: rgba(255, 221, 49, 0.55);
+  box-shadow: 0 10px 28px rgba(255, 200, 40, 0.25), 0 10px 25px rgba(0, 0, 0, 0.45);
+}
+
+.jar-total-coins.is-goal-just-reached {
+  animation: jarGoalPulse 680ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes jarGoalPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 221, 49, 0.55), 0 10px 25px rgba(0, 0, 0, 0.45);
+  }
+  55% {
+    box-shadow: 0 0 0 12px rgba(255, 221, 49, 0), 0 12px 30px rgba(255, 221, 49, 0.35);
+  }
+  100% {
+    box-shadow: 0 10px 28px rgba(255, 200, 40, 0.25), 0 10px 25px rgba(0, 0, 0, 0.45);
+  }
+}
+
+.jar-coins-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .coin-icon-wrap {
@@ -127,6 +159,43 @@ body {
   color: #ffdd31;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+.goal-coins-divider {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.goal-coins-target {
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.72);
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-progress-track {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.goal-progress-bar {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent, #e83e5f), #ffdd31);
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 240ms ease-out;
+}
+
+.jar-total-coins.is-goal-reached .goal-progress-bar {
+  background: linear-gradient(90deg, #ffdd31, #34d399);
 }
 
 /* ───────── HUD 2: LEADERBOARD DE DONANTES DESTACADOS ───────── */
@@ -254,7 +323,8 @@ body {
   height: 100%;
   background: var(--accent, #d43555);
   transform-origin: left center;
-  transition: transform linear;
+  transform: scaleX(1);
+  transition: transform 100ms linear;
 }
 
 /* ───────── HUD 3: ALERTA EMERGENTE (GIFT BUBBLE) ───────── */
@@ -390,15 +460,18 @@ body {
 /* ───────── MODO DE PRUEBA HUD FLOTANTE ───────── */
 .test-hud {
   position: fixed;
-  bottom: 24px;
+  bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: 12px;
+  gap: 8px 10px;
+  max-width: calc(100vw - 24px);
   padding: 8px 14px;
-  border-radius: 9999px;
-  background: rgba(25, 20, 24, 0.85);
+  border-radius: 24px;
+  background: rgba(25, 20, 24, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.2);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(14px);
@@ -418,6 +491,8 @@ body {
 
 .test-hud-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 6px;
 }
@@ -476,11 +551,14 @@ body.studio-bg-magenta {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 8px;
+  max-width: calc(100vw - 24px);
   padding: 6px 12px;
-  border-radius: 9999px;
-  background: rgba(20, 18, 24, 0.9);
+  border-radius: 20px;
+  background: rgba(20, 18, 24, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(12px);
@@ -488,11 +566,29 @@ body.studio-bg-magenta {
   pointer-events: auto;
   opacity: 0;
   transition: opacity 200ms ease-out;
+  -webkit-app-region: drag;
 }
 
 body:hover .studio-hud,
-.studio-hud:focus-within {
+.studio-hud:hover,
+.studio-hud:focus-within,
+.studio-hud.is-peeking {
   opacity: 1;
+}
+
+.studio-hud-drag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: grab;
+  -webkit-app-region: drag;
+}
+
+.studio-drag-grip {
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: -1px;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .studio-hud-badge {
@@ -507,11 +603,15 @@ body:hover .studio-hud,
 
 .studio-hud-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 5px;
+  -webkit-app-region: no-drag;
 }
 
-.studio-bg-btn {
+.studio-bg-btn,
+.studio-close-btn {
   appearance: none;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.08);
@@ -521,12 +621,26 @@ body:hover .studio-hud,
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background 140ms, border-color 140ms;
 }
 
 .studio-bg-btn.is-active,
 .studio-bg-btn:hover {
   background: rgba(255, 255, 255, 0.24);
   border-color: rgba(255, 255, 255, 0.45);
+}
+
+.studio-close-btn {
+  color: #ff8a9b;
+  border-color: rgba(255, 107, 129, 0.38);
+  background: rgba(255, 107, 129, 0.14);
+}
+
+.studio-close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 77, 109, 0.55);
+  border-color: rgba(255, 107, 129, 0.75);
 }
 
 .jar-fatal-error {

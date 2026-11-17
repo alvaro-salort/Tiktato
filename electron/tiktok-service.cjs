@@ -153,7 +153,7 @@ class TikTokService extends EventEmitter {
       retryIn: 0
     };
     this.intentionalDisconnect = false;
-    this.options = { playEveryStreak: true };
+    this.options = { playEveryStreak: true, emitAllPackets: true };
     this.pollTimer = null;
     this.pollTimeout = null;
     this.lastConnectArgs = null;
@@ -289,10 +289,14 @@ class TikTokService extends EventEmitter {
     }
 
     const dedupKey =
-      event.msgId ||
-      (event.type && (event.userId || event.username)
-        ? `${event.type}:${event.userId || event.username}:${event.createTime || event.timestamp || ''}`
-        : '');
+      event.type === 'gift'
+        ? (event.msgId && event.msgId !== '0'
+            ? `gift:${event.msgId}:${event.groupId || ''}:${event.giftId || event.giftName || ''}:${event.repeatCount}:${event.repeatEnd ? 1 : 0}:${event.createTime || ''}`
+            : '')
+        : (event.msgId ||
+            (event.type && (event.userId || event.username)
+              ? `${event.type}:${event.userId || event.username}:${event.createTime || event.timestamp || ''}`
+              : ''));
     if (dedupKey && this.#rememberMsgId(dedupKey)) {
       return null;
     }

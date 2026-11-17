@@ -474,3 +474,465 @@ test('sounds.playEveryStreak false con tts.playEveryStreak true reproduce exacta
   const singleDup = processGiftPacket({ repeatCount: 1, repeatEnd: 1 }, 5000);
   assert.equal(singleDup.alert, null);
 });
+
+test('normalizeTts acepta proveedor fish, voiceId fish:<id>, fishVoiceName y fishModel por defecto', () => {
+  const tts = normalizeTts({
+    voiceProvider: 'fish',
+    voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8',
+    fishVoiceName: 'Goku (Mario Castañeda)'
+  });
+  assert.equal(tts.voiceProvider, 'fish');
+  assert.equal(tts.voiceId, 'fish:9f850ee9ada24b20a6866825eaefd3f8');
+  assert.equal(tts.fishVoiceName, 'Goku (Mario Castañeda)');
+  assert.equal(tts.fishModel, 's2.1-pro-free');
+});
+
+test('FishAudioService valida clave, lista/filtra voces y sintetiza con caché acotada en memoria y disco', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { FishAudioService, DEFAULT_FISH_MODEL } = require('../electron/fish-audio.cjs');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiktato-fish-'));
+  const calls = [];
+
+  const mockFetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    if (String(url).includes('/wallet/self/api-credit')) {
+      if (init.headers?.Authorization === 'Bearer valid-key-123') {
+        return new Response(JSON.stringify({ credit: '10.00' }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    }
+    if (String(url).includes('/model')) {
+      return new Response(
+        JSON.stringify({
+          total: 2,
+          items: [
+            {
+              _id: 'aaaa1111bbbb2222cccc3333dddd4444',
+              title: 'Voz Celebridad Test',
+              tags: ['celebrity', 'spanish'],
+              languages: ['es'],
+              samples: [{ audio: 'https://example.com/sample.mp3' }],
+              task_count: 500
+            },
+            {
+              _id: '9f850ee9ada24b20a6866825eaefd3f8',
+              title: 'Goku duplicado API',
+              tags: ['character'],
+              languages: ['es']
+            }
+          ]
+        }),
+        { status: 200 }
+      );
+    }
+    if (String(url).includes('/v1/tts')) {
+      if (init.headers?.Authorization !== 'Bearer valid-key-123') {
+        return new Response('Unauthorized', { status: 401 });
+      }
+      const parsed = JSON.parse(init.body);
+      const fakeMp3 = Buffer.from(`MP3:${parsed.reference_id}:${parsed.text}`);
+      return new Response(fakeMp3, { status: 200 });
+    }
+    return new Response('Not found', { status: 404 });
+  };
+
+  try {
+    const service = new FishAudioService({
+      userDataDir: dir,
+      fetchImpl: mockFetch,
+      maxMemoryEntries: 2,
+      maxDiskEntries: 2
+    });
+
+    // 1. Validación de API key
+    const emptyKey = await service.testApiKey('');
+    assert.equal(emptyKey.valid, false);
+    assert.equal(emptyKey.code, 'MISSING_API_KEY');
+
+    const badKey = await service.testApiKey('wrong-key');
+    assert.equal(badKey.valid, false);
+    assert.equal(badKey.code, 'INVALID_API_KEY');
+
+    const goodKey = await service.testApiKey('valid-key-123');
+    assert.equal(goodKey.valid, true);
+    assert.equal(goodKey.credit, '10.00');
+
+    // 2. Listado y deduplicación de voces + categorías
+    const listRes = await service.listVoices({ apiKey: 'valid-key-123', category: 'all' });
+    assert.equal(listRes.ok, true);
+    assert.ok(listRes.voices.some((v) => v.referenceId === 'aaaa1111bbbb2222cccc3333dddd4444'));
+    const gokuCount = listRes.voices.filter((v) => v.referenceId === '9f850ee9ada24b20a6866825eaefd3f8').length;
+    assert.equal(gokuCount, 1);
+
+    const selfNoKey = await service.listVoices({ apiKey: '', selfOnly: true });
+    assert.equal(selfNoKey.ok, false);
+
+    // 3. Síntesis sin key -> error limpio sin petición HTTP
+    const missingKeySynth = await service.synthesize({
+      apiKey: '',
+      text: 'hola',
+      referenceId: '9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    assert.equal(missingKeySynth.ok, false);
+    assert.equal(missingKeySynth.code, 'MISSING_API_KEY');
+
+    // 4. Síntesis con key: verifica header model s2.1-pro-free y reference_id en body
+    const synth1 = await service.synthesize({
+      apiKey: 'valid-key-123',
+      text: 'Hola chat',
+      referenceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    assert.equal(synth1.ok, true);
+    assert.equal(synth1.cached, false);
+    assert.equal(
+      Buffer.from(synth1.audioBase64, 'base64').toString('utf8'),
+      'MP3:9f850ee9ada24b20a6866825eaefd3f8:Hola chat'
+    );
+    const ttsCall = calls.find((c) => c.url.includes('/v1/tts'));
+    assert.equal(ttsCall.init.headers.model, DEFAULT_FISH_MODEL);
+    assert.equal(ttsCall.init.headers.Authorization, 'Bearer valid-key-123');
+
+    // 5. Segunda llamada idéntica golpea caché en memoria (sin nuevo fetch)
+    const ttsCallsBefore = calls.filter((c) => c.url.includes('/v1/tts')).length;
+    const synthMem = await service.synthesize({
+      apiKey: 'valid-key-123',
+      text: 'Hola chat',
+      referenceId: '9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    assert.equal(synthMem.ok, true);
+    assert.equal(synthMem.cached, 'memory');
+    assert.equal(calls.filter((c) => c.url.includes('/v1/tts')).length, ttsCallsBefore);
+
+    // 6. Nueva instancia lee caché desde disco sin API call
+    const service2 = new FishAudioService({ userDataDir: dir, fetchImpl: mockFetch });
+    const synthDisk = await service2.synthesize({
+      apiKey: '',
+      text: 'Hola chat',
+      referenceId: '9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    assert.equal(synthDisk.ok, true);
+    assert.equal(synthDisk.cached, 'disk');
+
+    // 7. Evicción acotada (maxMemoryEntries=2, maxDiskEntries=2)
+    await service.synthesize({
+      apiKey: 'valid-key-123',
+      text: 'Frase 2',
+      referenceId: '9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    await service.synthesize({
+      apiKey: 'valid-key-123',
+      text: 'Frase 3',
+      referenceId: '9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    const cacheStats = await service.getCacheStats();
+    assert.equal(cacheStats.memoryEntries, 2);
+    assert.equal(cacheStats.diskEntries, 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('TTSQueue reproduce fish:<reference_id>, cachea frases repetidas, respeta ducking/skip y hace fallback limpio', async () => {
+  const { TTSQueue } = await import('../shared/tts-engine.js');
+
+  const playedUrls = [];
+  const origAudio = globalThis.Audio;
+  globalThis.Audio = class FakeAudio {
+    constructor(src) {
+      this.src = src;
+      this.volume = 1;
+      this.listeners = {};
+    }
+    addEventListener(evt, cb) {
+      this.listeners[evt] = cb;
+    }
+    removeEventListener(evt) {
+      delete this.listeners[evt];
+    }
+    pause() {}
+    play() {
+      playedUrls.push({ src: this.src, volume: this.volume });
+      setTimeout(() => this.listeners.ended?.(), 5);
+      return Promise.resolve();
+    }
+  };
+
+  try {
+    let synthCalls = 0;
+    const fakeSoundEngine = {
+      ducked: false,
+      duck(level) { this.ducked = true; this.level = level; },
+      restore() { this.ducked = false; }
+    };
+
+    const queue = new TTSQueue({
+      soundEngine: fakeSoundEngine,
+      maxCacheEntries: 2,
+      fishSynthesizer: async ({ text, referenceId }) => {
+        synthCalls += 1;
+        if (text === 'falla') {
+          return { ok: false, error: 'Sin clave' };
+        }
+        return {
+          ok: true,
+          audioBase64: Buffer.from(`${referenceId}:${text}`).toString('base64'),
+          contentType: 'audio/mpeg'
+        };
+      }
+    });
+
+    // 1. Primera reproducción Fish Audio con ducking y volumen
+    queue.enqueue({
+      text: 'Hola TikTok',
+      voiceProvider: 'fish',
+      voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8',
+      volume: 0.6,
+      ducking: true,
+      duckingLevel: 0.2
+    });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(synthCalls, 1);
+    assert.equal(playedUrls.length, 1);
+    assert.match(playedUrls[0].src, /^data:audio\/mpeg;base64,/);
+    assert.equal(playedUrls[0].volume, 0.6);
+    assert.equal(fakeSoundEngine.ducked, false);
+
+    // 2. Segunda frase idéntica reutiliza caché de TTSQueue (synthCalls sigue en 1)
+    queue.enqueue({
+      text: 'Hola TikTok',
+      voiceProvider: 'fish',
+      voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8',
+      volume: 0.9
+    });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(synthCalls, 1);
+    assert.equal(playedUrls.length, 2);
+
+    // 3. Fallback limpio a Google TTS si Fish Audio falla
+    queue.enqueue({
+      text: 'falla',
+      voiceProvider: 'fish',
+      voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8',
+      voiceLanguage: 'es-ES'
+    });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(playedUrls.length, 3);
+    assert.match(playedUrls[2].src, /google\.com\/speech-api\/v2\/synthesize/);
+
+    // 4. Skip inmediato durante síntesis lenta de Fish Audio
+    const slowQueue = new TTSQueue({
+      soundEngine: fakeSoundEngine,
+      fishSynthesizer: () => new Promise(() => {}) // Nunca resuelve
+    });
+    slowQueue.enqueue({
+      text: 'Lenta',
+      voiceProvider: 'fish',
+      voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(slowQueue.isSpeaking, true);
+    slowQueue.skip();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(slowQueue.isSpeaking, false);
+    assert.equal(fakeSoundEngine.ducked, false);
+  } finally {
+    if (origAudio === undefined) {
+      delete globalThis.Audio;
+    } else {
+      globalThis.Audio = origAudio;
+    }
+  }
+});
+
+test('FishAudioService maneja catálogo local sin API key, errores de cuota/JSON, clearCache y entradas inválidas', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { FishAudioService } = require('../electron/fish-audio.cjs');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiktato-fish-edge-'));
+  let fetchCalls = 0;
+
+  const mockFetch = async (url) => {
+    fetchCalls += 1;
+    if (String(url).includes('/v1/tts')) {
+      if (fetchCalls === 1) {
+        return new Response(JSON.stringify({ detail: 'Rate limit' }), { status: 429 });
+      }
+      if (fetchCalls === 2) {
+        return new Response(JSON.stringify({ error: 'unexpected' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      return new Response(Buffer.from('OK_MP3'), {
+        status: 200,
+        headers: { 'content-type': 'audio/mpeg' }
+      });
+    }
+    return new Response('Not found', { status: 404 });
+  };
+
+  try {
+    const service = new FishAudioService({ userDataDir: dir, fetchImpl: mockFetch });
+
+    // Sin API key: listVoices devuelve voces curadas sin disparar /model (evita 401 falso al abrir el menú)
+    const noKeyList = await service.listVoices({ apiKey: '', category: 'characters' });
+    assert.equal(noKeyList.ok, true);
+    assert.equal(noKeyList.needsApiKey, true);
+    assert.equal(noKeyList.source, 'curated');
+    assert.ok(noKeyList.voices.length > 0);
+    assert.equal(fetchCalls, 0);
+
+    // Texto vacío e ID inválido
+    const emptyText = await service.synthesize({
+      apiKey: 'k',
+      text: '   ',
+      referenceId: '9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    assert.equal(emptyText.ok, false);
+    assert.equal(emptyText.code, 'EMPTY_TEXT');
+
+    const badRef = await service.synthesize({
+      apiKey: 'k',
+      text: 'hola',
+      referenceId: 'no!'
+    });
+    assert.equal(badRef.ok, false);
+    assert.equal(badRef.code, 'INVALID_REFERENCE_ID');
+
+    // Cuota / 429 y JSON inesperado con 200
+    const rateLimited = await service.synthesize({
+      apiKey: 'k',
+      text: 'hola',
+      referenceId: '9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    assert.equal(rateLimited.ok, false);
+    assert.equal(rateLimited.code, 'QUOTA_OR_RATE_LIMIT');
+
+    const jsonResp = await service.synthesize({
+      apiKey: 'k',
+      text: 'hola',
+      referenceId: '9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    assert.equal(jsonResp.ok, false);
+    assert.equal(jsonResp.code, 'UNEXPECTED_JSON');
+
+    // Síntesis válida + clearCache
+    const okResp = await service.synthesize({
+      apiKey: 'k',
+      text: 'hola',
+      referenceId: '9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    assert.equal(okResp.ok, true);
+    let stats = await service.getCacheStats();
+    assert.equal(stats.memoryEntries, 1);
+    assert.equal(stats.diskEntries, 1);
+
+    await service.clearCache();
+    stats = await service.getCacheStats();
+    assert.equal(stats.memoryEntries, 0);
+    assert.equal(stats.diskEntries, 0);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('FishAudioService reporta error cuando /model falla sin voces curadas y amplía page_size en categorías locales', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { FishAudioService } = require('../electron/fish-audio.cjs');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiktato-fish-401-'));
+  const seenUrls = [];
+  const mockFetch = async (url) => {
+    seenUrls.push(String(url));
+    if (seenUrls.length === 1) {
+      return new Response(JSON.stringify({ detail: 'Unauthorized' }), { status: 401 });
+    }
+    return new Response(JSON.stringify({ total: 0, items: [] }), { status: 200 });
+  };
+
+  try {
+    const service = new FishAudioService({ userDataDir: dir, fetchImpl: mockFetch });
+    const badRes = await service.listVoices({ apiKey: 'bad-key', query: 'voz_inexistente_xyz' });
+    assert.equal(badRes.ok, false);
+    assert.equal(badRes.voices.length, 0);
+    assert.match(badRes.error, /inválida/i);
+
+    await service.listVoices({ apiKey: 'good-key', category: 'celebrities' });
+    assert.match(seenUrls[1], /page_size=50/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('TTSQueue incluye speed en la clave de caché de Fish Audio y lo reenvía al sintetizador', async () => {
+  const { TTSQueue } = await import('../shared/tts-engine.js');
+  const origAudio = globalThis.Audio;
+  globalThis.Audio = class FakeAudio {
+    constructor() {
+      this.listeners = {};
+    }
+    addEventListener(evt, cb) { this.listeners[evt] = cb; }
+    removeEventListener() {}
+    pause() {}
+    play() {
+      setTimeout(() => this.listeners.ended?.(), 2);
+      return Promise.resolve();
+    }
+  };
+
+  try {
+    const synthPayloads = [];
+    const queue = new TTSQueue({
+      fishSynthesizer: async (payload) => {
+        synthPayloads.push(payload);
+        return {
+          ok: true,
+          audioBase64: Buffer.from(`MP3:${payload.speed ?? 1}`).toString('base64'),
+          contentType: 'audio/mpeg'
+        };
+      }
+    });
+
+    queue.enqueue({
+      text: 'Velocidad distinta',
+      voiceProvider: 'fish',
+      voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8',
+      speed: 1
+    });
+    await new Promise((r) => setTimeout(r, 30));
+
+    queue.enqueue({
+      text: 'Velocidad distinta',
+      voiceProvider: 'fish',
+      voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8',
+      speed: 1.25
+    });
+    await new Promise((r) => setTimeout(r, 30));
+
+    assert.equal(synthPayloads.length, 2);
+    assert.equal(synthPayloads[0].speed, 1);
+    assert.equal(synthPayloads[1].speed, 1.25);
+  } finally {
+    if (origAudio === undefined) {
+      delete globalThis.Audio;
+    } else {
+      globalThis.Audio = origAudio;
+    }
+  }
+});
+
+test('CURATED_FISH_VOICES prioriza Babidi como voz recomendada y mantiene solo voces en español activas', () => {
+  const { CURATED_FISH_VOICES } = require('../electron/fish-audio.cjs');
+  assert.ok(CURATED_FISH_VOICES.length > 0);
+  assert.equal(CURATED_FISH_VOICES[0].referenceId, '47d00a02c75f47b7877fe925ab66b5f2');
+  assert.equal(CURATED_FISH_VOICES[0].name, 'Babidi');
+  assert.equal(CURATED_FISH_VOICES[0].recommended, true);
+  assert.ok(CURATED_FISH_VOICES.every((v) => Array.isArray(v.languages) && v.languages.includes('es')));
+});

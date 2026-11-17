@@ -23,6 +23,7 @@ function createStreakTracker() {
         giftId = '',
         giftName = '',
         groupId = '',
+        msgId = '',
         giftType = 0,
         repeatCount = 1,
         repeatEnd = true
@@ -37,6 +38,7 @@ function createStreakTracker() {
       const giftKey = String(giftId || giftName || 'gift');
       const key = `${actor}:${giftKey}`;
       const gid = String(groupId || '');
+      const mid = String(msgId || '');
 
       const prev = streaks.get(key);
       const isFinal = Boolean(repeatEnd);
@@ -48,6 +50,7 @@ function createStreakTracker() {
           closed: isFinal,
           closedAt: isFinal ? now : 0,
           groupId: gid,
+          msgId: mid,
           lastSeen: now,
           soundPlayed
         });
@@ -56,6 +59,7 @@ function createStreakTracker() {
             streakKey: key,
             isActive: !isFinal,
             isFinal,
+            isNewStreak: true,
             streakDelta: isFinal ? 1 : 0,
             totalCount: count,
             suppressAlert: !isFinal
@@ -65,6 +69,7 @@ function createStreakTracker() {
           streakKey: key,
           isActive: !isFinal,
           isFinal,
+          isNewStreak: true,
           streakDelta: count,
           totalCount: count,
           suppressAlert: false
@@ -73,8 +78,14 @@ function createStreakTracker() {
 
       if (prev.closed) {
         const hasDistinctGroupId = Boolean(gid && prev.groupId && gid !== prev.groupId);
+        const hasDistinctMsgId = Boolean(mid && prev.msgId && mid !== prev.msgId);
         const withinClosingWindow = (now - prev.closedAt) < CLOSING_WINDOW_MS;
-        const isDuplicateClosing = isFinal && !hasDistinctGroupId && withinClosingWindow && count === prev.lastRepeatCount;
+        const isDuplicateClosing =
+          isFinal &&
+          !hasDistinctGroupId &&
+          !hasDistinctMsgId &&
+          withinClosingWindow &&
+          count === prev.lastRepeatCount;
 
         if (isDuplicateClosing) {
           prev.lastSeen = now;
@@ -82,6 +93,7 @@ function createStreakTracker() {
             streakKey: key,
             isActive: false,
             isFinal: true,
+            isNewStreak: false,
             streakDelta: 0,
             totalCount: count,
             suppressAlert: true
@@ -95,6 +107,7 @@ function createStreakTracker() {
           closed: isFinal,
           closedAt: isFinal ? now : 0,
           groupId: gid || prev.groupId,
+          msgId: mid,
           lastSeen: now,
           soundPlayed
         });
@@ -103,6 +116,7 @@ function createStreakTracker() {
             streakKey: key,
             isActive: !isFinal,
             isFinal,
+            isNewStreak: true,
             streakDelta: isFinal ? 1 : 0,
             totalCount: count,
             suppressAlert: !isFinal
@@ -112,6 +126,7 @@ function createStreakTracker() {
           streakKey: key,
           isActive: !isFinal,
           isFinal,
+          isNewStreak: true,
           streakDelta: count,
           totalCount: count,
           suppressAlert: false
@@ -129,6 +144,7 @@ function createStreakTracker() {
       prev.closed = isFinal;
       prev.closedAt = isFinal ? now : 0;
       if (gid) prev.groupId = gid;
+      if (mid) prev.msgId = mid;
       prev.lastSeen = now;
 
       if (!playEveryStreak) {
@@ -136,6 +152,7 @@ function createStreakTracker() {
           streakKey: key,
           isActive: !isFinal,
           isFinal,
+          isNewStreak: false,
           streakDelta: shouldPlaySound ? 1 : 0,
           totalCount: count,
           suppressAlert: !shouldPlaySound
@@ -146,6 +163,7 @@ function createStreakTracker() {
         streakKey: key,
         isActive: !isFinal,
         isFinal,
+        isNewStreak: false,
         streakDelta: delta,
         totalCount: count,
         suppressAlert: delta === 0
@@ -344,7 +362,8 @@ function normalizeTikTokEvent(type, data, now = Date.now(), options = {}) {
       typeof repeatEndRaw === 'boolean' ? repeatEndRaw : Number(repeatEndRaw) !== 0;
 
     const playEveryStreak = Boolean(options && (options.playEveryStreak || options.allowCombos));
-    if (!repeatEnd && !playEveryStreak) return null;
+    const emitAllPackets = Boolean(options && options.emitAllPackets);
+    if (!repeatEnd && !playEveryStreak && !emitAllPackets) return null;
 
     const rawGiftName = String(gift.name || gift.giftName || data.giftName || '').trim();
     const isTest = Boolean(
@@ -386,6 +405,7 @@ function normalizeTikTokEvent(type, data, now = Date.now(), options = {}) {
           giftId: resolvedGiftId,
           giftName: displayGiftName,
           groupId,
+          msgId: base.msgId,
           giftType,
           repeatCount,
           repeatEnd
