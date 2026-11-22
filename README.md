@@ -12,8 +12,8 @@
 
 ## Descargar
 
-- [Instalador de Windows v1.3.0 (`Tiktato-Setup-1.3.0.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
-- [Versión portable v1.3.0 (`Tiktato-Portable-1.3.0.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+- [Instalador de Windows v1.3.1 (`Tiktato-Setup-1.3.1.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+- [Versión portable v1.3.1 (`Tiktato-Portable-1.3.1.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
 
 También puedes ejecutarlo desde el código fuente con `npm install` y `npm start`.
 
@@ -48,7 +48,7 @@ También puedes ejecutarlo desde el código fuente con `npm install` y `npm star
   - **Modo Ventana Nativa para TikTok LIVE Studio**: Permite abrir el Frasco en una ventana dedicada (`TikTato - Frasco`) con selector rápido de fondo (**Verde Chroma**, **Oscuro**, **Azul Chroma**, **Magenta** o **Transparente**) para quienes transmiten directamente desde TikTok LIVE Studio sin OBS.
   - Modo de calibración/prueba con HUD interactivo (`/jar?test=1`).
 - **Voz para Chat y Regalos (TTS)**:
-  - Selector de dialectos naturales de Google (España, LatAm, México, Argentina, EE.UU.) y compatibilidad automática con todas las voces del sistema instaladas en Windows.
+  - Síntesis de voz local con todas las voces del sistema instaladas en Windows (Web Speech API) por defecto y soporte opcional para **Fish Audio (BYOK)** con voces personalizadas en español.
   - **Lectura opcional del nombre de usuario**: Elige si el TTS lee el nombre del espectador antes del mensaje (`Usuario: hola`) o directamente el mensaje (`hola`), sin muletillas innecesarias.
   - **Filtros opcionales de chat por rol/nivel**: Por defecto lee todos los mensajes del chat (ideal para canales en crecimiento), con opción de restringir la lectura solo a **Moderadores**, **Suscriptores / Superfans**, **Mensajes destacados**, **Amigos**, **Seguidores**, **Donadores** (nivel mínimo configurable) o **Miembros del club**.
   - **Moderación automática en vivo**: Si un moderador borra un mensaje o banea a un usuario en TikTok LIVE, TikTato cancela y elimina automáticamente sus mensajes de la cola de voz.
@@ -68,11 +68,16 @@ También puedes ejecutarlo desde el código fuente con `npm install` y `npm star
 ```text
 Tiktato/
 ├── electron/
-│   ├── main.cjs            # Proceso principal de Electron, servidor HTTP/WS local y ventana Studio
+│   ├── main.cjs            # Proceso principal de Electron y ventana Studio
 │   ├── config.cjs          # Gestión y persistencia segura de la configuración (config.json)
 │   ├── events.cjs          # Normalización y enriquecimiento de eventos de TikTok LIVE
 │   ├── alert-matcher.cjs   # Motor de coincidencia de reglas y cooldowns
+│   ├── fish-audio.cjs      # Integración opcional con Fish Audio TTS (BYOK) y caché local
+│   ├── gifts-catalog.cjs   # Catálogo de regalos de TikTok LIVE con detección automática de región
+│   ├── overlay-server.cjs  # Servidor HTTP/WebSocket local para overlays
 │   ├── tiktok-service.cjs  # Cliente de conexión TikTok LIVE (piratetok-live-js) con reconexión
+│   ├── updater.cjs         # Auto-actualizador (electron-updater) para builds NSIS
+│   ├── jar-studio-preload.cjs # Context bridge para la ventana nativa del Frasco
 │   └── preload.cjs         # Context bridge seguro para el panel de control
 ├── renderer/
 │   ├── index.html          # Panel de control de escritorio con menú lateral
@@ -81,23 +86,25 @@ Tiktato/
 │   ├── theme-init.js       # Aplica el tema claro u oscuro antes del primer pintado
 │   └── assets/             # Logo, íconos y tipografías Nunito y Fredoka
 ├── overlay/
-│   ├── overlay.html        # Página web transparente para OBS Browser Source
+│   ├── index.html          # Página web transparente para OBS Browser Source
 │   ├── overlay.css         # Animaciones y diseño de la tarjeta de alerta
 │   ├── overlay.js          # Cliente WebSocket y cola de renderizado
 │   ├── jar.html            # Overlay del Frasco de Donaciones 2D
 │   ├── jar.css             # Estilos del frasco, ventana nativa y leaderboard
-│   └── jar.js              # Motor de física 2D (Matter.js) y renderizado SVG
+│   ├── jar.js              # Motor de física 2D (Matter.js) y renderizado SVG
+│   ├── matter.min.js       # Biblioteca Matter.js local para física 2D
+│   └── assets/             # Recursos estáticos de los overlays
 ├── shared/
 │   ├── audio-engine.js     # Motor de audio Web Audio API / HTML5 Audio con ducking y volumen > 100%
-│   └── tts-engine.js       # Motor de síntesis de voz (Google TTS + Web Speech API fallback)
-├── tests/                  # 94 pruebas unitarias automáticas con el runner nativo de Node.js
+│   └── tts-engine.js       # Motor de síntesis de voz local (Web Speech API / voces del sistema)
+├── tests/                  # Pruebas unitarias automáticas con el runner nativo de Node.js
 └── package.json            # Scripts, dependencias y configuración de electron-builder
 ```
 
 ## Requisitos
 
 - **Windows 10 / 11** (64 bits).
-- Conexión a Internet para conectar con TikTok LIVE y descargar voces de Google Speech.
+- Conexión a Internet para conectar con TikTok LIVE.
 - Para ejecutar desde el código fuente: **Node.js 22 LTS** o superior.
 
 ## Instalación para desarrollo

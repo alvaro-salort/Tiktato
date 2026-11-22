@@ -369,7 +369,7 @@ function normalizeTikTokEvent(type, data, now = Date.now(), options = {}) {
     const isTest = Boolean(
       data?.test ||
       data?.isTest ||
-      /prueba|test/i.test(rawGiftName)
+      /\b(prueba|test)\b/i.test(rawGiftName)
     );
 
     const giftId = String(data.giftId || gift.id || '');

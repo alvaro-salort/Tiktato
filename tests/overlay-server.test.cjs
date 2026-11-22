@@ -249,3 +249,46 @@ test('restringe Access-Control-Allow-Origin a orígenes locales en lugar de como
   }
 });
 
+test('rechaza Range malformado (416), WS con Origin externo (403), path traversal y sirve /api/gifts protegido', async () => {
+  const { server, sounds } = makeServer();
+  try {
+    await server.start();
+    const port = server.port;
+    server.setGifts([{ id: '5655', name: 'Rosa', coins: 1 }]);
+
+    // Range malformado no debe crashear el servidor y debe devolver 416
+    for (const badRange of ['bytes=-abc', 'bytes=abc-def', 'bytes=-']) {
+      const res = await fetch(`http://127.0.0.1:${port}/sounds/demo.mp3?token=${token}`, {
+        headers: { Range: badRange }
+      });
+      assert.equal(res.status, 416);
+      assert.equal(res.headers.get('content-range'), 'bytes */4');
+    }
+
+    // Rechazo WS 403 ante Origin externo
+    const wsEvil = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${token}`, {
+      headers: { Origin: 'https://evil.example.com' }
+    });
+    const wsErr = await new Promise((resolve) => wsEvil.once('error', resolve));
+    assert.match(wsErr.message, /403/);
+
+    // Path traversal bloqueado en /sounds y /assets
+    const travSounds = await fetch(`http://127.0.0.1:${port}/sounds/..%2Fpackage.json?token=${token}`);
+    assert.ok(travSounds.status === 403 || travSounds.status === 404);
+    const travAssets = await fetch(`http://127.0.0.1:${port}/assets/..%2F..%2Fpackage.json`);
+    assert.ok(travAssets.status === 403 || travAssets.status === 404);
+
+    // /api/gifts requiere token y devuelve catálogo
+    const giftsDenied = await fetch(`http://127.0.0.1:${port}/api/gifts`);
+    assert.equal(giftsDenied.status, 401);
+    const giftsOk = await fetch(`http://127.0.0.1:${port}/api/gifts?token=${token}`);
+    assert.equal(giftsOk.status, 200);
+    const giftsJson = await giftsOk.json();
+    assert.equal(Array.isArray(giftsJson.gifts), true);
+    assert.equal(giftsJson.gifts[0].id, '5655');
+  } finally {
+    await server.stop();
+    fs.rmSync(sounds, { recursive: true, force: true });
+  }
+});
+

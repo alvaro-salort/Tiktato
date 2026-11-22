@@ -7,7 +7,9 @@ const rootDir = path.resolve(__dirname, '..');
 
 function patchFile(relPath, before, after) {
   const fullPath = path.join(rootDir, relPath);
-  if (!fs.existsSync(fullPath)) return;
+  if (!fs.existsSync(fullPath)) {
+    throw new Error(`[apply-patches] No se encontró el archivo objetivo: ${relPath}`);
+  }
   const content = fs.readFileSync(fullPath, 'utf8');
   if (content.includes(after)) return;
   if (!content.includes(before)) {

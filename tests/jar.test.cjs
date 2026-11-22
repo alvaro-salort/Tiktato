@@ -394,7 +394,10 @@ function createJarVmSandbox({ search = '?studio=1', pathname = '/jar', hidden = 
       hidden: id === 'testHud' || id === 'studioHud',
       textContent: '',
       src: '',
+      width: 0,
+      height: 0,
       dataset: {},
+      getContext: () => mockCtx,
       style: { width: '', transform: '', setProperty: () => {} },
       classList: {
         add: (...c) => c.forEach((x) => classes.add(x)),
@@ -437,14 +440,21 @@ function createJarVmSandbox({ search = '?studio=1', pathname = '/jar', hidden = 
   const mockCtx = {
     save: () => ctxOps.push('save'),
     restore: () => ctxOps.push('restore'),
+    translate: () => ctxOps.push('translate'),
+    rotate: () => ctxOps.push('rotate'),
     beginPath: () => ctxOps.push('beginPath'),
     arc: () => ctxOps.push('arc'),
     fill: () => ctxOps.push('fill'),
     stroke: () => ctxOps.push('stroke'),
+    fillText: () => ctxOps.push('fillText'),
+    drawImage: () => ctxOps.push('drawImage'),
     createRadialGradient: () => ({ addColorStop: () => {} }),
     fillStyle: '',
     strokeStyle: '',
-    lineWidth: 1
+    lineWidth: 1,
+    font: '',
+    textAlign: '',
+    textBaseline: ''
   };
   const mockRender = { canvas: {}, options: {}, context: mockCtx, textures: {} };
   const mockMatter = {
@@ -453,7 +463,9 @@ function createJarVmSandbox({ search = '?studio=1', pathname = '/jar', hidden = 
     },
     Render: {
       create: () => mockRender,
-      run: () => {}
+      run: () => {},
+      stop: () => {},
+      setSize: () => {}
     },
     Runner: {
       create: () => ({}),
@@ -465,6 +477,7 @@ function createJarVmSandbox({ search = '?studio=1', pathname = '/jar', hidden = 
       circle: (x, y, r, opts = {}) => ({
         position: { x, y },
         velocity: { x: 0, y: 0 },
+        angle: 0,
         circleRadius: r,
         isStatic: false,
         isSleeping: false,
@@ -474,7 +487,9 @@ function createJarVmSandbox({ search = '?studio=1', pathname = '/jar', hidden = 
     Body: {
       setVelocity: (body, vel) => {
         body.velocity = { ...vel };
-      }
+      },
+      setPosition: () => {},
+      translate: () => {}
     },
     Composite: {
       add: (_world, item) => {
@@ -509,6 +524,7 @@ function createJarVmSandbox({ search = '?studio=1', pathname = '/jar', hidden = 
     constructor() {
       this.naturalWidth = 64;
       this.naturalHeight = 64;
+      this.complete = true;
     }
     set src(val) {
       this._src = val;
@@ -543,6 +559,7 @@ function createJarVmSandbox({ search = '?studio=1', pathname = '/jar', hidden = 
       hidden,
       body: makeEl('body'),
       documentElement: makeEl('html'),
+      createElement: () => makeEl('canvas'),
       querySelector: (sel) => getEl(sel),
       querySelectorAll: () => [],
       addEventListener: () => {}
@@ -594,13 +611,15 @@ function createJarVmSandbox({ search = '?studio=1', pathname = '/jar', hidden = 
     `${jarCode}\n;globalThis.__jarApi = {
       enqueueGift, processQueueTick, resetJar, applyConfig, spawnGift, mergeBodies, canBodiesMerge,
       buildJarBodies, computeSpawnPosition, computeRadius, computeQueueDelayMs, getVisibleDonors,
-      updateLeaderboardWithGift, buildRehydrationPlan,
+      updateLeaderboardWithGift, buildRehydrationPlan, loadState,
       getCoins: () => currentCoinsTotal,
       getDynamicBodies: () => dynamicBodies,
       getMergeEffects: () => mergeEffects,
       getQueue: () => giftQueue,
       getTopDonors: () => topDonorsList,
       getLeaderboardIndex: () => currentLeaderboardIndex,
+      getIsInitialLoad: () => isInitialLoad,
+      getLeaderboardTimer: () => leaderboardTimer,
       setDocHidden: (val) => { document.hidden = val; },
       advanceNow: (ms) => { fakeNow += ms; }
     };`,
@@ -769,17 +788,13 @@ test('cola adaptativa acelera cuando >20, acota cola en segundo plano sin perder
   assert.equal(getEl('#jarTotalCoins').classList.contains('is-goal-reached'), true);
   assert.equal(getEl('#jarTotalCoins').classList.contains('is-goal-just-reached'), true);
 
-  // En segundo plano (document.hidden && !isStudioMode), acota giftQueue a 500 conservando monedas
+  // En segundo plano (document.hidden && !isStudioMode), acredita directamente sin inflar giftQueue
   api.resetJar();
   api.setDocHidden(true);
   api.enqueueGift({ giftId: '5655', value: 2, giftName: 'Rosa', repeatCount: 600, username: 'spammer' });
-  assert.equal(api.getQueue().length, 500);
-  assert.equal(api.getCoins(), 200); // 100 items condensados (100 * 2)
+  assert.equal(api.getQueue().length, 0);
+  assert.equal(api.getCoins(), 1200);
   api.setDocHidden(false);
-  while (api.getQueue().length > 0) {
-    api.processQueueTick();
-  }
-  assert.equal(api.getCoins(), 1200); // 600 * 2 íntegros
 });
 
 test('jar.css oculta [hidden] correctamente, Studio tiene botón Cerrar funcional y MODO PRUEBA solo aparece en test/preview', () => {
@@ -1105,4 +1120,48 @@ test('simulación física real con Matter.js soporta +500 rosas sin desbordar el
   }
 });
 
+test('jar.js: tope de cola/combos, acumulador fuera de topN, hidratación tras fallo y fallback de textura a Rosa', async () => {
+  const { api, ctxOps } = createJarVmSandbox();
 
+  // 1. loadState() falla -> isInitialLoad sigue en true y luego applyConfig hidrata correctamente
+  await api.loadState();
+  assert.equal(api.getIsInitialLoad(), true);
+  api.applyConfig({
+    currentCoins: 600,
+    numberOfRanks: 'top3',
+    leaderboardDuration: 5,
+    topDonors: [
+      { username: 'u1', displayName: 'U1', totalCoins: 300 },
+      { username: 'u2', displayName: 'U2', totalCoins: 200 },
+      { username: 'u3', displayName: 'U3', totalCoins: 100 }
+    ]
+  });
+  assert.equal(api.getIsInitialLoad(), false);
+  assert.equal(api.getCoins(), 600);
+
+  // 2. Donante fuera de top3 acumula monedas hasta superar al #2/#3
+  api.enqueueGift({ coins: 150, value: 150, repeatCount: 1, giftName: 'Rosa', username: 'u4' });
+  api.processQueueTick();
+  api.enqueueGift({ coins: 100, value: 100, repeatCount: 1, giftName: 'Rosa', username: 'u4' });
+  api.processQueueTick();
+  const visible = api.getVisibleDonors();
+  assert.equal(visible.length, 3);
+  assert.equal(visible[0].username, 'u1');
+  assert.equal(visible[1].username, 'u4');
+  assert.equal(visible[1].totalCoins, 250);
+
+  // 3. Combo de 50 regalos acotado a MAX_PHYSICAL_PER_EVENT (25) sin perder monedas
+  const coinsBeforeCombo = api.getCoins();
+  api.enqueueGift({ coins: 50, coinsPerGift: 1, repeatCount: 50, giftName: 'Rosa', username: 'combo' });
+  assert.ok(api.getQueue().length <= 27);
+  while (api.getQueue().length > 0) api.processQueueTick();
+  assert.equal(api.getCoins(), coinsBeforeCombo + 50);
+
+  // 4. Fallback visual a Rosa cuando textura no existe en render.textures
+  const bodies = api.getDynamicBodies();
+  assert.ok(bodies.length > 0);
+  bodies[0].render.sprite = { texture: 'https://expired.cdn/missing.webp', textureLoaded: true };
+  api.triggerAfterRender();
+  assert.equal(bodies[0].render.sprite, undefined);
+  assert.ok(ctxOps.includes('drawImage'));
+});

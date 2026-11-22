@@ -28,7 +28,9 @@ function note(ctx, destination, frequency, start, duration, type = 'sine', gain 
 export class SoundEngine {
   constructor() {
     this.context = null;
-    this.queue = Promise.resolve();
+    this.queue = [];
+    this.isPlayingQueue = false;
+    this.queueGeneration = 0;
     this.activeNodes = new Map();
     this.activeAudio = new Map();
     this.isDucked = false;
@@ -37,7 +39,8 @@ export class SoundEngine {
 
   duck(factor = 0.25) {
     this.isDucked = true;
-    this.duckFactor = Math.max(0, Math.min(1, Number(factor) || 0.25));
+    const parsed = Number(factor);
+    this.duckFactor = Math.max(0, Math.min(1, Number.isFinite(parsed) ? parsed : 0.25));
     for (const [audio, baseVol] of this.activeAudio.entries()) {
       try {
         audio.volume = Math.max(0, Math.min(1, baseVol * this.duckFactor));
@@ -88,23 +91,48 @@ export class SoundEngine {
 
   play(sound, volume = 1) {
     const repeat = Math.max(1, Math.min(50, Math.round(Number(sound?.repeat) || 1)));
-    const item = { sound, volume: Math.max(0, Math.min(2, Number(volume) || 0)), repeat };
-    this.queue = this.queue
-      .then(async () => {
-        for (let i = 0; i < item.repeat; i += 1) {
-          await this.#playOne(item.sound, item.volume);
+    const parsedVol = Number(volume);
+    const safeVolume = Math.max(0, Math.min(2, Number.isFinite(parsedVol) ? parsedVol : 0));
+    return new Promise((resolve) => {
+      this.queue.push({ sound, volume: safeVolume, repeat, resolve });
+      this.#drainQueue();
+    });
+  }
+
+  async #drainQueue() {
+    if (this.isPlayingQueue) return;
+    this.isPlayingQueue = true;
+    const gen = this.queueGeneration;
+
+    try {
+      while (this.queue.length > 0 && gen === this.queueGeneration) {
+        const item = this.queue.shift();
+        try {
+          for (let i = 0; i < item.repeat; i += 1) {
+            if (gen !== this.queueGeneration) break;
+            await this.#playOne(item.sound, item.volume);
+          }
+        } catch (error) {
+          console.warn('[audio] no se pudo reproducir', error);
+        } finally {
+          item.resolve();
         }
-      })
-      .catch((error) => console.warn('[audio] no se pudo reproducir', error));
-    return this.queue;
+      }
+    } finally {
+      if (gen === this.queueGeneration) {
+        this.isPlayingQueue = false;
+      }
+    }
   }
 
   async preview(sound, volume = 1) {
     if (!sound) return;
-    this.queue = Promise.resolve();
     this.stopAll();
-    const safeVolume = Math.max(0, Math.min(2, Number(volume) || 0));
+    const gen = this.queueGeneration;
+    const parsedVol = Number(volume);
+    const safeVolume = Math.max(0, Math.min(2, Number.isFinite(parsedVol) ? parsedVol : 0));
     await this.unlock();
+    if (gen !== this.queueGeneration) return;
 
     if (sound.kind === 'file' && sound.url) {
       await this.#startFile(sound.url, safeVolume, { waitForEnd: false });
@@ -130,10 +158,11 @@ export class SoundEngine {
     await this.#playBuiltin(sound.key || String(sound.id || '').replace('builtin:', ''), volume);
   }
 
-  async #startFile(url, volume, { waitForEnd = true } = {}) {
+  async #startFile(url, volume, { waitForEnd = true, timeoutMs = 30_000 } = {}) {
     const audio = new Audio(url);
     audio.preload = 'auto';
-    const baseVolume = Math.max(0, Math.min(1.5, Number(volume) || 0));
+    const parsedVol = Number(volume);
+    const baseVolume = Math.max(0, Math.min(1.5, Number.isFinite(parsedVol) ? parsedVol : 0));
     const effectiveVolume = this.isDucked
       ? Math.max(0, Math.min(1.5, baseVolume * this.duckFactor))
       : baseVolume;
@@ -158,13 +187,23 @@ export class SoundEngine {
 
     await new Promise((resolve, reject) => {
       let settled = false;
+      let timer = null;
       const done = (err) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timer);
         cleanup();
         if (err && !audio.__stoppedByUser) reject(err);
         else resolve();
       };
+      timer = setTimeout(() => {
+        try {
+          audio.pause();
+          audio.src = '';
+        } catch {}
+        done();
+      }, Math.max(1000, Number(timeoutMs) || 30_000));
+
       audio.addEventListener('ended', () => done(), { once: true });
       audio.addEventListener(
         'error',
@@ -250,6 +289,15 @@ export class SoundEngine {
   }
 
   stopAll() {
+    this.queueGeneration += 1;
+    const pending = this.queue.splice(0);
+    for (const item of pending) {
+      try {
+        item.resolve();
+      } catch {}
+    }
+    this.isPlayingQueue = false;
+
     for (const [audio] of this.activeAudio.entries()) {
       try {
         audio.__stoppedByUser = true;

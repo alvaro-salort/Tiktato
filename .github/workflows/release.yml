@@ -15,18 +15,33 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
   NODE_NO_WARNINGS: '1'
 
 jobs:
   build-windows:
     name: Build Windows (NSIS & Portable)
     runs-on: windows-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Validate tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $pkg = Get-Content -Raw -Path package.json | ConvertFrom-Json
+          $expectedTag = "v$($pkg.version)"
+          $actualTag = $env:GITHUB_REF -replace '^refs/tags/', ''
+          if ($actualTag -ne $expectedTag) {
+            throw "El tag '$actualTag' no coincide con package.json version '$expectedTag'"
+          }
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -41,8 +56,6 @@ jobs:
         run: npm test
 
       - name: Build Windows installer (NSIS & Portable)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win nsis portable --publish never
 
       - name: Publish to GitHub Releases

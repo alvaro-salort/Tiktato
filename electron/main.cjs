@@ -3,11 +3,11 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
 const {
   deleteSoundFile,
   flushConfigSave,
-  importSound,
   importSoundAsync,
   loadConfig,
   normalizeJar,
@@ -29,6 +29,7 @@ const { setupAutoUpdater } = require('./updater.cjs');
 const { FishAudioService } = require('./fish-audio.cjs');
 
 const isDev = process.argv.includes('--dev');
+const allowDevHarness = isDev && !app.isPackaged;
 const MAX_ACTIVITY = 40;
 const MAX_UNIQUE_USERS = 10_000;
 const STATE_COALESCE_MS = 80;
@@ -511,6 +512,7 @@ function addToJar(event) {
     id: `jar_${Date.now()}_${jarEventSeq}_${Math.random().toString(36).slice(2, 6)}`,
     giftId: event.giftId || '',
     value,
+    giftId: event.giftId || '',
     giftPictureUrl: event.giftImageUrl || '',
     giftName: event.giftName || 'Regalo',
     repeatCount: delta,
@@ -552,8 +554,7 @@ function processEvent(event) {
 
   const now = Date.now();
   const rule = selectRule(config.rules, event, cooldowns, now);
-  const soundPerStreak =
-    (config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak) !== false;
+  const soundPerStreak = config.soundsPlayEveryStreak !== false;
 
   let soundTracked = null;
   if (event.type === 'gift') {
@@ -619,6 +620,10 @@ function processEvent(event) {
   return alert;
 }
 
+function redactUrlToken(rawUrl) {
+  return String(rawUrl || '').replace(/([?&]token=)[^&]+/gi, '$1[REDACTED]');
+}
+
 async function startOverlayServer() {
   if (overlayServer) {
     await overlayServer.stop();
@@ -633,13 +638,14 @@ async function startOverlayServer() {
     logger
   });
   await overlayServer.start();
+  overlayServer.setGifts(getActiveCatalog());
   updateOverlayConfig();
-  logger.info(`[overlay] ${overlayServer.getUrl()}`);
+  logger.info(`[overlay] ${redactUrlToken(overlayServer.getUrl())}`);
 }
 
 function syncTikTokStreakOption() {
   const allowCombos =
-    Boolean(config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak ?? true) ||
+    Boolean(config.soundsPlayEveryStreak !== false) ||
     Boolean(config.tts?.playEveryStreak !== false);
   tiktok?.setOptions({ playEveryStreak: allowCombos, emitAllPackets: true });
 }
@@ -702,7 +708,6 @@ function applySettings(patch) {
       ? Boolean(patch.sounds.playEveryStreak)
       : Boolean(patch.soundsPlayEveryStreak);
     config.soundsPlayEveryStreak = val;
-    if (config.sounds) config.sounds.playEveryStreak = val;
     syncTikTokStreakOption();
   }
 
@@ -733,10 +738,15 @@ function applySettings(patch) {
   if (patch.theme !== undefined) applyWindowTheme();
 }
 
+let lastJarStudioBg = 'green';
+
 async function restartOverlayIfPortChanged(previousPort) {
   if (previousPort !== config.overlay.port) {
     try {
       await startOverlayServer();
+      if (jarStudioWindow && !jarStudioWindow.isDestroyed() && jarUrl()) {
+        jarStudioWindow.loadURL(`${jarUrl()}&studio=1&bg=${encodeURIComponent(lastJarStudioBg)}`);
+      }
     } catch (error) {
       logger.error('[overlay] no se pudo reiniciar, volviendo al anterior', error);
       config.overlay.port = previousPort;
@@ -797,18 +807,18 @@ async function loginTikTok() {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\/([a-z0-9-]+\.)?tiktok\.com\//i.test(url)) {
       win.loadURL(url);
-    } else if (/^https?:\/\//i.test(url)) {
-      shell.openExternal(url);
+    } else if (/^https:\/\//i.test(url)) {
+      shell.openExternal(url).catch((error) => logger.warn('[shell] no se pudo abrir URL externa', error));
     }
     return { action: 'deny' };
   });
-  const allowOnlyHttp = (event, url) => {
-    if (!/^https?:\/\//i.test(url)) event.preventDefault();
+  const allowOnlyHttps = (event, url) => {
+    if (!/^https:\/\//i.test(url)) event.preventDefault();
   };
-  win.webContents.on('will-navigate', allowOnlyHttp);
-  win.webContents.on('will-redirect', allowOnlyHttp);
+  win.webContents.on('will-navigate', allowOnlyHttps);
+  win.webContents.on('will-redirect', allowOnlyHttps);
   win.webContents.on('will-frame-navigate', (details) => {
-    if (details?.url && !/^https?:\/\//i.test(details.url)) {
+    if (details?.url && !/^https:\/\//i.test(details.url)) {
       details.preventDefault?.();
     }
   });
@@ -910,7 +920,7 @@ function applyWindowTheme() {
 }
 
 function createWindow() {
-  const smokeScreenshot = (process.env.TIKTATO_SMOKE_SCREENSHOT || '').trim();
+  const smokeScreenshot = allowDevHarness ? (process.env.TIKTATO_SMOKE_SCREENSHOT || '').trim() : '';
   mainWindow = new BrowserWindow({
     width: 1320,
     height: 860,
@@ -1046,19 +1056,27 @@ function createWindow() {
     logger.error(`[renderer] falló la carga (${code}): ${description}`);
   });
 
-  const showWindow = () => {
+  let initialShowDone = false;
+  const showWindow = ({ inactive = false } = {}) => {
+    if (initialShowDone) return;
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
-      mainWindow.show();
-      mainWindow.focus();
+      initialShowDone = true;
+      if (inactive) {
+        mainWindow.showInactive();
+      } else {
+        mainWindow.show();
+      }
     }
   };
 
-  mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  const mainHtmlPath = path.join(__dirname, '..', 'renderer', 'index.html');
+  const expectedMainFileUrl = pathToFileURL(mainHtmlPath).href.toLowerCase();
+  mainWindow.loadFile(mainHtmlPath);
   mainWindow.once('ready-to-show', () => {
     if (whenReadyTimestamp > 0) {
       const startupMs = Date.now() - whenReadyTimestamp;
       logger.info(`[startup] app.whenReady -> ready-to-show: ${startupMs} ms`);
-      if (process.env.TIKTATO_BENCHMARK) {
+      if (allowDevHarness && process.env.TIKTATO_BENCHMARK) {
         const mainRss = Math.round(process.memoryUsage().rss / 1024 / 1024);
         const rendererPid = mainWindow.webContents.getOSProcessId ? mainWindow.webContents.getOSProcessId() : 0;
         console.log(`BENCHMARK_RESULT:startup=${startupMs},mainRss=${mainRss},rendererPid=${rendererPid}`);
@@ -1067,22 +1085,25 @@ function createWindow() {
         }, process.env.TIKTATO_BENCHMARK_WAIT ? parseInt(process.env.TIKTATO_BENCHMARK_WAIT, 10) : 500);
       }
     }
-    showWindow();
+    showWindow({ inactive: false });
   });
   mainWindow.webContents.once('did-finish-load', () => {
-    showWindow();
+    showWindow({ inactive: true });
   });
   setTimeout(() => {
-    showWindow();
+    showWindow({ inactive: true });
   }, 400);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url).catch((error) => logger.warn('[shell] no se pudo abrir URL externa', error));
+    }
     return { action: 'deny' };
   });
   const blockMainNavigation = (navEvent, targetUrl) => {
     try {
       const parsed = new URL(targetUrl);
-      if (parsed.protocol === 'file:' && parsed.pathname.toLowerCase().endsWith('/renderer/index.html')) {
+      const cleanHref = `${parsed.origin}${parsed.pathname}`.toLowerCase();
+      if (parsed.protocol === 'file:' && cleanHref === expectedMainFileUrl) {
         return;
       }
     } catch {
@@ -1098,10 +1119,26 @@ function createWindow() {
   });
 }
 
-function registerIpc() {
-  ipcMain.handle('app:bootstrap', () => publicState());
+function assertMainFrame(event) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    throw new Error('Ventana principal no disponible.');
+  }
+  if (event?.senderFrame !== mainWindow.webContents.mainFrame) {
+    throw new Error('Origen IPC no autorizado.');
+  }
+}
 
-  ipcMain.handle('settings:update', async (_event, patch) => {
+function registerIpc() {
+  const handleIpc = (channel, handler) => {
+    ipcMain.handle(channel, (event, ...args) => {
+      assertMainFrame(event);
+      return handler(event, ...args);
+    });
+  };
+
+  handleIpc('app:bootstrap', () => publicState());
+
+  handleIpc('settings:update', async (_event, patch) => {
     const previousPort = config.overlay.port;
     applySettings(patch);
     await restartOverlayIfPortChanged(previousPort);
@@ -1109,7 +1146,7 @@ function registerIpc() {
     return publicState();
   });
 
-  ipcMain.handle('rules:save', (_event, rules) => {
+  handleIpc('rules:save', (_event, rules) => {
     const normalized = (Array.isArray(rules) ? rules : []).map(normalizeRule).filter(Boolean);
     config.rules = normalized;
     config = saveConfig(app.getPath('userData'), config);
@@ -1117,7 +1154,7 @@ function registerIpc() {
     return publicState();
   });
 
-  ipcMain.handle('sound:import', async () => {
+  handleIpc('sound:import', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Añadir sonido',
       properties: ['openFile', 'multiSelections'],
@@ -1145,13 +1182,14 @@ function registerIpc() {
     }
   });
 
-  ipcMain.handle('gifts:refresh', async () => {
+  handleIpc('gifts:refresh', async () => {
     await refreshGiftsCatalog(app.getPath('userData'));
+    overlayServer?.setGifts(getActiveCatalog());
     sendState();
     return publicState();
   });
 
-  ipcMain.handle('sound:delete', (_event, soundId) => {
+  handleIpc('sound:delete', (_event, soundId) => {
     const sound = config.sounds.find((item) => item.id === soundId);
     if (!sound) return { ok: false, error: 'El sonido no existe.' };
     try {
@@ -1168,7 +1206,7 @@ function registerIpc() {
     return { ok: true };
   });
 
-  ipcMain.handle('tiktok:connect', async (_event, payload = {}) => {
+  handleIpc('tiktok:connect', async (_event, payload = {}) => {
     const previousPort = config.overlay.port;
     applySettings({
       username: payload.username,
@@ -1191,42 +1229,51 @@ function registerIpc() {
     }
   });
 
-  ipcMain.handle('tiktok:disconnect', async () => {
+  handleIpc('tiktok:disconnect', async () => {
     await tiktok.disconnect();
     sendState();
     return publicState();
   });
 
-  ipcMain.handle('tiktok:login', () => loginTikTok());
-  ipcMain.handle('tiktok:logout', () => logoutTikTok());
+  handleIpc('tiktok:login', () => loginTikTok());
+  handleIpc('tiktok:logout', () => logoutTikTok());
 
-  ipcMain.handle('event:test', (_event, input) => {
+  handleIpc('event:test', (_event, input) => {
     const alert = processEvent(makeTestEvent(input));
     return { ok: true, alert, state: publicState() };
   });
 
-  ipcMain.handle('overlay:copy', () => {
+  handleIpc('overlay:copy', () => {
     clipboard.writeText(overlayUrl());
     return { ok: true, url: overlayUrl() };
   });
 
-  ipcMain.handle('overlay:open', async () => {
-    if (overlayUrl()) await shell.openExternal(`${overlayUrl()}&preview=1`);
+  handleIpc('overlay:open', async () => {
+    if (overlayUrl()) {
+      await shell.openExternal(`${overlayUrl()}&preview=1`).catch((error) => {
+        logger.warn('[shell] no se pudo abrir overlay', error);
+      });
+    }
     return { ok: true };
   });
 
-  ipcMain.handle('jar:copy', () => {
+  handleIpc('jar:copy', () => {
     clipboard.writeText(jarUrl());
     return { ok: true, url: jarUrl() };
   });
 
-  ipcMain.handle('jar:open', async () => {
-    if (jarUrl()) await shell.openExternal(`${jarUrl()}&preview=1`);
+  handleIpc('jar:open', async () => {
+    if (jarUrl()) {
+      await shell.openExternal(`${jarUrl()}&preview=1`).catch((error) => {
+        logger.warn('[shell] no se pudo abrir frasco', error);
+      });
+    }
     return { ok: true };
   });
 
-  ipcMain.handle('jar:open-studio', (_event, opts = {}) => {
+  handleIpc('jar:open-studio', (_event, opts = {}) => {
     const bg = String(opts?.bg || 'green');
+    lastJarStudioBg = bg;
     const url = jarUrl();
     if (!url) {
       return { ok: false, error: 'El servidor del frasco no está activo. Reinicia TikTato.' };
@@ -1282,17 +1329,21 @@ function registerIpc() {
     return { ok: true };
   });
 
-  ipcMain.handle('jar:copy-test', () => {
+  handleIpc('jar:copy-test', () => {
     clipboard.writeText(jarTestUrl());
     return { ok: true, url: jarTestUrl() };
   });
 
-  ipcMain.handle('jar:open-test', async () => {
-    if (jarTestUrl()) await shell.openExternal(jarTestUrl());
+  handleIpc('jar:open-test', async () => {
+    if (jarTestUrl()) {
+      await shell.openExternal(jarTestUrl()).catch((error) => {
+        logger.warn('[shell] no se pudo abrir frasco de prueba', error);
+      });
+    }
     return { ok: true };
   });
 
-  ipcMain.handle('jar:test-gift', (_event, sample) => {
+  handleIpc('jar:test-gift', (_event, sample) => {
     const testEvt = makeTestEvent(sample || { giftName: 'Rosa', coins: 1, repeatCount: 1 });
     addToJar(testEvt);
     sendState();
@@ -1301,12 +1352,17 @@ function registerIpc() {
 
   ipcMain.on('jar:close-studio', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (win && !win.isDestroyed() && win === jarStudioWindow) {
+    if (
+      win &&
+      !win.isDestroyed() &&
+      win === jarStudioWindow &&
+      event.senderFrame === jarStudioWindow.webContents.mainFrame
+    ) {
       win.close();
     }
   });
 
-  ipcMain.handle('jar:reset', () => {
+  handleIpc('jar:reset', () => {
     jarStreakTracker.reset();
     config.jar.currentCoins = 0;
     config.jar.currentGifts = 0;
@@ -1319,12 +1375,12 @@ function registerIpc() {
     return publicState();
   });
 
-  ipcMain.handle('app:open-data-folder', async () => {
+  handleIpc('app:open-data-folder', async () => {
     await shell.openPath(app.getPath('userData'));
     return { ok: true };
   });
 
-  ipcMain.handle('tts:fish-set-key', (_event, payload) => {
+  handleIpc('tts:fish-set-key', (_event, payload) => {
     const raw = typeof payload === 'string' ? payload : payload?.apiKey;
     const trimmed = String(raw || '').trim();
     config.fishApiKeyEncrypted = trimmed ? encryptSecret(trimmed) : '';
@@ -1336,7 +1392,7 @@ function registerIpc() {
     };
   });
 
-  ipcMain.handle('tts:fish-test-key', async (_event, payload) => {
+  handleIpc('tts:fish-test-key', async (_event, payload) => {
     const raw = typeof payload === 'string' ? payload : payload?.apiKey;
     const candidate = String(raw || '').trim() || getFishApiKey();
     if (!fishAudio) {
@@ -1345,7 +1401,7 @@ function registerIpc() {
     return fishAudio.testApiKey(candidate);
   });
 
-  ipcMain.handle('tts:fish-list-voices', async (_event, query = {}) => {
+  handleIpc('tts:fish-list-voices', async (_event, query = {}) => {
     if (!fishAudio) {
       fishAudio = new FishAudioService({ userDataDir: app.getPath('userData'), logger });
     }
@@ -1355,7 +1411,7 @@ function registerIpc() {
     });
   });
 
-  ipcMain.handle('tts:fish-synthesize', async (_event, payload = {}) => {
+  handleIpc('tts:fish-synthesize', async (_event, payload = {}) => {
     if (!fishAudio) {
       fishAudio = new FishAudioService({ userDataDir: app.getPath('userData'), logger });
     }
@@ -1369,16 +1425,25 @@ function registerIpc() {
     });
   });
 
-  ipcMain.handle('tts:fish-clear-cache', async () => {
+  handleIpc('tts:fish-clear-cache', async () => {
     if (!fishAudio) {
       fishAudio = new FishAudioService({ userDataDir: app.getPath('userData'), logger });
     }
     return fishAudio.clearCache();
   });
 
-  ipcMain.handle('update:check', () => updaterApi?.check());
-  ipcMain.handle('update:download', () => updaterApi?.download());
-  ipcMain.handle('update:install', () => updaterApi?.install());
+  handleIpc('update:check', () => {
+    if (!updaterApi) return { ok: false, error: 'Actualizador no disponible en este modo.' };
+    return updaterApi.check();
+  });
+  handleIpc('update:download', () => {
+    if (!updaterApi) return { ok: false, error: 'Actualizador no disponible en este modo.' };
+    return updaterApi.download();
+  });
+  handleIpc('update:install', () => {
+    if (!updaterApi) return { ok: false, error: 'Actualizador no disponible en este modo.' };
+    return updaterApi.install();
+  });
 }
 
 function wireTikTok() {
@@ -1407,7 +1472,10 @@ async function bootstrap() {
   fishAudio = new FishAudioService({ userDataDir: app.getPath('userData'), logger });
   loadGiftsCatalog(app.getPath('userData'));
   refreshGiftsCatalog(app.getPath('userData'))
-    .then(() => sendState())
+    .then(() => {
+      overlayServer?.setGifts(getActiveCatalog());
+      sendState();
+    })
     .catch((err) => {
       logger.warn('[catalog] no se pudo refrescar el catálogo de regalos', err);
     });
@@ -1429,6 +1497,27 @@ async function bootstrap() {
     }, 1500);
   }
 }
+
+process.on('uncaughtException', (error) => {
+  logger.error('[process] uncaughtException', error);
+  try {
+    flushConfigSave(app.getPath('userData'));
+  } catch {
+    // Ignorado.
+  }
+  releaseStreamResources();
+  flushLogBufferSync();
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('[process] unhandledRejection', reason);
+  try {
+    flushConfigSave(app.getPath('userData'));
+  } catch {
+    // Ignorado.
+  }
+  flushLogBufferSync();
+});
 
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) {
@@ -1458,12 +1547,10 @@ if (!singleInstance) {
     if (quitting) return;
     quitting = true;
     flushLogBufferSync();
-    if (!updaterApi?.isUpdaterQuitting()) {
-      try {
-        flushConfigSave(app.getPath('userData'));
-      } catch (error) {
-        logger.warn('[config] no se pudo volcar config al salir', error);
-      }
+    try {
+      flushConfigSave(app.getPath('userData'));
+    } catch (error) {
+      logger.warn('[config] no se pudo volcar config al salir', error);
     }
     flushLogBufferSync();
     releaseStreamResources();

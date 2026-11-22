@@ -105,9 +105,9 @@ function createDefaultConfig() {
       giftsEnabled: false,
       minCoins: 1,
       volume: 0.8,
-      voiceProvider: 'google',
+      voiceProvider: 'local',
       voiceLanguage: 'es-ES',
-      voiceId: 'google:es-ES',
+      voiceId: 'local',
       fishVoiceName: '',
       fishModel: 's2.1-pro-free',
       ducking: true,
@@ -127,7 +127,7 @@ function createDefaultConfig() {
       minMemberLevel: 1
     },
     rules: defaultRules(),
-    sounds: Object.assign([], { playEveryStreak: true }),
+    sounds: [],
     soundsPlayEveryStreak: true
   };
 }
@@ -305,9 +305,14 @@ function normalizeJar(input) {
 function normalizeTts(input) {
   const defaults = createDefaultConfig().tts;
   const tts = input && typeof input === 'object' ? input : {};
-  const voiceProvider = ['google', 'local', 'fish'].includes(tts.voiceProvider)
+  const voiceProvider = ['local', 'fish'].includes(tts.voiceProvider)
     ? tts.voiceProvider
     : defaults.voiceProvider;
+  const rawVoiceId = String(tts.voiceId || '').trim();
+  const voiceId =
+    rawVoiceId && !rawVoiceId.startsWith('google:')
+      ? rawVoiceId.slice(0, 120)
+      : defaults.voiceId;
 
   return {
     enabled: tts.enabled !== false,
@@ -318,7 +323,7 @@ function normalizeTts(input) {
     volume: clampNumber(tts.volume, defaults.volume, 0, 1),
     voiceProvider,
     voiceLanguage: String(tts.voiceLanguage || defaults.voiceLanguage).slice(0, 20),
-    voiceId: String(tts.voiceId || defaults.voiceId || 'google:es-ES').slice(0, 120),
+    voiceId,
     fishVoiceName: String(tts.fishVoiceName || '').trim().slice(0, 100),
     fishModel: String(tts.fishModel || defaults.fishModel || 's2.1-pro-free').trim().slice(0, 60) || 's2.1-pro-free',
     ducking: tts.ducking !== false,
@@ -347,19 +352,16 @@ function normalizeConfig(input) {
     ? source.rules.map(normalizeRule).filter(Boolean)
     : defaults.rules;
   const soundsPlayEveryStreak =
-    source?.sounds?.playEveryStreak !== undefined
-      ? Boolean(source.sounds.playEveryStreak)
-      : (source?.soundsPlayEveryStreak !== undefined
-          ? Boolean(source.soundsPlayEveryStreak)
+    source?.soundsPlayEveryStreak !== undefined
+      ? Boolean(source.soundsPlayEveryStreak)
+      : (source?.sounds?.playEveryStreak !== undefined
+          ? Boolean(source.sounds.playEveryStreak)
           : true);
   const sounds = Array.isArray(source.sounds)
     ? source.sounds.map(normalizeSound).filter(Boolean)
     : [];
-  sounds.playEveryStreak = soundsPlayEveryStreak;
 
-  const result = {
-    ...defaults,
-    ...source,
+  return {
     version: 1,
     username: String(source.username || '').replace(/^@/, '').trim().slice(0, 80),
     autoConnect: source.autoConnect === true,
@@ -370,8 +372,6 @@ function normalizeConfig(input) {
     ttTargetIdcEncrypted: String(source.ttTargetIdcEncrypted || ''),
     fishApiKeyEncrypted: String(source.fishApiKeyEncrypted || ''),
     overlay: {
-      ...defaults.overlay,
-      ...overlay,
       port: Math.round(clampNumber(overlay.port, defaults.overlay.port, 1024, 65535)),
       token: /^[a-f0-9]{16,128}$/i.test(String(overlay.token || ''))
         ? String(overlay.token)
@@ -434,11 +434,16 @@ function loadConfig(userDataDir) {
 const pendingConfigSaves = new Map();
 const inFlightConfigSaves = new Map();
 const configSaveGenerations = new Map();
+const configWriteQueues = new Map();
 
 function bumpGeneration(dirKey) {
   const next = (configSaveGenerations.get(dirKey) || 0) + 1;
   configSaveGenerations.set(dirKey, next);
   return next;
+}
+
+function isRetryableFsError(error) {
+  return error?.code === 'EPERM' || error?.code === 'EBUSY';
 }
 
 function saveConfig(userDataDir, config) {
@@ -453,32 +458,78 @@ function saveConfig(userDataDir, config) {
   ensureDirectories(userDataDir);
   const normalized = normalizeConfig(config);
   const file = configPath(userDataDir);
-  const temporary = `${file}.tmp`;
-  fs.writeFileSync(temporary, JSON.stringify(normalized, null, 2), 'utf8');
-  fs.renameSync(temporary, file);
+  const temporary = `${file}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(temporary, JSON.stringify(normalized, null, 2), 'utf8');
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        fs.renameSync(temporary, file);
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!isRetryableFsError(error) || attempt === 2) throw error;
+      }
+    }
+    if (lastError) throw lastError;
+  } catch (error) {
+    try {
+      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+    } catch {
+      // Ignorado.
+    }
+    throw error;
+  }
   return normalized;
+}
+
+function enqueueConfigWrite(dirKey, task) {
+  const previous = configWriteQueues.get(dirKey) || Promise.resolve();
+  const next = previous.catch(() => {}).then(task);
+  configWriteQueues.set(dirKey, next);
+  next.finally(() => {
+    if (configWriteQueues.get(dirKey) === next) {
+      configWriteQueues.delete(dirKey);
+    }
+  });
+  return next;
 }
 
 async function writeConfigAsync(userDataDir, normalized, expectedGen) {
   const dirKey = path.resolve(userDataDir);
-  await fs.promises.mkdir(userDataDir, { recursive: true });
-  await fs.promises.mkdir(soundsDir(userDataDir), { recursive: true });
-  if (configSaveGenerations.get(dirKey) !== expectedGen) return normalized;
+  return enqueueConfigWrite(dirKey, async () => {
+    await fs.promises.mkdir(userDataDir, { recursive: true });
+    await fs.promises.mkdir(soundsDir(userDataDir), { recursive: true });
+    if (configSaveGenerations.get(dirKey) !== expectedGen) return normalized;
 
-  const file = configPath(userDataDir);
-  const temporary = `${file}.${process.pid}.${expectedGen}.tmp`;
-  try {
-    await fs.promises.writeFile(temporary, JSON.stringify(normalized, null, 2), 'utf8');
-    if (configSaveGenerations.get(dirKey) !== expectedGen) {
+    const file = configPath(userDataDir);
+    const temporary = `${file}.${process.pid}.${expectedGen}.tmp`;
+    try {
+      await fs.promises.writeFile(temporary, JSON.stringify(normalized, null, 2), 'utf8');
+      if (configSaveGenerations.get(dirKey) !== expectedGen) {
+        await fs.promises.unlink(temporary).catch(() => {});
+        return normalized;
+      }
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          if (configSaveGenerations.get(dirKey) !== expectedGen) {
+            await fs.promises.unlink(temporary).catch(() => {});
+            return normalized;
+          }
+          await fs.promises.rename(temporary, file);
+          break;
+        } catch (error) {
+          if (!isRetryableFsError(error) || attempt === 2) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 30 * (attempt + 1)));
+        }
+      }
+    } catch (error) {
       await fs.promises.unlink(temporary).catch(() => {});
-      return normalized;
+      throw error;
     }
-    await fs.promises.rename(temporary, file);
-  } catch (error) {
-    await fs.promises.unlink(temporary).catch(() => {});
-    throw error;
-  }
-  return normalized;
+    return normalized;
+  });
 }
 
 function scheduleSaveConfig(userDataDir, config, { delayMs = 1000, maxWaitMs = 5000 } = {}) {
@@ -585,7 +636,8 @@ async function importSoundAsync(userDataDir, sourcePath, displayName) {
   if (!AUDIO_EXTENSIONS.has(extension)) {
     throw new Error('Formato no compatible. Usa MP3, WAV, OGG, M4A, AAC, FLAC o WEBM.');
   }
-  ensureDirectories(userDataDir);
+  await fs.promises.mkdir(userDataDir, { recursive: true });
+  await fs.promises.mkdir(soundsDir(userDataDir), { recursive: true });
   const id = makeId('sound');
   const filename = `${id}${extension}`;
   await fs.promises.copyFile(sourcePath, path.join(soundsDir(userDataDir), filename));
@@ -694,10 +746,8 @@ function publicConfig(config, { overlayUrl } = {}) {
     jar: publicJar(config),
     tts: normalizeTts(config.tts),
     rules: config.rules,
-    sounds: Object.assign([...(config.sounds || [])], {
-      playEveryStreak: config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak ?? true
-    }),
-    soundsPlayEveryStreak: config.sounds?.playEveryStreak ?? config.soundsPlayEveryStreak ?? true
+    sounds: [...(config.sounds || [])],
+    soundsPlayEveryStreak: config.soundsPlayEveryStreak !== false
   };
 }
 

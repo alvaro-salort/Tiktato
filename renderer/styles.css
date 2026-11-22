@@ -3182,6 +3182,7 @@ select {
 }
 
 .update-progress-bar {
+  width: 0%;
   height: 100%;
   background: var(--md-primary);
   transition: width 0.2s ease;
@@ -3255,46 +3256,6 @@ select {
   .card-feature:last-child {
     grid-column: span 12;
     height: auto;
-  }
-}
-
-@media (max-width: 860px) {
-  .app {
-    padding: 12px 14px 20px;
-  }
-
-  .card.card-banner,
-  .card-banner {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 14px 16px;
-  }
-
-  .banner-stats {
-    flex-wrap: wrap;
-    justify-content: space-between;
-  }
-
-  .bento-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .card-sounds,
-  .card-activity,
-  .card-feature {
-    grid-column: span 1;
-    height: auto;
-    min-height: 360px;
-  }
-
-  .settings-grid,
-  .rule-form,
-  .sound-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .span-2 {
-    grid-column: span 1;
   }
 }
 
@@ -3761,6 +3722,10 @@ select {
 }
 
 @media (max-width: 860px) {
+  .app {
+    padding: 12px 14px 20px;
+  }
+
   .app.app-layout {
     flex-direction: column;
   }
@@ -3787,16 +3752,79 @@ select {
     flex-direction: row;
   }
 
-  .card.card-banner {
+  .card.card-banner,
+  .card-banner {
     flex-direction: column;
     align-items: stretch;
+    padding: 14px 16px;
     gap: 14px;
   }
 
   .banner-stats {
+    flex-wrap: wrap;
     justify-self: stretch;
     justify-content: space-between;
   }
+
+  .bento-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-sounds,
+  .card-activity,
+  .card-feature {
+    grid-column: span 1;
+    height: auto;
+    min-height: 360px;
+  }
+
+  .settings-grid,
+  .rule-form,
+  .sound-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .span-2 {
+    grid-column: span 1;
+  }
+}
+
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 12px; }
+.mt-3-5 { margin-top: 14px; }
+.mt-4 { margin-top: 18px; }
+.mb-2 { margin-bottom: 8px; }
+.settings-divider { margin: 16px 0; border-top: 1px solid var(--line); }
+.is-hidden { display: none; }
+.is-dimmed { opacity: 0.5; }
+
+.fish-avatar-0 { background: hsl(18, 65%, 88%); color: hsl(18, 70%, 24%); }
+.fish-avatar-1 { background: hsl(58, 65%, 88%); color: hsl(58, 70%, 24%); }
+.fish-avatar-2 { background: hsl(112, 65%, 88%); color: hsl(112, 70%, 24%); }
+.fish-avatar-3 { background: hsl(168, 65%, 88%); color: hsl(168, 70%, 24%); }
+.fish-avatar-4 { background: hsl(205, 65%, 88%); color: hsl(205, 70%, 24%); }
+.fish-avatar-5 { background: hsl(250, 65%, 88%); color: hsl(250, 70%, 24%); }
+.fish-avatar-6 { background: hsl(295, 65%, 88%); color: hsl(295, 70%, 24%); }
+.fish-avatar-7 { background: hsl(338, 65%, 88%); color: hsl(338, 70%, 24%); }
+
+.fish-configured-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 10px);
+  background: var(--surface-2);
+  font-size: 12.5px;
+}
+
+.fish-configured-banner[hidden] {
+  display: none;
+}
+
+.fish-settings-section .fish-key-controls {
+  margin-top: 8px;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -153,6 +153,8 @@ class TikTokService extends EventEmitter {
       retryIn: 0
     };
     this.intentionalDisconnect = false;
+    this.connectGen = 0;
+    this.pollingInFlight = false;
     this.options = { playEveryStreak: true, emitAllPackets: true };
     this.pollTimer = null;
     this.pollTimeout = null;
@@ -209,6 +211,33 @@ class TikTokService extends EventEmitter {
     return recent;
   }
 
+  #cleanupClient(client) {
+    if (!client) return;
+    try {
+      client.removeAllListeners?.();
+    } catch {}
+    try {
+      client.disconnect?.();
+    } catch {}
+  }
+
+  #handleLiveEnded() {
+    const client = this.client;
+    this.client = null;
+    this.#cleanupClient(client);
+    this.#setStatus({
+      state: 'disconnected',
+      paused: false,
+      reconnecting: false,
+      retryIn: 0,
+      message: 'El directo terminó.',
+      viewerCount: 0
+    });
+    if (!this.intentionalDisconnect && this.lastConnectArgs) {
+      this.#startPolling({ initialDelayMs: 3000 });
+    }
+  }
+
   handleControlEvent(data) {
     const action = Number(data?.action ?? 0);
     const clean = this.status.username;
@@ -231,30 +260,14 @@ class TikTokService extends EventEmitter {
       return;
     }
     if (action === 3) {
-      const client = this.client;
-      this.client = null;
-      if (client) {
-        try {
-          client.disconnect();
-        } catch {}
-      }
-      this.#setStatus({
-        state: 'disconnected',
-        paused: false,
-        message: 'El directo terminó.',
-        viewerCount: 0
-      });
+      this.#handleLiveEnded();
       this.emit('control', { action: 3, status: 'ended', data });
       return;
     }
     if (action === 4) {
       const client = this.client;
       this.client = null;
-      if (client) {
-        try {
-          client.disconnect();
-        } catch {}
-      }
+      this.#cleanupClient(client);
       this.#setStatus({
         state: 'error',
         paused: false,
@@ -344,56 +357,70 @@ class TikTokService extends EventEmitter {
           this.#stopPolling();
           return;
         }
+        if (this.pollingInFlight) return;
+        this.pollingInFlight = true;
 
-        if (this.status.state === 'connected') {
-          connectedPollSeconds--;
-          if (connectedPollSeconds <= 0) {
-            connectedPollSeconds = 20;
-            const clean = cleanUsername(this.lastConnectArgs.username);
-            if (!clean) return;
-            const cookie = sessionCookie(this.lastConnectArgs.sessionId, this.lastConnectArgs.ttTargetIdc);
-            const savedArgs = { ...this.lastConnectArgs };
-            try {
-              const latestRoomId = await resolveRoomId(clean, cookie);
-              if (latestRoomId && this.status.roomId && latestRoomId !== this.status.roomId) {
-                this.logger.info?.(`[tiktok] sala cambió de ${this.status.roomId} a ${latestRoomId}, reconectando…`);
-                await this.connect({ ...savedArgs, roomId: latestRoomId });
-              }
-            } catch {}
-          }
-          return;
-        }
-
-        secondsLeft--;
-        if (secondsLeft > 0) {
-          tick();
-          return;
-        }
-
-        secondsLeft = 20;
-        const clean = cleanUsername(this.lastConnectArgs.username);
-        if (!clean) return;
-        const cookie = sessionCookie(this.lastConnectArgs.sessionId, this.lastConnectArgs.ttTargetIdc);
-        const savedArgs = { ...this.lastConnectArgs };
-        let latestRoomId = null;
         try {
-          this.#setStatus({
-            state: 'connecting',
-            reconnecting: true,
-            retryIn: 0,
-            message: 'Buscando directo... comprobando...'
-          });
-          latestRoomId = await resolveRoomId(clean, cookie);
-        } catch {
-          // Ignorar fallos temporales de red o sala offline durante el sondeo
-        }
+          if (this.status.state === 'connected') {
+            connectedPollSeconds--;
+            if (connectedPollSeconds <= 0) {
+              connectedPollSeconds = 20;
+              const clean = cleanUsername(this.lastConnectArgs.username);
+              if (!clean) return;
+              const cookie = sessionCookie(this.lastConnectArgs.sessionId, this.lastConnectArgs.ttTargetIdc);
+              const savedArgs = { ...this.lastConnectArgs };
+              try {
+                const latestRoomId = await resolveRoomId(clean, cookie);
+                if (latestRoomId && this.status.roomId && latestRoomId !== this.status.roomId) {
+                  this.logger.info?.(`[tiktok] sala cambió de ${this.status.roomId} a ${latestRoomId}, reconectando…`);
+                  await this.connect({ ...savedArgs, roomId: latestRoomId });
+                }
+              } catch (error) {
+                this.logger.warn?.('[tiktok] error comprobando cambio de sala', error);
+              }
+            }
+            return;
+          }
 
-        if (latestRoomId) {
-          this.logger.info?.(`[tiktok] sala disponible detectada (${latestRoomId}), reconectando…`);
-          await this.connect({ ...savedArgs, roomId: latestRoomId });
-          return;
+          secondsLeft--;
+          if (secondsLeft > 0) {
+            tick();
+            return;
+          }
+
+          secondsLeft = 20;
+          const clean = cleanUsername(this.lastConnectArgs.username);
+          if (!clean) return;
+          const cookie = sessionCookie(this.lastConnectArgs.sessionId, this.lastConnectArgs.ttTargetIdc);
+          const savedArgs = { ...this.lastConnectArgs };
+          let latestRoomId = null;
+          try {
+            this.#setStatus({
+              state: 'connecting',
+              reconnecting: true,
+              retryIn: 0,
+              message: 'Buscando directo... comprobando...'
+            });
+            latestRoomId = await resolveRoomId(clean, cookie);
+          } catch {
+            // Ignorar fallos temporales de red o sala offline durante el sondeo
+          }
+
+          if (this.intentionalDisconnect || !this.lastConnectArgs) return;
+
+          if (latestRoomId) {
+            this.logger.info?.(`[tiktok] sala disponible detectada (${latestRoomId}), reconectando…`);
+            try {
+              await this.connect({ ...savedArgs, roomId: latestRoomId });
+            } catch (error) {
+              this.logger.warn?.('[tiktok] reconexión desde sondeo falló', error);
+            }
+            return;
+          }
+          tick();
+        } finally {
+          this.pollingInFlight = false;
         }
-        tick();
       }, 1000);
       if (typeof this.pollTimer?.unref === 'function') this.pollTimer.unref();
     };
@@ -439,6 +466,9 @@ class TikTokService extends EventEmitter {
     }
 
     this.intentionalDisconnect = false;
+    const gen = ++this.connectGen;
+    const isStale = () => gen !== this.connectGen || this.intentionalDisconnect;
+
     this.lastConnectArgs = { username: clean, sessionId, ttTargetIdc, roomId: manualRoom };
     this.beginBacklogWindow();
     this.#setStatus({
@@ -453,69 +483,97 @@ class TikTokService extends EventEmitter {
       suspended: false
     });
 
+    let client = null;
     try {
       const module = await import('piratetok-live-js');
+      if (isStale()) return this.getStatus();
+
       const { TikTokLiveClient, EventType } = module;
       if (!TikTokLiveClient || !EventType) {
         throw new Error('La librería de TikTok no expone TikTokLiveClient.');
       }
 
-      const client = new TikTokLiveClient(clean || 'manual');
+      client = new TikTokLiveClient(clean || 'manual');
       if (typeof client.language === 'function') client.language('es');
       const cookie = sessionCookie(sessionId, ttTargetIdc);
       if (cookie) client.cookies(cookie);
       this.client = client;
 
-      client.on(EventType.gift, (data) => this.#emitEvent('gift', data));
-      client.on(EventType.chat, (data) => this.#emitEvent('chat', data));
+      client.on(EventType.gift, (data) => {
+        if (isStale()) return;
+        this.#emitEvent('gift', data);
+      });
+      client.on(EventType.chat, (data) => {
+        if (isStale()) return;
+        this.#emitEvent('chat', data);
+      });
       if (EventType.barrage) {
-        client.on(EventType.barrage, (data) => this.#emitEvent('barrage', data));
+        client.on(EventType.barrage, (data) => {
+          if (isStale()) return;
+          this.#emitEvent('barrage', data);
+        });
       }
-      client.on(EventType.follow, (data) => this.#emitEvent('follow', data));
-      client.on(EventType.share, (data) => this.#emitEvent('share', data));
-      client.on(EventType.like, (data) => this.#emitEvent('like', data));
+      client.on(EventType.follow, (data) => {
+        if (isStale()) return;
+        this.#emitEvent('follow', data);
+      });
+      client.on(EventType.share, (data) => {
+        if (isStale()) return;
+        this.#emitEvent('share', data);
+      });
+      client.on(EventType.like, (data) => {
+        if (isStale()) return;
+        this.#emitEvent('like', data);
+      });
       if (EventType.join) {
-        client.on(EventType.join, (data) => this.#emitEvent('join', data));
+        client.on(EventType.join, (data) => {
+          if (isStale()) return;
+          this.#emitEvent('join', data);
+        });
       }
       if (EventType.subNotify) {
-        client.on(EventType.subNotify, (data) => this.#emitEvent('subNotify', data));
+        client.on(EventType.subNotify, (data) => {
+          if (isStale()) return;
+          this.#emitEvent('subNotify', data);
+        });
       }
       if (EventType.subscriptionNotify) {
-        client.on(EventType.subscriptionNotify, (data) => this.#emitEvent('subscriptionNotify', data));
+        client.on(EventType.subscriptionNotify, (data) => {
+          if (isStale()) return;
+          this.#emitEvent('subscriptionNotify', data);
+        });
       }
       if (EventType.imDelete) {
-        client.on(EventType.imDelete, (data) => this.#emitEvent('imDelete', data));
+        client.on(EventType.imDelete, (data) => {
+          if (isStale()) return;
+          this.#emitEvent('imDelete', data);
+        });
       }
       if (EventType.control) {
-        client.on(EventType.control, (data) => this.handleControlEvent(data));
+        client.on(EventType.control, (data) => {
+          if (isStale()) return;
+          this.handleControlEvent(data);
+        });
       }
       client.on(EventType.roomUserSeq, (data) => {
+        if (isStale()) return;
         const count = Number(data?.viewerCount ?? data?.totalUser ?? 0);
         if (Number.isFinite(count)) this.#setStatus({ viewerCount: count });
       });
       client.on(EventType.liveEnded, () => {
-        const endedClient = this.client;
-        this.client = null;
-        if (endedClient) {
-          try { endedClient.disconnect(); } catch {}
-        }
-        this.#setStatus({
-          state: 'disconnected',
-          paused: false,
-          reconnecting: false,
-          retryIn: 0,
-          message: 'El directo terminó.',
-          viewerCount: 0
-        });
-        if (!this.intentionalDisconnect && this.lastConnectArgs) {
-          this.#startPolling({ initialDelayMs: 3000 });
-        }
+        if (isStale()) return;
+        this.#handleLiveEnded();
       });
       client.on(EventType.reconnecting, () => {
+        if (isStale()) return;
         this.beginBacklogWindow();
         this.#setStatus({ state: 'connecting', message: 'Reconectando con TikTok…' });
       });
       client.on(EventType.disconnected, () => {
+        if (isStale()) return;
+        const currentClient = this.client;
+        this.client = null;
+        this.#cleanupClient(currentClient || client);
         if (!this.intentionalDisconnect && !this.status.suspended) {
           this.#setStatus({
             state: 'disconnected',
@@ -529,9 +587,9 @@ class TikTokService extends EventEmitter {
             this.#startPolling({ initialDelayMs: 3000 });
           }
         }
-        this.client = null;
       });
       client.on('error', (error) => {
+        if (isStale()) return;
         this.logger.error?.('[tiktok] error de conexión', error);
         if (this.status.state === 'connected') {
           this.#setStatus({
@@ -547,6 +605,11 @@ class TikTokService extends EventEmitter {
           resolvedRoom = await resolveRoomId(clean, cookie);
           this.logger.info?.(`[tiktok] sala resuelta: ${resolvedRoom}`);
         } catch (error) {
+          if (isStale()) {
+            this.#cleanupClient(client);
+            if (this.client === client) this.client = null;
+            return this.getStatus();
+          }
           if (error?.name === 'HostNotOnlineError' || error?.name === 'UserNotFoundError') {
             throw error;
           }
@@ -554,7 +617,19 @@ class TikTokService extends EventEmitter {
         }
       }
 
+      if (isStale()) {
+        this.#cleanupClient(client);
+        if (this.client === client) this.client = null;
+        return this.getStatus();
+      }
+
       const connectedRoomId = String(await client.connect(resolvedRoom || undefined));
+      if (isStale()) {
+        this.#cleanupClient(client);
+        if (this.client === client) this.client = null;
+        return this.getStatus();
+      }
+
       if (this.status.roomId && this.status.roomId !== connectedRoomId) {
         this.seenMsgIds.clear();
         this.streakTracker.reset();
@@ -574,7 +649,11 @@ class TikTokService extends EventEmitter {
       this.#startPolling();
       return this.getStatus();
     } catch (error) {
-      this.client = null;
+      this.#cleanupClient(client);
+      if (this.client === client) this.client = null;
+      if (isStale()) {
+        return this.getStatus();
+      }
       const message = friendlyError(error);
       this.#setStatus({ state: 'error', reconnecting: false, retryIn: 0, message });
       this.logger.error?.('[tiktok] no se pudo conectar', error);
@@ -590,6 +669,7 @@ class TikTokService extends EventEmitter {
   }
 
   async disconnect({ preserveHistory = false } = {}) {
+    this.connectGen += 1;
     this.intentionalDisconnect = true;
     this.#stopPolling();
     this.lastConnectArgs = null;
@@ -602,13 +682,7 @@ class TikTokService extends EventEmitter {
     }
     const client = this.client;
     this.client = null;
-    if (client) {
-      try {
-        client.disconnect();
-      } catch (error) {
-        this.logger.warn?.('[tiktok] error al desconectar', error);
-      }
-    }
+    this.#cleanupClient(client);
     if (this.status.state !== 'disconnected' || this.status.reconnecting) {
       this.#setStatus({
         state: 'disconnected',

@@ -7,6 +7,8 @@ const queue = [];
 let active = false;
 let socket = null;
 let reconnectTimer = null;
+let reconnectAttempt = 0;
+let configRetryAttempt = 0;
 let config = {
   title: 'TIKTATO',
   accent: '#ff3d81',
@@ -26,14 +28,31 @@ const LABELS = {
   share: 'COMPARTIDO',
   like: 'LIKES',
   subscribe: 'SUSCRIPCIÓN',
-  join: 'ENTRÓ AL LIVE'
+  join: 'ENTRÓ AL LIVE',
+  chat: 'CHAT'
 };
 
+function isSafeImageUrl(url) {
+  if (typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('/assets/')) return true;
+  if (typeof URL === 'function') {
+    try {
+      const parsed = new URL(trimmed);
+      return parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+  return /^https:\/\/[^\s]+$/i.test(trimmed);
+}
+
 function applyConfig(nextConfig) {
-  if (!nextConfig) return;
+  if (!nextConfig || typeof nextConfig !== 'object') return;
   config = { ...config, ...nextConfig };
   document.documentElement.style.setProperty('--accent', config.accent);
-  document.documentElement.style.setProperty('--duration', `${Math.max(1500, config.durationMs)}ms`);
+  document.documentElement.style.setProperty('--duration', `${Math.max(1500, Number(config.durationMs) || 5000)}ms`);
   stage.classList.toggle('position-top', config.position === 'top');
 }
 
@@ -46,11 +65,18 @@ function showStatus(message, kind = '') {
   }
 }
 
-function hideStatus() {
-  status.classList.remove('is-visible');
-}
-
 function setImage(element, url, fallback) {
+  element.hidden = true;
+  element.removeAttribute('src');
+  if (fallback) fallback.hidden = false;
+
+  const safeUrl = isSafeImageUrl(url) ? url.trim() : '';
+  if (!safeUrl) {
+    element.onload = null;
+    element.onerror = null;
+    return;
+  }
+
   element.onload = () => {
     element.hidden = false;
     if (fallback) fallback.hidden = true;
@@ -59,24 +85,24 @@ function setImage(element, url, fallback) {
     element.hidden = true;
     if (fallback) fallback.hidden = false;
   };
-  if (url) {
-    element.src = url;
-  } else {
-    element.hidden = true;
-    if (fallback) fallback.hidden = false;
-  }
+  element.src = safeUrl;
 }
 
 function detailFor(alert) {
   if (alert.type === 'gift') {
-    const count = Number(alert.repeatCount || 1);
+    const count = Math.max(1, Number(alert.repeatCount) || 1);
     return `envió <strong>${escapeHtml(alert.giftName || 'un regalo')}</strong>${count > 1 ? ` ×${count}` : ''}`;
   }
   if (alert.type === 'follow') return 'empezó a seguirte';
   if (alert.type === 'share') return 'compartió el directo';
   if (alert.type === 'subscribe') return 'se suscribió al canal';
   if (alert.type === 'join') return 'entró al directo';
-  return `envió ${Number(alert.repeatCount || 1)} likes`;
+  if (alert.type === 'chat') {
+    const text = escapeHtml(alert.comment || alert.message || '');
+    return text || 'envió un mensaje';
+  }
+  const likes = Math.max(1, Number(alert.repeatCount) || 1);
+  return `envió ${likes} ${likes === 1 ? 'like' : 'likes'}`;
 }
 
 function escapeHtml(value) {
@@ -93,10 +119,13 @@ function wait(ms) {
 }
 
 async function present(alert) {
-  const showGift = alert.type === 'gift' && config.showGiftImage && Boolean(alert.giftImageUrl);
-  card.className = `alert-card type-${alert.type}${showGift ? '' : ' no-gift'}`;
-  $('#eventLabel').textContent = LABELS[alert.type] || 'EVENTO';
-  $('#coins').textContent = alert.coins > 0 ? `${Number(alert.coins).toLocaleString('es-ES')} monedas` : '';
+  const safeType = Object.hasOwn(LABELS, alert.type) ? alert.type : 'event';
+  const safeGiftUrl = isSafeImageUrl(alert.giftImageUrl) ? alert.giftImageUrl.trim() : '';
+  const showGift = safeType === 'gift' && config.showGiftImage && Boolean(safeGiftUrl);
+  card.className = `alert-card type-${safeType}${showGift ? '' : ' no-gift'}`;
+  $('#eventLabel').textContent = LABELS[safeType] || 'EVENTO';
+  const coinsVal = Number(alert.coins) || 0;
+  $('#coins').textContent = coinsVal > 0 ? `${coinsVal.toLocaleString('es-ES')} monedas` : '';
   $('#username').textContent = alert.displayName || alert.username || 'Alguien';
   $('#detail').innerHTML = detailFor(alert);
   $('#soundName').textContent = alert.sound?.name ? `Sonido: ${alert.sound.name}` : 'Sin sonido asignado';
@@ -111,21 +140,30 @@ async function present(alert) {
   const giftImage = $('#giftImage');
   giftWrap.hidden = !showGift;
   if (showGift) {
-    setImage(giftImage, alert.giftImageUrl, null);
+    setImage(giftImage, safeGiftUrl, null);
+  } else {
+    giftImage.hidden = true;
+    giftImage.removeAttribute('src');
   }
+
+  const baseDuration = Math.max(1500, Number(config.durationMs) || 5000);
+  const duration = queue.length > 0 ? Math.min(baseDuration, queue.length > 2 ? 1400 : 2000) : baseDuration;
+  document.documentElement.style.setProperty('--duration', `${duration}ms`);
 
   // Reinicia la animación de entrada y de progreso.
   card.classList.remove('show');
   void card.offsetWidth;
   card.classList.add('show');
 
-  const baseDuration = Math.max(1500, Number(config.durationMs) || 5000);
-  const duration = queue.length > 0 ? Math.min(baseDuration, queue.length > 2 ? 1400 : 2000) : baseDuration;
   const master = Number(config.masterVolume ?? 0.8);
   const playback = alert.sound
     ? audio.play(alert.sound, master * Number(alert.sound.volume ?? 1))
     : Promise.resolve();
-  await Promise.all([wait(duration), playback.catch(() => {})]);
+  const maxPlaybackWait = Math.max(duration + 5000, 15000);
+  await Promise.all([
+    wait(duration),
+    Promise.race([playback.catch(() => {}), wait(maxPlaybackWait)])
+  ]);
   card.classList.remove('show');
   await wait(260);
 }
@@ -172,21 +210,34 @@ async function loadConfig() {
 function connect() {
   if (!token) return;
   clearTimeout(reconnectTimer);
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  socket = new WebSocket(`${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+  if (socket) {
+    try {
+      socket.close();
+    } catch {
+      // Ignorado
+    }
+    socket = null;
+  }
 
-  socket.addEventListener('open', () => {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+  socket = ws;
+
+  ws.addEventListener('open', () => {
+    if (socket !== ws) return;
+    reconnectAttempt = 0;
     showStatus('Overlay conectado', 'is-live');
-    setTimeout(hideStatus, 3200);
   });
 
-  socket.addEventListener('message', (event) => {
+  ws.addEventListener('message', (event) => {
+    if (socket !== ws) return;
     let payload;
     try {
       payload = JSON.parse(event.data);
     } catch {
       return;
     }
+    if (!payload || typeof payload !== 'object') return;
     if (payload.type === 'hello' || payload.type === 'config') {
       applyConfig(payload.config);
       return;
@@ -204,28 +255,55 @@ function connect() {
     }
   });
 
-  socket.addEventListener('close', () => {
+  ws.addEventListener('close', () => {
+    if (socket !== ws) return;
     showStatus('Reconectando overlay…', 'is-error');
-    reconnectTimer = setTimeout(connect, 2000);
+    const delay = Math.min(15000, 1000 * Math.pow(2, reconnectAttempt)) + Math.floor(Math.random() * 500);
+    reconnectAttempt += 1;
+    reconnectTimer = setTimeout(connect, delay);
   });
 
-  socket.addEventListener('error', () => {
-    socket?.close();
+  ws.addEventListener('error', () => {
+    if (socket !== ws) return;
+    ws.close();
   });
 }
 
-document.addEventListener(
-  'click',
-  () => {
-    audio.unlock();
-  },
-  { once: true }
-);
+async function tryUnlockAudio() {
+  try {
+    const unlocked = await audio.unlock();
+    if (unlocked) {
+      document.removeEventListener('click', tryUnlockAudio);
+      document.removeEventListener('pointerdown', tryUnlockAudio);
+      document.removeEventListener('keydown', tryUnlockAudio);
+    }
+  } catch {
+    // Reintentar en la próxima interacción
+  }
+}
+
+document.addEventListener('click', tryUnlockAudio);
+document.addEventListener('pointerdown', tryUnlockAudio);
+document.addEventListener('keydown', tryUnlockAudio);
+
+async function initConfigWithRetry() {
+  while (true) {
+    const ready = await loadConfig();
+    if (ready) {
+      configRetryAttempt = 0;
+      connect();
+      return;
+    }
+    if (!token) return;
+    const delay = Math.min(15000, 1000 * Math.pow(2, configRetryAttempt)) + Math.floor(Math.random() * 500);
+    configRetryAttempt += 1;
+    await wait(delay);
+  }
+}
 
 (async () => {
   await audio.unlock().catch(() => {});
-  const ready = await loadConfig();
-  if (ready) connect();
+  initConfigWithRetry();
   if (params.get('preview') === '1') {
     setTimeout(() => {
       enqueue({

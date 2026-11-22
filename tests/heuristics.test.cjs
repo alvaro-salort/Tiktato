@@ -86,14 +86,22 @@ test('TikTokService emite formato de mensaje de reconexión durante el sondeo y 
 test('TTSQueue realiza fallback local sin ReferenceError si la API de Google falla', async () => {
   const { TTSQueue } = await import('../shared/tts-engine.js');
   const queue = new TTSQueue();
+  const origWarn = console.warn;
+  const origError = console.error;
+  console.warn = () => {};
+  console.error = () => {};
+  try {
+    queue.enqueue({
+      text: 'Prueba de voz en español',
+      voiceProvider: 'google',
+      voiceId: 'google:es-ES',
+      voiceLanguage: 'es-ES'
+    });
 
-  queue.enqueue({
-    text: 'Prueba de voz en español',
-    voiceProvider: 'google',
-    voiceId: 'google:es-ES',
-    voiceLanguage: 'es-ES'
-  });
-
-  await new Promise((resolve) => setTimeout(resolve, 80));
-  assert.equal(queue.isSpeaking, false);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(queue.isSpeaking, false);
+  } finally {
+    console.warn = origWarn;
+    console.error = origError;
+  }
 });

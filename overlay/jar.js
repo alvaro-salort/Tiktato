@@ -129,7 +129,9 @@ let goalPulseTimer = null;
 // Physics State
 const MAX_BODIES = 250;
 const MAX_IMAGE_CACHE = 120;
-const MAX_BACKGROUND_QUEUE = 500;
+const MAX_PHYSICAL_PER_EVENT = 25;
+const MAX_QUEUE_LENGTH = 100;
+const MAX_DONORS_TRACKED = 200;
 const MAX_MERGE_TIER = 6;
 const MERGE_RADIUS_FACTOR = 1.26;
 const MERGE_COOLDOWN_MS = 100;
@@ -142,6 +144,105 @@ let containerBodies = [];
 const dynamicBodies = [];
 const mergeEffects = [];
 const imageCache = new Map();
+const failedTextureUrls = new Set();
+const giftCatalogMap = new Map();
+const DEFAULT_ROSE_URL = 'https://p16-webcast.tiktokcdn.com/img/maliva/webcast-va/eba3a9bb85c33e017f3648eaf88d7189~tplv-obj.webp';
+let fallbackRoseCanvas = null;
+
+function isSafeImageUrl(url) {
+  if (typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('/assets/')) return true;
+  if (typeof URL === 'function') {
+    try {
+      const parsed = new URL(trimmed);
+      return parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+  return /^https:\/\/[^\s]+$/i.test(trimmed);
+}
+
+function registerGiftCatalogEntries(entries) {
+  if (!Array.isArray(entries)) return;
+  for (const g of entries) {
+    if (!g || typeof g !== 'object') continue;
+    const url = isSafeImageUrl(g.imageUrl || g.giftPictureUrl) ? (g.imageUrl || g.giftPictureUrl).trim() : '';
+    if (!url) continue;
+    if (g.id !== undefined && g.id !== null && String(g.id).trim()) {
+      giftCatalogMap.set(`id:${String(g.id).trim().toLowerCase()}`, url);
+    }
+    if (g.name && String(g.name).trim()) {
+      giftCatalogMap.set(`name:${String(g.name).trim().toLowerCase()}`, url);
+    }
+    if (g.nameEn && String(g.nameEn).trim()) {
+      giftCatalogMap.set(`name:${String(g.nameEn).trim().toLowerCase()}`, url);
+    }
+  }
+}
+
+function getRoseFallbackUrl() {
+  return (
+    giftCatalogMap.get('id:5655') ||
+    giftCatalogMap.get('name:rosa') ||
+    giftCatalogMap.get('name:rose') ||
+    DEFAULT_ROSE_URL
+  );
+}
+
+function resolveCatalogFallbackUrl(meta, failedUrl) {
+  const candidates = [];
+  if (meta?.giftId) {
+    const byId = giftCatalogMap.get(`id:${String(meta.giftId).trim().toLowerCase()}`);
+    if (byId) candidates.push(byId);
+  }
+  if (meta?.giftName) {
+    const byName = giftCatalogMap.get(`name:${String(meta.giftName).trim().toLowerCase()}`);
+    if (byName) candidates.push(byName);
+  }
+  const roseUrl = getRoseFallbackUrl();
+  if (roseUrl) candidates.push(roseUrl);
+  for (const url of candidates) {
+    if (url && url !== failedUrl && !failedTextureUrls.has(url) && isSafeImageUrl(url)) {
+      return url;
+    }
+  }
+  return '';
+}
+
+function getFallbackRoseCanvas() {
+  if (fallbackRoseCanvas) return fallbackRoseCanvas;
+  if (typeof document.createElement !== 'function') return null;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const cctx = canvas.getContext?.('2d');
+  if (!cctx) return null;
+  const half = size / 2;
+  const grad = cctx.createRadialGradient(half - half * 0.25, half - half * 0.25, half * 0.1, half, half, half);
+  grad.addColorStop(0, '#FFE4EC');
+  grad.addColorStop(0.65, '#FF85A6');
+  grad.addColorStop(1, '#E83E5F');
+  cctx.beginPath();
+  cctx.arc(half, half, half - 1, 0, Math.PI * 2);
+  cctx.fillStyle = grad;
+  cctx.fill();
+  cctx.beginPath();
+  cctx.arc(half, half, half * 0.72, 0, Math.PI * 2);
+  cctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+  cctx.lineWidth = Math.max(2, half * 0.06);
+  cctx.stroke();
+  cctx.font = '72px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+  cctx.textAlign = 'center';
+  cctx.textBaseline = 'middle';
+  cctx.fillStyle = '#FFFFFF';
+  cctx.fillText('🌹', half, half + 4);
+  fallbackRoseCanvas = canvas;
+  return fallbackRoseCanvas;
+}
 
 function isBackgroundPaused() {
   return Boolean(document.hidden && !isStudioMode);
@@ -154,6 +255,9 @@ let demoInterval = null;
 let demoPaused = !isTestMode;
 let socket = null;
 let reconnectTimer = null;
+let reconnectAttempt = 0;
+let lastLeaderboardDuration = null;
+let lastOffsets = { x: 0, y: 0 };
 
 function formatNumber(value) {
   return new Intl.NumberFormat('es-ES').format(Number(value) || 0);
@@ -299,15 +403,23 @@ function cleanupUnusedRenderTextures() {
 }
 
 /* ───────── PRECARGA DE TEXTURAS ───────── */
-function preloadTexture(url, callback) {
-  if (!url) return;
+function preloadTexture(url, callback, fallbackMeta = null) {
+  if (!isSafeImageUrl(url) || failedTextureUrls.has(url)) {
+    const alt = resolveCatalogFallbackUrl(fallbackMeta, url);
+    if (alt) {
+      preloadTexture(alt, callback, null);
+    } else {
+      callback?.(null, '');
+    }
+    return;
+  }
   if (imageCache.has(url)) {
     const cached = imageCache.get(url);
     imageCache.delete(url);
     imageCache.set(url, cached);
     if (cached.loaded) {
       if (render?.textures) render.textures[url] = cached.img;
-      callback?.(cached.img);
+      callback?.(cached.img, url);
       return;
     }
     if (callback && Array.isArray(cached.callbacks)) {
@@ -322,23 +434,44 @@ function preloadTexture(url, callback) {
   }
   cleanupUnusedRenderTextures();
   const img = new Image();
-  img.crossOrigin = 'anonymous';
   const entry = { img, loaded: false, callbacks: callback ? [callback] : [] };
   imageCache.set(url, entry);
+
+  const handleFailure = () => {
+    entry.loaded = false;
+    const pending = entry.callbacks.splice(0);
+    imageCache.delete(url);
+    failedTextureUrls.add(url);
+    if (failedTextureUrls.size > 300) {
+      const oldest = failedTextureUrls.values().next().value;
+      failedTextureUrls.delete(oldest);
+    }
+    if (render?.textures) delete render.textures[url];
+    const altUrl = resolveCatalogFallbackUrl(fallbackMeta, url);
+    if (altUrl) {
+      for (const cb of pending) {
+        preloadTexture(altUrl, cb, null);
+      }
+      return;
+    }
+    for (const cb of pending) {
+      cb(null, '');
+    }
+  };
+
   img.onload = () => {
+    if (!(img.naturalWidth > 0 && img.naturalHeight > 0)) {
+      handleFailure();
+      return;
+    }
     entry.loaded = true;
     if (render?.textures) render.textures[url] = img;
     const pending = entry.callbacks.splice(0);
     for (const cb of pending) {
-      cb(img);
+      cb(img, url);
     }
   };
-  img.onerror = () => {
-    entry.loaded = false;
-    entry.callbacks.length = 0;
-    imageCache.delete(url);
-    if (render?.textures) delete render.textures[url];
-  };
+  img.onerror = handleFailure;
   img.src = url;
 }
 
@@ -403,7 +536,8 @@ function initPhysics() {
   Matter.Events.on(engine, 'collisionStart', handleCollisionPairs);
   Matter.Events.on(engine, 'collisionActive', handleCollisionPairs);
 
-  // Hook de dibujo adicional para bordes nítidos, fallback dorado y destello discreto de fusión
+  // Hook de dibujo adicional para bordes nítidos, fallback de Rosa y destello discreto de fusión
+  preloadTexture(getRoseFallbackUrl(), null, null);
   Matter.Events.on(render, 'afterRender', () => {
     const ctx = render.context;
     if (!ctx) return;
@@ -415,29 +549,39 @@ function initPhysics() {
       const y = body.position.y;
 
       const spriteTexture = body.render?.sprite?.texture;
+      const texImg = spriteTexture ? render.textures?.[spriteTexture] : null;
       const isTextureLoaded = Boolean(
-        spriteTexture && (body.render?.sprite?.textureLoaded || imageCache.get(spriteTexture)?.loaded)
+        spriteTexture &&
+          (body.render?.sprite?.textureLoaded || imageCache.get(spriteTexture)?.loaded) &&
+          texImg &&
+          texImg.complete &&
+          texImg.naturalWidth > 0 &&
+          texImg.naturalHeight > 0
       );
 
       if (!isTextureLoaded) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(x, y, R, 0, Math.PI * 2);
-        const grad = ctx.createRadialGradient(x - R * 0.25, y - R * 0.25, R * 0.1, x, y, R);
-        grad.addColorStop(0, '#FFE57F');
-        grad.addColorStop(0.65, '#FFB800');
-        grad.addColorStop(1, '#D98200');
-        ctx.fillStyle = grad;
-        ctx.fill();
-
-        if (R >= 13) {
-          ctx.beginPath();
-          ctx.arc(x, y, R * 0.72, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-          ctx.lineWidth = Math.max(1, R * 0.06);
-          ctx.stroke();
+        if (body.render?.sprite) {
+          delete body.render.sprite;
         }
-        ctx.restore();
+        const roseUrl = getRoseFallbackUrl();
+        const roseEntry = imageCache.get(roseUrl);
+        const roseTex = render.textures?.[roseUrl] || (roseEntry?.loaded ? roseEntry.img : null);
+        if (roseTex && roseTex.complete && roseTex.naturalWidth > 0 && roseTex.naturalHeight > 0) {
+          ctx.drawImage(roseTex, x - R * 1.25, y - R * 1.25, R * 2.5, R * 2.5);
+        } else {
+          if (roseUrl && !roseEntry && !failedTextureUrls.has(roseUrl)) {
+            preloadTexture(roseUrl, null, null);
+          }
+          const roseCanvas = getFallbackRoseCanvas();
+          if (roseCanvas) {
+            ctx.drawImage(roseCanvas, x - R, y - R, R * 2, R * 2);
+          } else {
+            ctx.beginPath();
+            ctx.arc(x, y, R, 0, Math.PI * 2);
+            ctx.fillStyle = '#FF85A6';
+            ctx.fill();
+          }
+        }
       }
 
       ctx.beginPath();
@@ -483,7 +627,9 @@ function initPhysics() {
   document.addEventListener('visibilitychange', () => {
     if (isBackgroundPaused()) {
       if (runner && engine) Matter.Runner.stop(runner);
+      if (render) Matter.Render.stop?.(render);
     } else {
+      if (render) Matter.Render.run?.(render);
       if (runner && engine) Matter.Runner.run(runner, engine);
     }
   });
@@ -493,10 +639,14 @@ function handleResize() {
   if (!render || !engine) return;
   const width = window.innerWidth;
   const height = window.innerHeight;
-  render.canvas.width = width;
-  render.canvas.height = height;
-  render.options.width = width;
-  render.options.height = height;
+  if (typeof Matter.Render?.setSize === 'function') {
+    Matter.Render.setSize(render, width, height);
+  } else {
+    render.canvas.width = width;
+    render.canvas.height = height;
+    render.options.width = width;
+    render.options.height = height;
+  }
 
   rebuildJarContainer();
 }
@@ -508,6 +658,21 @@ function rebuildJarContainer() {
   }
   containerBodies = buildJarBodies(window.innerWidth, window.innerHeight, currentConfig);
   Matter.Composite.add(engine.world, containerBodies);
+
+  const nextX = Number(currentConfig.xOffset) || 0;
+  const nextY = Number(currentConfig.yOffset) || 0;
+  const dx = nextX - lastOffsets.x;
+  const dy = nextY - lastOffsets.y;
+  lastOffsets = { x: nextX, y: nextY };
+
+  for (const activeBody of dynamicBodies) {
+    if ((dx !== 0 || dy !== 0) && typeof Matter.Body?.translate === 'function') {
+      Matter.Body.translate(activeBody, { x: dx, y: dy });
+    }
+    if (activeBody.isSleeping && Matter.Sleeping?.set) {
+      Matter.Sleeping.set(activeBody, false);
+    }
+  }
 }
 
 /* ───────── SUIKA MERGE + SPAWN DE REGALO (Sección 6.5) ───────── */
@@ -633,7 +798,13 @@ function spawnGift(item, options = {}) {
   const R = Number(options.radiusOverride) || computeRadius(singleValue, currentConfig.scale, currentConfig.giftScale);
   const spawnPos = options.spawnPos || computeSpawnPosition(R, window.innerWidth, window.innerHeight, currentConfig);
 
-  const textureUrl = item.giftPictureUrl || '';
+  const rawUrl = item.giftPictureUrl || '';
+  const textureUrl = isSafeImageUrl(rawUrl) ? rawUrl.trim() : '';
+  const fallbackMeta = { giftId: item.giftId, giftName: item.giftName };
+  if (textureUrl && (item.giftId || item.giftName)) {
+    registerGiftCatalogEntries([{ id: item.giftId, name: item.giftName, imageUrl: textureUrl }]);
+  }
+
   const bodyOptions = {
     restitution: 0.2,
     friction: 0.2,
@@ -641,14 +812,14 @@ function spawnGift(item, options = {}) {
     density: 0.0015,
     sleepThreshold: 45,
     render: {
-      fillStyle: '#FFB800'
+      fillStyle: '#FF85A6'
     }
   };
 
   const cached = textureUrl ? imageCache.get(textureUrl) : null;
-  if (cached?.loaded) {
-    const naturalW = cached.img.naturalWidth || 64;
-    const naturalH = cached.img.naturalHeight || 64;
+  if (cached?.loaded && cached.img.naturalWidth > 0 && cached.img.naturalHeight > 0) {
+    const naturalW = cached.img.naturalWidth;
+    const naturalH = cached.img.naturalHeight;
     if (render?.textures) render.textures[textureUrl] = cached.img;
     bodyOptions.render.sprite = {
       texture: textureUrl,
@@ -674,28 +845,36 @@ function spawnGift(item, options = {}) {
     Matter.Body?.setVelocity?.(body, options.velocity);
   }
 
+  Matter.Composite.add(engine.world, body);
+  dynamicBodies.push(body);
+
   if (textureUrl && (!cached || !cached.loaded)) {
-    preloadTexture(textureUrl, (img) => {
-      if (body?.render && !body._removed) {
-        const naturalW = img.naturalWidth || 64;
-        const naturalH = img.naturalHeight || 64;
+    preloadTexture(
+      textureUrl,
+      (img, resolvedUrl) => {
+        if (body._removed || body._evicted || !dynamicBodies.includes(body) || !body?.render) return;
+        if (!img || !(img.naturalWidth > 0 && img.naturalHeight > 0)) {
+          delete body.render.sprite;
+          return;
+        }
+        const naturalW = img.naturalWidth;
+        const naturalH = img.naturalHeight;
         body.render.sprite = {
-          texture: textureUrl,
+          texture: resolvedUrl || textureUrl,
           xScale: (R * 2.5) / naturalW,
           yScale: (R * 2.5) / naturalH,
           textureLoaded: true
         };
-      }
-    });
+      },
+      fallbackMeta
+    );
   }
-
-  Matter.Composite.add(engine.world, body);
-  dynamicBodies.push(body);
   let evicted = false;
   while (dynamicBodies.length > MAX_BODIES) {
     const oldestBody = dynamicBodies.shift();
     if (oldestBody) {
       oldestBody._removed = true;
+      oldestBody._evicted = true;
       Matter.Composite.remove(engine.world, oldestBody);
       evicted = true;
     }
@@ -722,25 +901,43 @@ function computeQueueDelayMs(queueLength = giftQueue.length) {
   return 200;
 }
 
+function creditGiftDirect(data, totalCoins) {
+  currentCoinsTotal += totalCoins;
+  updateTotalCoinsHud();
+  updateLeaderboardWithGift(data.username, data.displayName, data.profilePictureUrl, totalCoins);
+}
+
 function enqueueGift(data) {
-  if (!data) return;
+  if (!data || typeof data !== 'object') return;
   const repeatCount = Math.max(1, Number(data.repeatCount) || 1);
   const singleValue = Math.max(1, Number(data.value || data.coinsPerGift || Math.round(Number(data.coins || 1) / repeatCount) || 1));
+  const totalCoins = Math.max(singleValue * repeatCount, Number(data.coins) || singleValue * repeatCount);
 
-  // Desglose de combos en eventos individuales
-  for (let i = 0; i < repeatCount; i++) {
-    if (isBackgroundPaused() && giftQueue.length >= MAX_BACKGROUND_QUEUE) {
-      const evicted = giftQueue.shift();
-      if (evicted) {
-        const evictedValue = evicted.singleValue || 1;
-        currentCoinsTotal += evictedValue;
-        updateLeaderboardWithGift(evicted.username, evicted.displayName, evicted.profilePictureUrl, evictedValue);
-        updateTotalCoinsHud();
-      }
-    }
+  if (isBackgroundPaused()) {
+    creditGiftDirect(data, totalCoins);
+    return;
+  }
+
+  const availableSlots = Math.max(0, MAX_QUEUE_LENGTH - giftQueue.length);
+  const physicalCount = Math.min(repeatCount, MAX_PHYSICAL_PER_EVENT, availableSlots);
+
+  if (physicalCount <= 0) {
+    creditGiftDirect(data, totalCoins);
+    showAlert({ ...data, singleValue, repeatCount });
+    return;
+  }
+
+  const basePerSphere = Math.floor(totalCoins / physicalCount);
+  let remainder = totalCoins - basePerSphere * physicalCount;
+
+  // Desglose acotado de combos en esferas físicas sin perder monedas
+  for (let i = 0; i < physicalCount; i++) {
+    const extra = remainder > 0 ? 1 : 0;
+    if (remainder > 0) remainder -= 1;
     giftQueue.push({
       ...data,
-      singleValue,
+      singleValue: Math.max(1, basePerSphere + extra),
+      originalSingleValue: singleValue,
       isFirstOfCombo: i === 0,
       comboIndex: i + 1,
       totalCombo: repeatCount
@@ -767,7 +964,7 @@ function processQueueTick() {
 
   // 4. Mostrar burbuja de alerta si es el primer impacto o alerta individual
   if (item.isFirstOfCombo) {
-    showAlert(item);
+    showAlert({ ...item, singleValue: item.originalSingleValue || value });
   }
 }
 
@@ -816,29 +1013,39 @@ function getVisibleDonors() {
 
 function updateLeaderboardWithGift(username, displayName, avatarUrl, coins) {
   if (!username) return;
+  const safeAvatar = isSafeImageUrl(avatarUrl) ? avatarUrl.trim() : '';
   let entry = topDonorsList.find((d) => d.username.toLowerCase() === username.toLowerCase());
   if (entry) {
     entry.totalCoins += coins;
     if (displayName) entry.displayName = displayName;
-    if (avatarUrl) entry.avatarUrl = avatarUrl;
+    if (safeAvatar) entry.avatarUrl = safeAvatar;
   } else {
     entry = {
       username,
       displayName: displayName || username,
-      avatarUrl: avatarUrl || '',
+      avatarUrl: safeAvatar,
       totalCoins: coins
     };
     topDonorsList.push(entry);
   }
   topDonorsList.sort((a, b) => b.totalCoins - a.totalCoins);
 
-  if (topDonorsList.length > MAX_STORED_DONORS) {
-    topDonorsList.length = MAX_STORED_DONORS;
+  if (topDonorsList.length > MAX_DONORS_TRACKED) {
+    topDonorsList.length = MAX_DONORS_TRACKED;
   }
 
   renderCurrentLeaderboardItem();
 }
 
+function getRankLimit() {
+  if (currentConfig.numberOfRanks === 'top3') return 3;
+  if (currentConfig.numberOfRanks === 'top10') return 10;
+  return 5;
+}
+
+function getVisibleDonors() {
+  return topDonorsList.slice(0, getRankLimit());
+}
 function renderCurrentLeaderboardItem() {
   if (!leaderboardBox) return;
   if (currentConfig.displayLeaderboard === false) {
@@ -851,7 +1058,10 @@ function renderCurrentLeaderboardItem() {
   if (visibleDonors.length === 0) {
     leaderboardUsername.textContent = 'Esperando donaciones...';
     leaderboardCoins.textContent = '0';
+    leaderboardAvatar.onerror = null;
     leaderboardAvatar.src = '/assets/coin-icon.svg';
+    leaderboardAvatar.hidden = false;
+    leaderboardAvatarFallback.hidden = true;
     leaderboardMedal.src = '/assets/first.svg';
     leaderboardMedal.hidden = false;
     leaderboardRankText.hidden = true;
@@ -869,11 +1079,18 @@ function renderCurrentLeaderboardItem() {
   leaderboardUsername.textContent = donor.displayName || donor.username;
   leaderboardCoins.textContent = formatNumber(donor.totalCoins);
 
-  if (donor.avatarUrl) {
-    leaderboardAvatar.src = donor.avatarUrl;
+  const safeAvatar = isSafeImageUrl(donor.avatarUrl) ? donor.avatarUrl.trim() : '';
+  if (safeAvatar) {
+    leaderboardAvatarFallback.textContent = (donor.username || 'A')[0].toUpperCase();
+    leaderboardAvatar.onerror = () => {
+      leaderboardAvatar.hidden = true;
+      leaderboardAvatarFallback.hidden = false;
+    };
+    leaderboardAvatar.src = safeAvatar;
     leaderboardAvatar.hidden = false;
     leaderboardAvatarFallback.hidden = true;
   } else {
+    leaderboardAvatar.onerror = null;
     leaderboardAvatar.hidden = true;
     leaderboardAvatarFallback.hidden = false;
     leaderboardAvatarFallback.textContent = (donor.username || 'A')[0].toUpperCase();
@@ -904,8 +1121,6 @@ function renderCurrentLeaderboardItem() {
     leaderboardRankText.textContent = `${rank}.`;
   }
 }
-
-let lastLeaderboardDuration = null;
 
 function startLeaderboardCarousel() {
   clearInterval(leaderboardTimer);
@@ -947,20 +1162,34 @@ function showAlert(item) {
   alertRepeatCount.textContent = `x${displayRepeat}`;
 
   const totalValue = (item.singleValue || 1) * displayRepeat;
-  alertCoinsValue.textContent = `(${formatNumber(totalValue)} monedas)`;
+  const coinWord = totalValue === 1 ? 'moneda' : 'monedas';
+  alertCoinsValue.textContent = `(${formatNumber(totalValue)} ${coinWord})`;
 
-  if (item.giftPictureUrl) {
-    alertGiftIcon.src = item.giftPictureUrl;
+  const safeGiftUrl = isSafeImageUrl(item.giftPictureUrl) ? item.giftPictureUrl.trim() : '';
+  if (safeGiftUrl) {
+    alertGiftIcon.onerror = () => {
+      alertGiftIcon.onerror = null;
+      alertGiftIcon.src = '/assets/coin-icon.svg';
+    };
+    alertGiftIcon.src = safeGiftUrl;
     alertGiftIcon.hidden = false;
   } else {
+    alertGiftIcon.onerror = null;
     alertGiftIcon.src = '/assets/coin-icon.svg';
   }
 
-  if (item.profilePictureUrl) {
-    alertAvatar.src = item.profilePictureUrl;
+  const safeProfileUrl = isSafeImageUrl(item.profilePictureUrl) ? item.profilePictureUrl.trim() : '';
+  if (safeProfileUrl) {
+    alertAvatarFallback.textContent = (item.username || 'A')[0].toUpperCase();
+    alertAvatar.onerror = () => {
+      alertAvatar.hidden = true;
+      alertAvatarFallback.hidden = false;
+    };
+    alertAvatar.src = safeProfileUrl;
     alertAvatar.hidden = false;
     alertAvatarFallback.hidden = true;
   } else {
+    alertAvatar.onerror = null;
     alertAvatar.hidden = true;
     alertAvatarFallback.hidden = false;
     alertAvatarFallback.textContent = (item.username || 'A')[0].toUpperCase();
@@ -977,6 +1206,9 @@ function showAlert(item) {
 /* ───────── VACIAR FRASCO (Sección 5.2) ───────── */
 function resetJar() {
   giftQueue.length = 0;
+  for (const b of dynamicBodies) {
+    if (b) b._evicted = true;
+  }
   dynamicBodies.length = 0;
   mergeEffects.length = 0;
   cleanupUnusedRenderTextures();
@@ -1020,7 +1252,7 @@ function buildRehydrationPlan(totalCoins, recentGifts = []) {
   const plan = [];
   const maxRehydrateBodies = 45;
   const recent = Array.isArray(recentGifts) ? recentGifts : [];
-  const fallbackTextures = recent.map((g) => g?.imageUrl).filter(Boolean);
+  const fallbackTextures = recent.map((g) => g?.imageUrl).filter((u) => isSafeImageUrl(u));
 
   for (const gift of recent) {
     if (plan.length >= maxRehydrateBodies || remaining <= 0) break;
@@ -1029,7 +1261,7 @@ function buildRehydrationPlan(totalCoins, recentGifts = []) {
       plan.push({
         singleValue: giftCoins,
         giftName: gift?.name || 'Regalo',
-        giftPictureUrl: gift?.imageUrl || ''
+        giftPictureUrl: isSafeImageUrl(gift?.imageUrl) ? gift.imageUrl : getRoseFallbackUrl()
       });
       remaining -= giftCoins;
     }
@@ -1050,10 +1282,10 @@ function buildRehydrationPlan(totalCoins, recentGifts = []) {
     }
     const sampleTexture = fallbackTextures.length > 0
       ? fallbackTextures[plan.length % fallbackTextures.length]
-      : '';
+      : getRoseFallbackUrl();
     plan.push({
       singleValue: chosen,
-      giftName: 'Moneda',
+      giftName: 'Rosa',
       giftPictureUrl: sampleTexture
     });
     remaining -= chosen;
@@ -1092,12 +1324,45 @@ function rehydrateJarBodies(cfg) {
   }
 }
 
+function mergeTopDonors(incoming) {
+  if (!Array.isArray(incoming)) return;
+  for (const donor of incoming) {
+    if (!donor || typeof donor !== 'object' || !donor.username) continue;
+    const incomingCoins = Math.max(0, Number(donor.totalCoins) || 0);
+    const safeAvatar = isSafeImageUrl(donor.avatarUrl) ? donor.avatarUrl.trim() : '';
+    const existing = topDonorsList.find((d) => d.username.toLowerCase() === String(donor.username).toLowerCase());
+    if (existing) {
+      existing.totalCoins = Math.max(existing.totalCoins, incomingCoins);
+      if (donor.displayName) existing.displayName = donor.displayName;
+      if (safeAvatar) existing.avatarUrl = safeAvatar;
+    } else {
+      topDonorsList.push({
+        username: donor.username,
+        displayName: donor.displayName || donor.username,
+        avatarUrl: safeAvatar,
+        totalCoins: incomingCoins
+      });
+    }
+  }
+  topDonorsList.sort((a, b) => b.totalCoins - a.totalCoins);
+  if (topDonorsList.length > MAX_DONORS_TRACKED) {
+    topDonorsList.length = MAX_DONORS_TRACKED;
+  }
+}
+
 /* ───────── APLICAR CONFIGURACIÓN ───────── */
-function applyConfig(cfg) {
-  if (!cfg) return;
+function applyConfig(cfg, { isReconnect = false } = {}) {
+  if (!cfg || typeof cfg !== 'object') return;
   const newGeomKey = `${cfg.scale ?? currentConfig.scale}|${cfg.xOffset ?? currentConfig.xOffset}|${cfg.yOffset ?? currentConfig.yOffset}`;
   const geomChanged = newGeomKey !== lastGeometryKey;
   lastGeometryKey = newGeomKey;
+
+  if (Array.isArray(cfg.giftCatalog)) {
+    registerGiftCatalogEntries(cfg.giftCatalog);
+  }
+  if (Array.isArray(cfg.gifts)) {
+    registerGiftCatalogEntries(cfg.gifts);
+  }
 
   currentConfig = {
     ...currentConfig,
@@ -1109,37 +1374,68 @@ function applyConfig(cfg) {
   document.documentElement.style.setProperty('--y-offset', `${currentConfig.yOffset || 0}px`);
   document.documentElement.style.setProperty('--scale', `${currentConfig.scale || 1.0}`);
 
-  if (cfg.currentCoins !== undefined && isInitialLoad) {
-    currentCoinsTotal = Number(cfg.currentCoins) || 0;
-    const initialGoal = Math.max(1, Number(currentConfig.goalCoins) || 1000);
-    hasCelebratedGoal = currentCoinsTotal >= initialGoal;
-  }
-
-  if (Array.isArray(cfg.topDonors) && isInitialLoad) {
-    topDonorsList = [...cfg.topDonors].slice(0, MAX_STORED_DONORS);
-  }
-  const shouldHydrate = isInitialLoad && !hasHydratedBodies && dynamicBodies.length === 0 && currentCoinsTotal > 0;
+  const shouldHydrate = isInitialLoad && !hasHydratedBodies && dynamicBodies.length === 0 && Number(cfg.currentCoins || currentCoinsTotal) > 0;
   if (isInitialLoad) {
+    if (cfg.currentCoins !== undefined) {
+      currentCoinsTotal = Number(cfg.currentCoins) || 0;
+      const initialGoal = Math.max(1, Number(currentConfig.goalCoins) || 1000);
+      hasCelebratedGoal = currentCoinsTotal >= initialGoal;
+    }
+    if (Array.isArray(cfg.topDonors)) {
+      topDonorsList = cfg.topDonors
+        .filter((d) => d && typeof d === 'object' && d.username)
+        .map((d) => ({
+          ...d,
+          avatarUrl: isSafeImageUrl(d.avatarUrl) ? d.avatarUrl.trim() : '',
+          totalCoins: Math.max(0, Number(d.totalCoins) || 0)
+        }))
+        .slice(0, MAX_DONORS_TRACKED);
+    }
     hasHydratedBodies = true;
+    isInitialLoad = false;
+  } else if (isReconnect) {
+    if (cfg.currentCoins !== undefined) {
+      currentCoinsTotal = Math.max(currentCoinsTotal, Number(cfg.currentCoins) || 0);
+    }
+    if (Array.isArray(cfg.topDonors)) {
+      mergeTopDonors(cfg.topDonors);
+    }
   }
 
   if (geomChanged) {
     rebuildJarContainer();
   }
-  if (shouldHydrate) {
+  if (shouldHydrate && currentCoinsTotal > 0) {
     rehydrateJarBodies(cfg);
   }
 
   updateTotalCoinsHud();
-  isInitialLoad = false;
   renderCurrentLeaderboardItem();
-  const nextLeaderboardDuration = Math.max(2, Number(currentConfig.leaderboardDuration) || 5);
-  if (!leaderboardTimer || nextLeaderboardDuration !== lastLeaderboardDuration) {
+
+  const nextDuration = Math.max(2, Number(currentConfig.leaderboardDuration) || 5);
+  if (leaderboardTimer === null || nextDuration !== lastLeaderboardDuration) {
     startLeaderboardCarousel();
   }
 }
 
 /* ───────── WEBSOCKET & API ───────── */
+async function loadGiftCatalog() {
+  if (!token) return;
+  try {
+    const res = await fetch(`/api/gifts?token=${encodeURIComponent(token)}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        registerGiftCatalogEntries(data);
+      } else if (data && Array.isArray(data.gifts)) {
+        registerGiftCatalogEntries(data.gifts);
+      }
+    }
+  } catch {
+    // Endpoint opcional: ignorar si no está disponible
+  }
+}
+
 async function loadState() {
   if (!token) return;
   try {
@@ -1156,18 +1452,40 @@ async function loadState() {
 function connect() {
   if (!token) return;
   clearTimeout(reconnectTimer);
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  socket = new WebSocket(`${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+  if (socket) {
+    try {
+      socket.close();
+    } catch {
+      // Ignorado
+    }
+    socket = null;
+  }
 
-  socket.addEventListener('message', (event) => {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+  socket = ws;
+
+  ws.addEventListener('open', () => {
+    if (socket !== ws) return;
+    reconnectAttempt = 0;
+  });
+
+  ws.addEventListener('message', (event) => {
+    if (socket !== ws) return;
     let payload;
     try {
       payload = JSON.parse(event.data);
     } catch {
       return;
     }
+    if (!payload || typeof payload !== 'object') return;
 
-    if (payload.type === 'hello' || payload.type === 'jar') {
+    if (payload.type === 'hello') {
+      if (Array.isArray(payload.gifts)) registerGiftCatalogEntries(payload.gifts);
+      applyConfig(payload.jar || payload.config, { isReconnect: !isInitialLoad });
+    } else if (payload.type === 'gifts') {
+      registerGiftCatalogEntries(payload.gifts);
+    } else if (payload.type === 'jar') {
       applyConfig(payload.jar || payload.config);
     } else if (payload.type === 'coin-jar:gift' || payload.type === 'jar:gift') {
       if (payload.id && processedEventKeys.has(payload.id)) return;
@@ -1184,11 +1502,17 @@ function connect() {
     }
   });
 
-  socket.addEventListener('close', () => {
-    reconnectTimer = setTimeout(connect, 2000);
+  ws.addEventListener('close', () => {
+    if (socket !== ws) return;
+    const delay = Math.min(15000, 1000 * Math.pow(2, reconnectAttempt)) + Math.floor(Math.random() * 500);
+    reconnectAttempt += 1;
+    reconnectTimer = setTimeout(connect, delay);
   });
 
-  socket.addEventListener('error', () => socket?.close());
+  ws.addEventListener('error', () => {
+    if (socket !== ws) return;
+    ws.close();
+  });
 }
 
 /* ───────── MODO DE PRUEBA / DEMO ───────── */
@@ -1305,7 +1629,7 @@ function scheduleQueueLoop() {
   initPhysics();
   setupStudioMode();
   setupTestMode();
-  await loadState();
+  await Promise.all([loadState(), loadGiftCatalog()]);
   connect();
   renderCurrentLeaderboardItem();
   startLeaderboardCarousel();

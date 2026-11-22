@@ -604,3 +604,27 @@ test('normalizeTikTokEvent resuelve regalo de prueba sin giftId como test y asig
   assert.equal(testGiftEvent.test, true);
 });
 
+test('normalizeTikTokEvent no marca como test regalos reales que contienen subcadenas como Cutest, Greatest o Contest', () => {
+  for (const name of ['Cutest', 'Greatest', 'Contest']) {
+    const ev = normalizeTikTokEvent('gift', {
+      user: { uniqueId: 'viewer', nickname: 'Viewer' },
+      giftId: 90001,
+      repeatCount: 1,
+      repeatEnd: 1,
+      gift: { name, diamondCount: 10 }
+    });
+    assert.equal(ev.test, false, `${name} no debe marcarse como test`);
+  }
+
+  for (const name of ['Rosa de prueba', 'Test Gift']) {
+    const ev = normalizeTikTokEvent('gift', {
+      user: { uniqueId: 'viewer', nickname: 'Viewer' },
+      giftId: 90002,
+      repeatCount: 1,
+      repeatEnd: 1,
+      gift: { name, diamondCount: 1 }
+    });
+    assert.equal(ev.test, true, `${name} sí debe marcarse como test`);
+  }
+});
+

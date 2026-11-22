@@ -15,4 +15,6 @@ coverage/
 *.p12
 *.blockmap
 builder-effective-config.yaml
+builder-debug.yml
+.opencodereview/
 Desktop.ini

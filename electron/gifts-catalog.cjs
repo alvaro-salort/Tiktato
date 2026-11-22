@@ -384,9 +384,115 @@ function getEquivalentGiftNames(nameOrGift, catalog = activeCatalog) {
   return [...names];
 }
 
+const TIMEZONE_TO_REGION = {
+  'America/Buenos_Aires': 'AR',
+  'America/Cordoba': 'AR',
+  'America/Mendoza': 'AR',
+  'America/Rosario': 'AR',
+  'America/Salta': 'AR',
+  'America/Tucuman': 'AR',
+  'America/Catamarca': 'AR',
+  'America/Jujuy': 'AR',
+  'America/La_Rioja': 'AR',
+  'America/Rio_Gallegos': 'AR',
+  'America/San_Juan': 'AR',
+  'America/San_Luis': 'AR',
+  'America/Ushuaia': 'AR',
+  'America/Mexico_City': 'MX',
+  'America/Monterrey': 'MX',
+  'America/Cancun': 'MX',
+  'America/Merida': 'MX',
+  'America/Tijuana': 'MX',
+  'America/Chihuahua': 'MX',
+  'America/Hermosillo': 'MX',
+  'America/Mazatlan': 'MX',
+  'America/Ciudad_Juarez': 'MX',
+  'America/Matamoros': 'MX',
+  'America/Ojinaga': 'MX',
+  'America/Bahia_Banderas': 'MX',
+  'Europe/Madrid': 'ES',
+  'Atlantic/Canary': 'ES',
+  'Africa/Ceuta': 'ES',
+  'America/Bogota': 'CO',
+  'America/Lima': 'PE',
+  'America/Santiago': 'CL',
+  'America/Punta_Arenas': 'CL',
+  'Pacific/Easter': 'CL',
+  'America/Montevideo': 'UY',
+  'America/Caracas': 'VE',
+  'America/Guayaquil': 'EC',
+  'Pacific/Galapagos': 'EC',
+  'America/La_Paz': 'BO',
+  'America/Asuncion': 'PY',
+  'America/Costa_Rica': 'CR',
+  'America/Panama': 'PA',
+  'America/Guatemala': 'GT',
+  'America/Tegucigalpa': 'HN',
+  'America/El_Salvador': 'SV',
+  'America/Managua': 'NI',
+  'America/Santo_Domingo': 'DO',
+  'America/Havana': 'CU',
+  'America/Puerto_Rico': 'PR',
+  'America/Sao_Paulo': 'BR',
+  'America/Fortaleza': 'BR',
+  'America/Recife': 'BR',
+  'America/Bahia': 'BR',
+  'America/Belem': 'BR',
+  'America/Manaus': 'BR',
+  'America/Cuiaba': 'BR',
+  'America/Porto_Velho': 'BR',
+  'America/Boa_Vista': 'BR',
+  'America/Rio_Branco': 'BR',
+  'America/Maceio': 'BR',
+  'America/Araguaina': 'BR',
+  'America/Campo_Grande': 'BR',
+  'America/Noronha': 'BR',
+  'America/New_York': 'US',
+  'America/Chicago': 'US',
+  'America/Denver': 'US',
+  'America/Los_Angeles': 'US',
+  'America/Phoenix': 'US',
+  'America/Anchorage': 'US',
+  'Pacific/Honolulu': 'US',
+  'America/Detroit': 'US',
+  'America/Indiana/Indianapolis': 'US'
+};
+
+function detectSystemLanguage({ locale } = {}) {
+  try {
+    const raw = locale || Intl.DateTimeFormat().resolvedOptions().locale || '';
+    const match = String(raw).match(/^([a-zA-Z]{2,3})(?:[-_]|$)/);
+    if (match) return match[1].toLowerCase();
+  } catch {
+    // Fallback abajo
+  }
+  return 'es';
+}
+
+function detectSystemRegion({ locale, timeZone } = {}) {
+  try {
+    const resolved = Intl.DateTimeFormat().resolvedOptions();
+    const rawLocale = String(locale ?? resolved.locale ?? '');
+    const regionMatch = rawLocale.match(/^[a-zA-Z]{2,3}(?:[-_][a-zA-Z]{4})?[-_]([a-zA-Z]{2})(?:[-_]|$)/);
+    if (regionMatch) {
+      return regionMatch[1].toUpperCase();
+    }
+
+    const tz = String(timeZone ?? resolved.timeZone ?? '');
+    if (tz) {
+      if (tz.startsWith('America/Argentina/')) return 'AR';
+      if (TIMEZONE_TO_REGION[tz]) return TIMEZONE_TO_REGION[tz];
+    }
+  } catch {
+    // Fallback abajo
+  }
+  return detectSystemLanguage({ locale }) === 'es' ? 'AR' : 'US';
+}
+
 function mergeGifts(baseList, extraList) {
   const byId = new Map();
   const popularIds = new Set(DEFAULT_GIFTS.filter((item) => item.popular).map((item) => String(item.id)));
+  const defaultOrder = new Map(DEFAULT_GIFTS.map((item, idx) => [String(item.id), idx]));
 
   const upsert = (gift, isDefault = false) => {
     if (!gift || !gift.id) return;
@@ -402,7 +508,7 @@ function mergeGifts(baseList, extraList) {
       name: isDefault && existing?.name ? existing.name : name,
       nameEn,
       coins,
-      popular: Boolean(gift.popular || existing?.popular || popularIds.has(id)),
+      popular: popularIds.has(id) || (isDefault && Boolean(gift.popular)),
       imageUrl
     });
   };
@@ -413,6 +519,12 @@ function mergeGifts(baseList, extraList) {
   return [...byId.values()].sort((left, right) => {
     if (left.popular !== right.popular) return left.popular ? -1 : 1;
     if (left.coins !== right.coins) return left.coins - right.coins;
+    const leftDefault = defaultOrder.has(left.id);
+    const rightDefault = defaultOrder.has(right.id);
+    if (leftDefault !== rightDefault) return leftDefault ? -1 : 1;
+    if (leftDefault && rightDefault) {
+      return defaultOrder.get(left.id) - defaultOrder.get(right.id);
+    }
     return left.name.localeCompare(right.name, 'es');
   });
 }
@@ -421,42 +533,51 @@ function cachePath(userDataDir) {
   return path.join(userDataDir, 'gifts-cache.json');
 }
 
-function loadGiftsCatalog(userDataDir) {
+function loadGiftsCatalog(userDataDir, { region } = {}) {
   if (!userDataDir) {
     activeCatalog = mergeGifts(DEFAULT_GIFTS, []);
     return activeCatalog;
   }
+  const expectedRegion = String(region || detectSystemRegion()).toUpperCase();
   try {
     const file = cachePath(userDataDir);
     if (fs.existsSync(file)) {
       const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (Array.isArray(parsed)) {
-        activeCatalog = mergeGifts(DEFAULT_GIFTS, parsed);
+      if (
+        parsed &&
+        !Array.isArray(parsed) &&
+        Array.isArray(parsed.gifts) &&
+        String(parsed.region || '').toUpperCase() === expectedRegion
+      ) {
+        activeCatalog = mergeGifts(DEFAULT_GIFTS, parsed.gifts);
         return activeCatalog;
       }
     }
   } catch {
-    // Si falla el caché, usamos el catálogo por defecto.
+    // Si falla el caché o la región no coincide, usamos el catálogo por defecto hasta refrescar.
   }
   activeCatalog = mergeGifts(DEFAULT_GIFTS, []);
   return activeCatalog;
 }
 
-async function fetchTikTokGiftMap(lang) {
+async function fetchTikTokGiftMap(lang, region) {
+  const safeLang = String(lang || detectSystemLanguage()).toLowerCase();
+  const safeRegion = String(region || detectSystemRegion()).toUpperCase();
   const params = new URLSearchParams({
     aid: '1988',
     app_name: 'tiktok_web',
     device_platform: 'web_pc',
-    app_language: lang,
-    webcast_language: lang,
-    browser_language: lang,
-    region: 'AR'
+    app_language: safeLang,
+    webcast_language: safeLang,
+    browser_language: safeLang,
+    region: safeRegion
   });
   const response = await fetch(`https://webcast.tiktok.com/webcast/gift/list/?${params}`, {
     headers: {
       'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       Accept: 'application/json, text/plain, */*',
+      'Accept-Language': `${safeLang}-${safeRegion},${safeLang};q=0.9,en;q=0.8`,
       Referer: 'https://www.tiktok.com/'
     },
     signal: AbortSignal.timeout(10_000)
@@ -468,6 +589,10 @@ async function fetchTikTokGiftMap(lang) {
   const map = new Map();
   const collect = (gift) => {
     if (!gift || !gift.id) return;
+    // Excluir regalos ocultos del panel, deshabilitados o exclusivos de linkmic
+    if (gift.is_displayed_on_panel === false || gift.is_gray === true || gift.for_linkmic === true) {
+      return;
+    }
     const id = String(gift.id);
     if (map.has(id)) return;
     const imageUrl =
@@ -481,39 +606,62 @@ async function fetchTikTokGiftMap(lang) {
       imageUrl: String(imageUrl || '').trim()
     });
   };
-  (payload.data?.gifts || []).forEach(collect);
-  (payload.data?.pages || []).forEach((page) => (page.gifts || []).forEach(collect));
+  // Preferir `pages` (pestañas activas del panel para la región); usar `gifts` solo como respaldo
+  const pages = Array.isArray(payload.data?.pages) ? payload.data.pages : [];
+  if (pages.length > 0) {
+    pages.forEach((page) => (page.gifts || []).forEach(collect));
+  } else {
+    (payload.data?.gifts || []).forEach(collect);
+  }
   return map;
 }
 
-async function refreshGiftsCatalog(userDataDir) {
-  const [esMap, enMap] = await Promise.all([
-    fetchTikTokGiftMap('es').catch(() => new Map()),
-    fetchTikTokGiftMap('en').catch(() => new Map())
+async function refreshGiftsCatalog(userDataDir, { region, language } = {}) {
+  const targetRegion = String(region || detectSystemRegion()).toUpperCase();
+  const primaryLang = String(language || detectSystemLanguage()).toLowerCase();
+  const [localMap, enMap] = await Promise.all([
+    fetchTikTokGiftMap(primaryLang, targetRegion).catch(() => new Map()),
+    primaryLang === 'en'
+      ? Promise.resolve(new Map())
+      : fetchTikTokGiftMap('en', targetRegion).catch(() => new Map())
   ]);
-  const allIds = new Set([...esMap.keys(), ...enMap.keys()]);
+  const allIds = new Set([...localMap.keys(), ...enMap.keys()]);
   const fetched = [];
   for (const id of allIds) {
-    const es = esMap.get(id);
+    const local = localMap.get(id);
     const en = enMap.get(id);
-    const name = (es && es.name) || (en && en.name) || '';
+    const name = (local && local.name) || (en && en.name) || '';
     if (!name) continue;
     fetched.push({
       id,
       name,
       nameEn: (en && en.name) || name,
-      coins: (es && es.coins) || (en && en.coins) || 1,
-      imageUrl: (es && es.imageUrl) || (en && en.imageUrl) || ''
+      coins: (local && local.coins) || (en && en.coins) || 1,
+      imageUrl: (local && local.imageUrl) || (en && en.imageUrl) || ''
     });
   }
   if (fetched.length > 0) {
     activeCatalog = mergeGifts(DEFAULT_GIFTS, fetched);
     if (userDataDir) {
+      const target = cachePath(userDataDir);
+      const tmpPath = `${target}.${process.pid}.${Date.now()}.tmp`;
+      const cachePayload = {
+        version: 2,
+        region: targetRegion,
+        language: primaryLang,
+        updatedAt: Date.now(),
+        gifts: activeCatalog
+      };
       try {
-        fs.mkdirSync(userDataDir, { recursive: true });
-        fs.writeFileSync(cachePath(userDataDir), JSON.stringify(activeCatalog, null, 2), 'utf8');
+        await fs.promises.mkdir(userDataDir, { recursive: true });
+        await fs.promises.writeFile(tmpPath, JSON.stringify(cachePayload, null, 2), 'utf8');
+        await fs.promises.rename(tmpPath, target);
       } catch {
-        // Ignorado si no se puede escribir el caché.
+        try {
+          await fs.promises.unlink(tmpPath);
+        } catch {
+          // Ignorado si no se puede limpiar el temporal.
+        }
       }
     }
   }
@@ -523,6 +671,8 @@ async function refreshGiftsCatalog(userDataDir) {
 module.exports = {
   DEFAULT_GIFTS,
   GIFT_SYNONYM_GROUPS,
+  detectSystemLanguage,
+  detectSystemRegion,
   findGiftById,
   findGiftByName,
   getActiveCatalog,

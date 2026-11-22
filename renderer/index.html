@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; media-src 'self' http://127.0.0.1:* http://localhost:* https://www.google.com https://*.google.com https: data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' data:; img-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; media-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; object-src 'none'; base-uri 'self'; form-action 'self'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TikTato · Sonidos y alertas para TikTok LIVE</title>
@@ -31,7 +31,7 @@
             <span class="status-dot"></span>
             <span id="statusLabel">Desconectado</span>
           </div>
-          <span id="liveBadge" class="badge-live" style="display: none;">LIVE</span>
+          <span id="liveBadge" class="badge-live" hidden>LIVE</span>
           <span id="connectionMessage" class="connection-message sidebar-connection-message"></span>
         </div>
 
@@ -120,7 +120,7 @@
 
       <!-- ÁREA PRINCIPAL CON VISTAS POR PESTAÑA -->
       <div class="app-content">
-        <div id="errorBanner" class="error-banner" hidden></div>
+        <div id="errorBanner" class="error-banner" role="alert" hidden></div>
         <div id="updateBanner" class="update-banner" hidden>
           <div class="update-banner-content">
             <span class="update-banner-icon">
@@ -133,7 +133,7 @@
           </div>
           <div class="update-banner-actions">
             <div id="updateProgressWrap" class="update-progress-wrap" hidden>
-              <div id="updateProgressBar" class="update-progress-bar" style="width: 0%"></div>
+              <div id="updateProgressBar" class="update-progress-bar"></div>
             </div>
             <button id="btnUpdateDownload" class="btn btn-sm btn-primary" type="button">Descargar</button>
             <button id="btnUpdateInstall" class="btn btn-sm btn-success" type="button" hidden>Reiniciar e instalar</button>
@@ -222,10 +222,10 @@
                 <div class="section-label">Regalos configurados</div>
                 <div id="giftQuickList" class="quick-rules gift-quick-list"></div>
 
-                <div class="section-label" style="margin-top: 14px;">Eventos generales</div>
+                <div class="section-label mt-3-5">Eventos generales</div>
                 <div id="quickRules" class="quick-rules"></div>
 
-                <label class="toggle-row" style="margin-top: 12px;">
+                <label class="toggle-row mt-3">
                   <span class="toggle-copy">
                     <strong>Repetir el sonido en cada combo</strong>
                     <small>Si envían 10 rosas seguidas, suena 10 veces de forma secuencial.</small>
@@ -376,7 +376,7 @@
                   </ol>
                 </div>
 
-                <div class="overlay-quick-test" style="margin-top: 14px;">
+                <div class="overlay-quick-test mt-3-5">
                   <span class="field-label">Probar visualización de alerta:</span>
                   <div class="test-toolbar" role="group" aria-label="Probar alerta de regalo">
                     <button class="btn btn-secondary btn-small" data-test="gift" type="button">Enviar regalo de prueba</button>
@@ -475,8 +475,8 @@
                 </div>
 
                 <input id="jarTestUrl" readonly type="hidden" />
-                <button id="btnCopyJarTest" style="display: none;" type="button"></button>
-                <button id="btnOpenJarTest" style="display: none;" type="button"></button>
+                <button id="btnCopyJarTest" class="is-hidden" type="button"></button>
+                <button id="btnOpenJarTest" class="is-hidden" type="button"></button>
               </div>
 
               <div class="jar-visual-col">
@@ -546,28 +546,20 @@
                   </label>
                 </div>
 
-                <div class="section-label" style="margin-top: 18px;">Voz y volumen</div>
+                <div class="section-label mt-4">Voz y volumen</div>
                 <div class="field-compact-stack">
                   <div class="field">
                     <span>Proveedor TTS</span>
                     <div id="ttsProviderTabs" class="tts-provider-tabs" role="group" aria-label="Proveedor de voz TTS">
-                      <button class="tts-provider-pill is-active" data-tts-provider="google" type="button">Google</button>
-                      <button class="tts-provider-pill" data-tts-provider="local" type="button">Local</button>
+                      <button class="tts-provider-pill is-active" data-tts-provider="local" type="button">Local</button>
                       <button class="tts-provider-pill" data-tts-provider="fish" type="button">Fish Audio (API Key propia)</button>
                     </div>
                   </div>
 
                   <label class="field">
-                    <span>Proveedor y tipo de voz</span>
+                    <span>Voz del sistema</span>
                     <select id="ttsVoiceProvider" aria-label="Elegir voz">
-                      <optgroup label="Voces de Google">
-                        <option value="google:es-ES">Google Español (España)</option>
-                        <option value="google:es-US">Google Español (Latinoamérica)</option>
-                        <option value="google:es-MX">Google Español (México)</option>
-                        <option value="google:es-AR">Google Español (Argentina)</option>
-                        <!-- <option value="google:en-US">Google English (US)</option> -->
-                      </optgroup>
-                      <optgroup id="ttsLocalVoicesGroup" label="Voces del sistema (Windows)">
+                      <optgroup id="ttsLocalVoicesGroup" label="Voces del sistema">
                         <option value="local">Predeterminada del sistema</option>
                       </optgroup>
                       <optgroup label="Fish Audio (API Key propia)">
@@ -593,7 +585,7 @@
                     </span>
                     <span class="switch"><input id="ttsDucking" type="checkbox" checked /><span></span></span>
                   </label>
-                  <div id="ttsDuckingLevelWrap" class="field" style="margin-top: 8px;">
+                  <div id="ttsDuckingLevelWrap" class="field mt-2">
                     <span class="field-row">Volumen al atenuar <strong id="ttsDuckingLevelValue">25%</strong></span>
                     <input id="ttsDuckingLevel" type="range" min="0" max="100" step="5" value="25" />
                   </div>
@@ -613,12 +605,12 @@
                   </label>
                 </div>
 
-                <div class="field" style="margin-top: 12px;">
+                <div class="field mt-3">
                   <span class="field-row">Mínimo de monedas para regalos: <strong id="ttsMinCoinsValue">1</strong></span>
                   <input id="ttsMinCoins" type="range" min="0" max="100" step="1" value="1" />
                 </div>
 
-                <div class="toggle-list-compact" style="margin-top: 12px;">
+                <div class="toggle-list-compact mt-3">
                   <label class="toggle-row">
                     <span class="toggle-copy">
                       <strong>Filtrar chat por tipo de espectador</strong>
@@ -661,7 +653,7 @@
                   </div>
                 </div>
 
-                <div class="fish-key-controls">
+                <div id="ttsFishKeyControlsWrap" class="fish-key-controls">
                   <div class="fish-key-input-wrap">
                     <input
                       id="ttsFishApiKey"
@@ -676,7 +668,11 @@
                   </div>
                   <button id="btnSaveFishKey" class="btn btn-primary btn-small" type="button">Guardar clave</button>
                   <button id="btnTestFishKey" class="btn btn-secondary btn-small" type="button">Probar conexión</button>
-                  <button id="btnClearFishKey" class="btn btn-ghost btn-small" type="button" hidden>Borrar</button>
+                </div>
+
+                <div id="ttsFishConfiguredBanner" class="fish-configured-banner" hidden>
+                  <span>Fish Audio activo · Gestiona o cambia tu API Key desde Ajustes.</span>
+                  <button id="btnManageFishKeyInSettings" class="btn btn-ghost btn-small" type="button">Gestionar en Ajustes</button>
                 </div>
 
                 <div class="fish-selected-bar">
@@ -832,7 +828,7 @@
       <p class="section-label">Sonidos incluidos</p>
       <div id="builtinSounds" class="sound-grid"></div>
 
-      <p class="section-label" style="margin-top: 14px;">Tus archivos de sonido</p>
+      <p class="section-label mt-3-5">Tus archivos de sonido</p>
       <div id="customSounds" class="custom-sounds"></div>
       <div id="soundsEmpty" class="empty-state small" hidden>
         <span>Sube archivos MP3, WAV, OGG, M4A o FLAC. Máximo 30 MB.</span>
@@ -999,7 +995,7 @@
         </select>
       </label>
 
-      <div style="margin: 16px 0; border-top: 1px solid var(--line);"></div>
+      <div class="settings-divider"></div>
 
       <label class="field">
         <span>Volumen general <strong id="volumeValue">80%</strong></span>
@@ -1012,17 +1008,44 @@
       </label>
       <p class="hint">Si usas OBS, desactívalo para evitar escuchar las alertas por duplicado.</p>
 
-      <div style="margin: 16px 0; border-top: 1px solid var(--line);"></div>
+      <div class="settings-divider"></div>
 
-      <div class="section-label" style="margin-bottom: 8px;">Atenuación de alertas (Ducking)</div>
+      <div class="section-label mb-2">Atenuación de alertas (Ducking)</div>
       <label class="checkline">
         <input id="settingsAudioDucking" type="checkbox" checked />
         <span>Atenuar alertas mientras habla la voz (TTS)</span>
       </label>
-      <label class="field" id="settingsAudioDuckingLevelWrap" style="margin-top: 8px;">
+      <label class="field mt-2" id="settingsAudioDuckingLevelWrap">
         <span class="field-row">Volumen al atenuar <strong id="settingsAudioDuckingLevelValue">25%</strong></span>
         <input id="settingsAudioDuckingLevel" type="range" min="0" max="100" step="5" value="25" />
       </label>
+
+      <div class="settings-divider"></div>
+
+      <div id="settingsFishSection" class="fish-settings-section">
+        <div class="fish-header-row">
+          <div class="section-label">Fish Audio (TTS) · API Key</div>
+          <span id="settingsFishKeyStatus" class="chip">SIN API KEY</span>
+        </div>
+        <p class="hint">Tu API Key se guarda cifrada en este equipo. Puedes cambiarla o eliminarla aquí.</p>
+        <div class="fish-key-controls">
+          <div class="fish-key-input-wrap">
+            <input
+              id="settingsFishApiKey"
+              type="password"
+              autocomplete="off"
+              placeholder="Pega tu API Key de Fish Audio…"
+              aria-label="API Key de Fish Audio en Ajustes"
+            />
+            <button id="btnToggleSettingsFishKey" class="icon-btn" type="button" title="Mostrar u ocultar API Key" aria-label="Mostrar u ocultar API Key">
+              <svg class="icon" viewBox="0 0 256 256" aria-hidden="true"><path d="M128,56C48,56,16,128,16,128s32,72,112,72,112-72,112-72S208,56,128,56Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><circle cx="128" cy="128" r="36" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
+            </button>
+          </div>
+          <button id="btnSaveSettingsFishKey" class="btn btn-primary btn-small" type="button">Guardar</button>
+          <button id="btnTestSettingsFishKey" class="btn btn-secondary btn-small" type="button">Probar</button>
+          <button id="btnClearFishKey" class="btn btn-ghost btn-danger btn-small" type="button" hidden>Eliminar</button>
+        </div>
+      </div>
 
       <div class="dialog-foot">
         <button id="btnOpenData" class="btn btn-ghost" type="button">Carpeta de datos</button>

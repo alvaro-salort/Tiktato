@@ -60,7 +60,7 @@ function sendJson(response, status, payload, { origin } = {}) {
   response.end(body);
 }
 
-function serveFile(request, response, filePath, { cache = false, port = 3477 } = {}) {
+function serveFile(request, response, filePath, { cache = false, cacheVisibility = 'public', port = 3477 } = {}) {
   let stat;
   try {
     stat = fs.statSync(filePath);
@@ -78,6 +78,9 @@ function serveFile(request, response, filePath, { cache = false, port = 3477 } =
   const total = stat.size;
   const rangeHeader = request?.headers?.range;
   const allowedOrigin = resolveCorsOrigin(request, port);
+  const cacheControl = cache
+    ? `${cacheVisibility === 'private' ? 'private' : 'public'}, max-age=3600`
+    : 'no-store';
 
   const baseHeaders = {
     'Content-Type': contentType,
@@ -86,7 +89,7 @@ function serveFile(request, response, filePath, { cache = false, port = 3477 } =
     'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
     'Access-Control-Allow-Headers': 'Range, Content-Type, Authorization',
     'Vary': 'Origin',
-    'Cache-Control': cache ? 'public, max-age=3600' : 'no-store',
+    'Cache-Control': cacheControl,
     'X-Content-Type-Options': 'nosniff'
   };
 
@@ -105,29 +108,67 @@ function serveFile(request, response, filePath, { cache = false, port = 3477 } =
     return;
   }
 
+  const attachStreamHandlers = (stream) => {
+    response.on('close', () => stream.destroy());
+    stream.on('error', (error) => {
+      if (!response.headersSent) {
+        const status = error?.code === 'ENOENT' ? 404 : 500;
+        sendJson(response, status, { error: status === 404 ? 'No encontrado' : 'Error interno al leer el archivo' }, { origin: allowedOrigin });
+      } else {
+        response.destroy(error);
+      }
+    });
+  };
+
   if (rangeHeader && typeof rangeHeader === 'string' && rangeHeader.startsWith('bytes=')) {
-    const parts = rangeHeader.slice(6).split('-');
-    let start = parseInt(parts[0], 10);
-    let end = parts[1] ? parseInt(parts[1], 10) : total - 1;
-
-    if (Number.isNaN(start)) {
-      start = total - end;
-      end = total - 1;
-    }
-    if (start < 0) {
-      start = 0;
-    }
-    if (Number.isNaN(end) || end >= total) {
-      end = total - 1;
-    }
-
-    if (start > end || start >= total || start < 0) {
+    const rangeSpec = rangeHeader.slice(6).trim();
+    if (!/^\d*-\d*$/.test(rangeSpec) || rangeSpec === '-') {
       response.writeHead(416, {
         ...baseHeaders,
         'Content-Range': `bytes */${total}`
       });
       response.end();
       return;
+    }
+
+    const [rawStart, rawEnd] = rangeSpec.split('-');
+    let start;
+    let end;
+
+    if (rawStart === '') {
+      const suffixLength = Number(rawEnd);
+      if (!Number.isFinite(suffixLength) || suffixLength <= 0) {
+        response.writeHead(416, {
+          ...baseHeaders,
+          'Content-Range': `bytes */${total}`
+        });
+        response.end();
+        return;
+      }
+      start = Math.max(0, total - suffixLength);
+      end = total - 1;
+    } else {
+      start = Number(rawStart);
+      end = rawEnd === '' ? total - 1 : Number(rawEnd);
+    }
+
+    if (
+      Number.isNaN(start) ||
+      Number.isNaN(end) ||
+      start < 0 ||
+      start >= total ||
+      start > end
+    ) {
+      response.writeHead(416, {
+        ...baseHeaders,
+        'Content-Range': `bytes */${total}`
+      });
+      response.end();
+      return;
+    }
+
+    if (end >= total) {
+      end = total - 1;
     }
 
     const chunkSize = end - start + 1;
@@ -137,7 +178,7 @@ function serveFile(request, response, filePath, { cache = false, port = 3477 } =
       'Content-Length': chunkSize
     });
     const stream = fs.createReadStream(filePath, { start, end });
-    response.on('close', () => stream.destroy());
+    attachStreamHandlers(stream);
     stream.pipe(response);
     return;
   }
@@ -147,7 +188,7 @@ function serveFile(request, response, filePath, { cache = false, port = 3477 } =
     'Content-Length': total
   });
   const stream = fs.createReadStream(filePath);
-  response.on('close', () => stream.destroy());
+  attachStreamHandlers(stream);
   stream.pipe(response);
 }
 
@@ -176,14 +217,20 @@ class OverlayServer {
     this.clients = new Set();
     this.config = {};
     this.jar = {};
+    this.gifts = [];
+    this.heartbeatTimer = null;
   }
 
   async start() {
     if (this.server) return this.port;
-    this.wss = new WebSocketServer({ noServer: true });
+    this.wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
     this.wss.on('connection', (socket) => {
+      socket.isAlive = true;
       this.clients.add(socket);
-      this.#send(socket, { type: 'hello', config: this.config, jar: this.jar });
+      this.#send(socket, { type: 'hello', config: this.config, jar: this.jar, gifts: this.gifts });
+      socket.on('pong', () => {
+        socket.isAlive = true;
+      });
       socket.on('close', () => this.clients.delete(socket));
       socket.on('error', () => this.clients.delete(socket));
     });
@@ -198,6 +245,10 @@ class OverlayServer {
     for (const candidate of ports) {
       try {
         this.port = await this.#listen(candidate);
+        this.server.on('error', (error) => {
+          this.logger.error?.('[overlay] error del servidor', error);
+        });
+        this.#startHeartbeat();
         this.logger.info?.(`[overlay] servidor escuchando en http://127.0.0.1:${this.port}`);
         return this.port;
       } catch (error) {
@@ -205,8 +256,47 @@ class OverlayServer {
         if (error.code !== 'EADDRINUSE') break;
       }
     }
+    if (this.wss) {
+      try {
+        this.wss.close();
+      } catch {
+        // Ignorado.
+      }
+      this.wss = null;
+    }
     this.#closeServer();
     throw lastError || new Error('No se pudo iniciar el servidor del overlay.');
+  }
+
+  #startHeartbeat() {
+    this.#stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      for (const client of this.clients) {
+        if (client.isAlive === false) {
+          this.clients.delete(client);
+          try {
+            client.terminate();
+          } catch {
+            // Ignorado.
+          }
+          continue;
+        }
+        client.isAlive = false;
+        try {
+          client.ping();
+        } catch {
+          // Ignorado.
+        }
+      }
+    }, 30_000);
+    if (typeof this.heartbeatTimer?.unref === 'function') this.heartbeatTimer.unref();
+  }
+
+  #stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 
   #listen(port) {
@@ -228,7 +318,13 @@ class OverlayServer {
   #handleHttp(request, response) {
     const activePort = this.port || this.requestedPort || 3477;
     const allowedOrigin = resolveCorsOrigin(request, activePort);
-    const url = new URL(request.url || '/', `http://127.0.0.1:${activePort}`);
+    let url;
+    try {
+      url = new URL(request.url || '/', `http://127.0.0.1:${activePort}`);
+    } catch {
+      sendJson(response, 400, { error: 'URL inválida' }, { origin: allowedOrigin });
+      return;
+    }
     let pathname = '/';
     try {
       pathname = decodeURIComponent(url.pathname);
@@ -238,7 +334,7 @@ class OverlayServer {
     }
 
     const overlayCsp =
-      "default-src 'self' https: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; media-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; object-src 'none';";
+      "default-src 'self' https: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; media-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; object-src 'none'; frame-ancestors 'none';";
 
     if (pathname === '/health') {
       sendJson(response, 200, { ok: true, service: 'tiktato-overlay', clients: this.clients.size }, { origin: allowedOrigin });
@@ -319,6 +415,15 @@ class OverlayServer {
       return;
     }
 
+    if (pathname === '/api/gifts') {
+      if (!tokenMatches(this.token, url.searchParams.get('token'))) {
+        sendJson(response, 401, { error: 'Token inválido' }, { origin: allowedOrigin });
+        return;
+      }
+      sendJson(response, 200, { gifts: this.gifts }, { origin: allowedOrigin });
+      return;
+    }
+
     if (pathname.startsWith('/sounds/')) {
       if (!tokenMatches(this.token, url.searchParams.get('token'))) {
         sendJson(response, 401, { error: 'Token inválido' }, { origin: allowedOrigin });
@@ -330,7 +435,7 @@ class OverlayServer {
         sendJson(response, 400, { error: 'Ruta inválida' }, { origin: allowedOrigin });
         return;
       }
-      serveFile(request, response, file, { cache: true, port: activePort });
+      serveFile(request, response, file, { cache: true, cacheVisibility: 'private', port: activePort });
       return;
     }
 
@@ -344,7 +449,14 @@ class OverlayServer {
   }
 
   #handleUpgrade(request, socket, head) {
-    const url = new URL(request.url || '/', `http://127.0.0.1:${this.port || 3477}`);
+    let url;
+    try {
+      url = new URL(request.url || '/', `http://127.0.0.1:${this.port || 3477}`);
+    } catch {
+      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+      socket.destroy();
+      return;
+    }
     if (url.pathname !== '/ws' || !tokenMatches(this.token, url.searchParams.get('token'))) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
@@ -376,6 +488,10 @@ class OverlayServer {
     this.broadcast({ type: 'jar', jar });
   }
 
+  setGifts(gifts) {
+    this.gifts = Array.isArray(gifts) ? gifts : [];
+  }
+
   broadcast(payload) {
     const message = JSON.stringify(payload);
     for (const client of this.clients) {
@@ -402,7 +518,9 @@ class OverlayServer {
   }
 
   async stop() {
-    for (const client of this.clients) {
+    this.#stopHeartbeat();
+    const pendingClients = [...this.clients];
+    for (const client of pendingClients) {
       try {
         client.close();
       } catch {
@@ -410,12 +528,51 @@ class OverlayServer {
       }
     }
     this.clients.clear();
+    if (pendingClients.length > 0) {
+      const graceTimer = setTimeout(() => {
+        for (const client of pendingClients) {
+          if (client.readyState !== WebSocket.CLOSED) {
+            try {
+              client.terminate();
+            } catch {
+              // Ignorado.
+            }
+          }
+        }
+      }, 150);
+      if (typeof graceTimer?.unref === 'function') graceTimer.unref();
+    }
     if (this.wss) {
-      this.wss.close();
+      try {
+        this.wss.close();
+      } catch {
+        // Ignorado.
+      }
       this.wss = null;
     }
     if (!this.server) return;
-    await new Promise((resolve) => this.server.close(() => resolve()));
+    const server = this.server;
+    await new Promise((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const closeTimer = setTimeout(() => {
+        try {
+          server.closeAllConnections?.();
+        } catch {
+          // Ignorado.
+        }
+        done();
+      }, 200);
+      if (typeof closeTimer?.unref === 'function') closeTimer.unref();
+      server.close(() => {
+        clearTimeout(closeTimer);
+        done();
+      });
+    });
     this.#closeServer();
   }
 

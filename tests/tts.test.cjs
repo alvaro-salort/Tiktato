@@ -12,7 +12,8 @@ test('normaliza configuración de TTS y combos por defecto', () => {
   assert.equal(config.tts.giftsEnabled, false);
   assert.equal(config.tts.minCoins, 1);
   assert.equal(config.tts.volume, 0.8);
-  assert.equal(config.tts.voiceProvider, 'google');
+  assert.equal(config.tts.voiceProvider, 'local');
+  assert.equal(config.tts.voiceId, 'local');
   assert.equal(config.tts.ducking, true);
   assert.equal(config.tts.duckingLevel, 0.25);
   assert.equal(config.tts.antiSpam, true);
@@ -32,7 +33,7 @@ test('normaliza valores extremos o inválidos de TTS', () => {
   });
   assert.equal(tts.volume, 1);
   assert.equal(tts.minCoins, 0);
-  assert.equal(tts.voiceProvider, 'google');
+  assert.equal(tts.voiceProvider, 'local');
   assert.equal(tts.duckingLevel, 1);
   assert.equal(tts.maxChars, 500);
   assert.equal(tts.antiSpam, true);
@@ -58,7 +59,8 @@ test('filtro anti-spam opcional en tts-engine', async () => {
 });
 
 test('formateadores de texto para chat y regalos (sin "dice" y con readUsername opcional)', async () => {
-  const { formatChatTTS, formatGiftTTS, buildGoogleTTSUrl, shouldReadChatMessage } = await import('../shared/tts-engine.js');
+  const ttsEngine = await import('../shared/tts-engine.js');
+  const { formatChatTTS, formatGiftTTS, shouldReadChatMessage } = ttsEngine;
 
   assert.equal(formatChatTTS('Pepe', 'hola directo'), 'Pepe: hola directo');
   assert.equal(formatChatTTS('Pepe', 'hola directo', { readUsername: true }), 'Pepe: hola directo');
@@ -95,10 +97,8 @@ test('formateadores de texto para chat y regalos (sin "dice" y con readUsername 
   assert.equal(shouldReadChatMessage({ ...normalUserMsg, memberLevel: 3 }, roleFilterCfg), false);
   assert.equal(shouldReadChatMessage({ ...normalUserMsg, memberLevel: 6 }, roleFilterCfg), true);
 
-  const url = buildGoogleTTSUrl('prueba de voz', 'es-ES');
-  assert.match(url, /google\.com\/speech-api\/v2\/synthesize/);
-  assert.match(url, /lang=es-ES/);
-  assert.match(url, /text=prueba%20de%20voz/);
+  assert.equal('GOOGLE_TTS_API_KEY' in ttsEngine, false);
+  assert.equal('buildGoogleTTSUrl' in ttsEngine, false);
 });
 
 test('cola TTSQueue limita a 5 mensajes, deduplica msgId y cancela por moderación (imDelete)', async () => {
@@ -329,36 +329,45 @@ test('SoundEngine ducking y restore admiten volumen de hasta 1.5', async () => {
   assert.equal(mockNode.gain.value, 1.5);
 });
 
-test('config.sounds.playEveryStreak es independiente de config.tts.playEveryStreak', () => {
+test('config.soundsPlayEveryStreak es independiente de config.tts.playEveryStreak', () => {
   const { createDefaultConfig, normalizeConfig } = require('../electron/config.cjs');
   const defaults = createDefaultConfig();
-  assert.equal(defaults.sounds.playEveryStreak, true);
+  assert.equal(defaults.soundsPlayEveryStreak, true);
+  assert.equal(Array.isArray(defaults.sounds), true);
+  assert.equal('playEveryStreak' in defaults.sounds, false);
   assert.equal(defaults.tts.playEveryStreak, true);
 
-  // Modificar solo sounds
+  // Modificar solo soundsPlayEveryStreak (incluyendo migración desde propiedad legacy)
   const customSounds = normalizeConfig({
+    soundsPlayEveryStreak: false,
+    tts: { playEveryStreak: true }
+  });
+  assert.equal(customSounds.soundsPlayEveryStreak, false);
+  assert.equal(customSounds.tts.playEveryStreak, true);
+
+  const migratedLegacy = normalizeConfig({
     sounds: Object.assign([], { playEveryStreak: false }),
     tts: { playEveryStreak: true }
   });
-  assert.equal(customSounds.sounds.playEveryStreak, false);
-  assert.equal(customSounds.tts.playEveryStreak, true);
+  assert.equal(migratedLegacy.soundsPlayEveryStreak, false);
+  assert.equal('playEveryStreak' in migratedLegacy.sounds, false);
 
   // Modificar solo tts
   const customTts = normalizeConfig({
-    sounds: Object.assign([], { playEveryStreak: true }),
+    soundsPlayEveryStreak: true,
     tts: { playEveryStreak: false }
   });
-  assert.equal(customTts.sounds.playEveryStreak, true);
+  assert.equal(customTts.soundsPlayEveryStreak, true);
   assert.equal(customTts.tts.playEveryStreak, false);
 
   // Ingesta de combos debe permitirse si cualquiera de los dos switches está activo
   const shouldIngestCombos = (cfg) =>
-    Boolean(cfg.sounds?.playEveryStreak ?? cfg.soundsPlayEveryStreak ?? true) ||
+    Boolean(cfg.soundsPlayEveryStreak ?? true) ||
     Boolean(cfg.tts?.playEveryStreak !== false);
 
-  assert.equal(shouldIngestCombos({ sounds: { playEveryStreak: true }, tts: { playEveryStreak: false } }), true);
-  assert.equal(shouldIngestCombos({ sounds: { playEveryStreak: false }, tts: { playEveryStreak: true } }), true);
-  assert.equal(shouldIngestCombos({ sounds: { playEveryStreak: false }, tts: { playEveryStreak: false } }), false);
+  assert.equal(shouldIngestCombos({ soundsPlayEveryStreak: true, tts: { playEveryStreak: false } }), true);
+  assert.equal(shouldIngestCombos({ soundsPlayEveryStreak: false, tts: { playEveryStreak: true } }), true);
+  assert.equal(shouldIngestCombos({ soundsPlayEveryStreak: false, tts: { playEveryStreak: false } }), false);
 });
 
 test('sounds.playEveryStreak false con tts.playEveryStreak true reproduce exactamente un solo sonido al final de cada combo y no silencia regalos posteriores', () => {
@@ -659,6 +668,25 @@ test('TTSQueue reproduce fish:<reference_id>, cachea frases repetidas, respeta d
       return Promise.resolve();
     }
   };
+  const localSpoken = [];
+  const origWindow = globalThis.window;
+  const origUtterance = globalThis.SpeechSynthesisUtterance;
+  globalThis.SpeechSynthesisUtterance = class {
+    constructor(text) {
+      this.text = text;
+      this.lang = '';
+    }
+  };
+  globalThis.window = {
+    speechSynthesis: {
+      getVoices: () => [],
+      speak(u) {
+        localSpoken.push(u);
+        u.onend?.();
+      },
+      cancel() {}
+    }
+  };
 
   try {
     let synthCalls = 0;
@@ -711,16 +739,23 @@ test('TTSQueue reproduce fish:<reference_id>, cachea frases repetidas, respeta d
     assert.equal(synthCalls, 1);
     assert.equal(playedUrls.length, 2);
 
-    // 3. Fallback limpio a Google TTS si Fish Audio falla
-    queue.enqueue({
-      text: 'falla',
-      voiceProvider: 'fish',
-      voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8',
-      voiceLanguage: 'es-ES'
-    });
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    assert.equal(playedUrls.length, 3);
-    assert.match(playedUrls[2].src, /google\.com\/speech-api\/v2\/synthesize/);
+    // 3. Fallback limpio a voz local si Fish Audio falla
+    const origWarn = console.warn;
+    console.warn = () => {};
+    try {
+      queue.enqueue({
+        text: 'falla',
+        voiceProvider: 'fish',
+        voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8',
+        voiceLanguage: 'es-ES'
+      });
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    } finally {
+      console.warn = origWarn;
+    }
+    assert.equal(playedUrls.length, 2);
+    assert.equal(localSpoken.length, 1);
+    assert.equal(localSpoken[0].text, 'falla');
 
     // 4. Skip inmediato durante síntesis lenta de Fish Audio
     const slowQueue = new TTSQueue({
@@ -744,6 +779,10 @@ test('TTSQueue reproduce fish:<reference_id>, cachea frases repetidas, respeta d
     } else {
       globalThis.Audio = origAudio;
     }
+    if (origWindow === undefined) delete globalThis.window;
+    else globalThis.window = origWindow;
+    if (origUtterance === undefined) delete globalThis.SpeechSynthesisUtterance;
+    else globalThis.SpeechSynthesisUtterance = origUtterance;
   }
 });
 
@@ -935,4 +974,140 @@ test('CURATED_FISH_VOICES prioriza Babidi como voz recomendada y mantiene solo v
   assert.equal(CURATED_FISH_VOICES[0].name, 'Babidi');
   assert.equal(CURATED_FISH_VOICES[0].recommended, true);
   assert.ok(CURATED_FISH_VOICES.every((v) => Array.isArray(v.languages) && v.languages.includes('es')));
+});
+
+test('TTS local no contiene API key hardcodeada, migra google:* a local, soporta Unicode y respeta mute(true)', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const ttsSource = fs.readFileSync(path.join(__dirname, '..', 'shared', 'tts-engine.js'), 'utf8');
+  assert.doesNotMatch(ttsSource, /AIzaSy/);
+  assert.doesNotMatch(ttsSource, /speech-api\/v2\/synthesize/);
+
+  const legacyTts = normalizeTts({ voiceProvider: 'google', voiceId: 'google:es-MX', voiceLanguage: 'es-MX' });
+  assert.equal(legacyTts.voiceProvider, 'local');
+  assert.equal(legacyTts.voiceId, 'local');
+  assert.equal(legacyTts.voiceLanguage, 'es-MX');
+
+  const { filterTtsText, TTSQueue } = await import('../shared/tts-engine.js');
+  assert.equal(filterTtsText('привет привет привет', { antiSpam: true }), 'привет привет');
+
+  const spoken = [];
+  const origWindow = globalThis.window;
+  const origUtterance = globalThis.SpeechSynthesisUtterance;
+  globalThis.SpeechSynthesisUtterance = class {
+    constructor(text) {
+      this.text = text;
+      this.lang = '';
+      this.volume = 1;
+      this.rate = 1;
+      this.pitch = 1;
+      this.voice = null;
+    }
+  };
+  globalThis.window = {
+    speechSynthesis: {
+      getVoices: () => [{ name: 'Microsoft Sabina', voiceURI: 'Sabina', lang: 'es-MX' }],
+      speak(utterance) {
+        spoken.push(utterance);
+        if (typeof utterance.onend === 'function') utterance.onend();
+      },
+      cancel() {}
+    }
+  };
+
+  try {
+    const queue = new TTSQueue();
+    queue.enqueue({
+      text: 'Hola México',
+      voiceProvider: 'google',
+      voiceId: 'google:es-MX'
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(spoken.length, 1);
+    assert.equal(spoken[0].text, 'Hola México');
+    assert.equal(spoken[0].lang, 'es-MX');
+
+    queue.mute(true);
+    queue.queue.push({ text: 'No debe sonar', voiceId: 'local', voiceLanguage: 'es-ES', volume: 0.8, ducking: false, duckingLevel: 0.25 });
+    await queue.skip();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(spoken.length, 1);
+  } finally {
+    if (origWindow === undefined) delete globalThis.window;
+    else globalThis.window = origWindow;
+    if (origUtterance === undefined) delete globalThis.SpeechSynthesisUtterance;
+    else globalThis.SpeechSynthesisUtterance = origUtterance;
+  }
+});
+
+test('SoundEngine respeta duck(0) y cancela la cola pendiente en stopAll() y preview()', async () => {
+  const { SoundEngine } = await import('../shared/audio-engine.js');
+  const engine = new SoundEngine();
+
+  const mockNode = {
+    gain: { value: 1, setValueAtTime() {}, linearRampToValueAtTime(val) { this.value = val; } }
+  };
+  engine.activeNodes.set(mockNode, 1);
+
+  engine.duck(0);
+  assert.equal(engine.isDucked, true);
+  assert.equal(engine.duckFactor, 0);
+  assert.equal(mockNode.gain.value, 0);
+  engine.restore();
+  assert.equal(mockNode.gain.value, 1);
+
+  const origWindow = globalThis.window;
+  globalThis.window = {
+    AudioContext: class {
+      constructor() {
+        this.state = 'running';
+        this.currentTime = 0;
+        this.destination = {};
+      }
+      resume() { return Promise.resolve(); }
+      createGain() {
+        return {
+          gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {}, linearRampToValueAtTime() {} },
+          connect() {}
+        };
+      }
+      createOscillator() {
+        return {
+          type: 'sine',
+          frequency: { setValueAtTime() {} },
+          connect() {},
+          start() {},
+          stop() {}
+        };
+      }
+    }
+  };
+
+  try {
+    let resolveFirst;
+    const origDrain = engine.play.bind(engine);
+    assert.equal(typeof origDrain, 'function');
+    engine.isPlayingQueue = true;
+    const p1 = engine.play({ kind: 'builtin', key: 'coin' }, 1);
+    const p2 = engine.play({ kind: 'builtin', key: 'bell' }, 1);
+    assert.equal(engine.queue.length, 2);
+
+    engine.stopAll();
+    assert.equal(engine.queue.length, 0);
+    assert.equal(engine.isPlayingQueue, false);
+    await Promise.all([p1, p2]);
+
+    engine.isPlayingQueue = true;
+    const p3 = engine.play({ kind: 'builtin', key: 'coin' }, 1);
+    const p4 = engine.play({ kind: 'builtin', key: 'bell' }, 1);
+    assert.equal(engine.queue.length, 2);
+    await engine.preview({ kind: 'file', url: '' }, 1);
+    assert.equal(engine.queue.length, 0);
+    assert.equal(engine.isPlayingQueue, false);
+    await Promise.all([p3, p4]);
+    void resolveFirst;
+  } finally {
+    if (origWindow === undefined) delete globalThis.window;
+    else globalThis.window = origWindow;
+  }
 });

@@ -293,14 +293,22 @@ body {
 
 .alert-card.type-follow .gift-wrap,
 .alert-card.type-share .gift-wrap,
-.alert-card.type-like .gift-wrap {
+.alert-card.type-like .gift-wrap,
+.alert-card.type-subscribe .gift-wrap,
+.alert-card.type-join .gift-wrap,
+.alert-card.type-chat .gift-wrap,
+.alert-card.type-event .gift-wrap {
   display: none;
 }
 
 .alert-card.no-gift,
 .alert-card.type-follow,
 .alert-card.type-share,
-.alert-card.type-like {
+.alert-card.type-like,
+.alert-card.type-subscribe,
+.alert-card.type-join,
+.alert-card.type-chat,
+.alert-card.type-event {
   grid-template-columns: 74px minmax(0, 1fr);
 }
 

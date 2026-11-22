@@ -1,11 +1,3 @@
-export const GOOGLE_TTS_API_KEY = 'AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw';
-
-export function buildGoogleTTSUrl(text, lang = 'es-ES') {
-  const safeLang = encodeURIComponent(lang || 'es-ES');
-  const safeText = encodeURIComponent(String(text || '').slice(0, 300));
-  return `https://www.google.com/speech-api/v2/synthesize?key=${GOOGLE_TTS_API_KEY}&enc=mpeg&lang=${safeLang}&text=${safeText}`;
-}
-
 export function filterTtsText(rawText, { antiSpam = false, maxChars = 120 } = {}) {
   if (!rawText) return '';
   let clean = String(rawText).trim();
@@ -20,14 +12,15 @@ export function filterTtsText(rawText, { antiSpam = false, maxChars = 120 } = {}
     // Colapsa palabras repetidas sucesivamente con soporte Unicode (ej. "jaja jaja jaja jaja" -> "jaja jaja", "sí sí sí" -> "sí sí")
     clean = clean.replace(/(?<!\p{L})(\p{L}+)(?:\s+\1){2,}(?!\p{L})/giu, '$1 $1');
 
-    // Descarta mensajes que sean solo signos o sin contenido inteligible
-    if (!/[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/.test(clean)) {
+    // Descarta mensajes que sean solo signos o sin contenido inteligible (soporte Unicode completo)
+    if (!/[\p{L}\p{N}]/u.test(clean)) {
       return '';
     }
   }
 
-  // Límite de caracteres
-  const limit = Math.max(10, Math.min(500, Number(maxChars) || 120));
+  // Límite de caracteres alineado con config.cjs (20..500, default 120)
+  const rawMax = Number(maxChars);
+  const limit = Math.max(20, Math.min(500, Number.isFinite(rawMax) ? Math.round(rawMax) : 120));
   if (clean.length > limit) {
     clean = clean.slice(0, limit).trim();
   }
@@ -169,7 +162,7 @@ export class TTSQueue {
     }
     const cleanText = filterTtsText(item.text, {
       antiSpam: Boolean(item.antiSpam),
-      maxChars: item.maxChars || 120
+      maxChars: item.maxChars ?? 120
     });
     if (!cleanText) return;
 
@@ -270,58 +263,46 @@ export class TTSQueue {
     this.currentItem = item;
     this.#notify();
 
+    const rawDuck = Number(item.duckingLevel ?? 0.25);
+    const duckLevel = Number.isFinite(rawDuck) ? rawDuck : 0.25;
     const ducking = item.ducking !== false;
     if (ducking && this.soundEngine) {
-      this.soundEngine.duck(item.duckingLevel ?? 0.25);
+      this.soundEngine.duck(duckLevel);
     } else if (!ducking && this.soundEngine) {
       this.soundEngine.restore();
     }
 
-    const voiceId = String(
-      item.voiceId ||
-        (item.voiceProvider === 'google'
-          ? 'google:es-ES'
-          : item.voiceProvider === 'fish'
-            ? 'fish:'
-            : 'local')
-    );
+    const rawVoiceId = String(item.voiceId || '');
+    const resolvedLang =
+      item.voiceLanguage ||
+      (rawVoiceId.startsWith('google:') ? rawVoiceId.slice(7) : '') ||
+      'es-ES';
     const isFish =
-      voiceId.startsWith('fish:') ||
-      (!voiceId.startsWith('google:') && !voiceId.startsWith('local:') && item.voiceProvider === 'fish');
-    const isGoogle =
-      !isFish &&
-      (voiceId.startsWith('google:') || (!voiceId.startsWith('local:') && item.voiceProvider === 'google'));
+      rawVoiceId.startsWith('fish:') ||
+      (!rawVoiceId.startsWith('google:') && !rawVoiceId.startsWith('local:') && item.voiceProvider === 'fish');
 
     try {
+      if (this.isMuted) return;
       if (isFish) {
         try {
           await this.#speakFish(item);
         } catch (fishError) {
-          console.warn('[tts] Fish Audio falló, intentando respaldo Google/local', fishError);
+          console.warn('[tts] Fish Audio falló, intentando voz local', fishError);
           if (!this.isMuted) {
-            const fallbackLang = item.voiceLanguage || 'es-ES';
-            try {
-              await this.#speakGoogle({ ...item, voiceLanguage: fallbackLang });
-            } catch (googleError) {
-              console.warn('[tts] Respaldo Google Speech API v2 falló, intentando voz local', googleError);
-              if (!this.isMuted) {
-                await this.#speakLocal({ ...item, voiceLanguage: fallbackLang });
-              }
-            }
-          }
-        }
-      } else if (isGoogle) {
-        const googleLang = voiceId.startsWith('google:') ? voiceId.slice(7) : (item.voiceLanguage || 'es-ES');
-        try {
-          await this.#speakGoogle({ ...item, voiceLanguage: googleLang });
-        } catch (googleError) {
-          console.warn('[tts] Google Speech API v2 falló, intentando voz local', googleError);
-          if (!this.isMuted) {
-            await this.#speakLocal({ ...item, voiceLanguage: googleLang });
+            await this.#speakLocal({
+              ...item,
+              voiceProvider: 'local',
+              voiceId: 'local',
+              voiceLanguage: resolvedLang
+            });
           }
         }
       } else {
-        await this.#speakLocal(item);
+        // Fallback transparente a voz local si una configuración antigua tenía voiceProvider='google' o voiceId='google:...'
+        const normalizedItem = rawVoiceId.startsWith('google:')
+          ? { ...item, voiceProvider: 'local', voiceId: 'local', voiceLanguage: resolvedLang }
+          : { ...item, voiceProvider: 'local', voiceLanguage: resolvedLang };
+        await this.#speakLocal(normalizedItem);
       }
     } catch (err) {
       console.warn('[tts] error durante la reproducción de voz', err);
@@ -330,7 +311,7 @@ export class TTSQueue {
       this.currentItem = null;
       this.currentAbort = null;
 
-      if (this.queue.length === 0 && this.soundEngine) {
+      if ((this.queue.length === 0 || this.isMuted) && this.soundEngine) {
         this.soundEngine.restore();
       }
       this.#notify();
@@ -403,16 +384,13 @@ export class TTSQueue {
     await this.#playAudioUrl(audioSrc, item.volume, 'No se pudo reproducir audio de Fish Audio');
   }
 
-  #speakGoogle(item) {
-    const url = buildGoogleTTSUrl(item.text, item.voiceLanguage || 'es-ES');
-    return this.#playAudioUrl(url, item.volume, 'No se pudo reproducir audio de Google TTS');
-  }
-
   #playAudioUrl(url, volume = 0.8, errorMessage = 'No se pudo reproducir audio de TTS') {
     return new Promise((resolve, reject) => {
       const audio = new Audio(url);
       audio.preload = 'auto';
-      audio.volume = Math.max(0, Math.min(1, Number(volume ?? 0.8)));
+      const rawVolume = Number(volume ?? 0.8);
+      const safeVolume = Number.isFinite(rawVolume) ? rawVolume : 0.8;
+      audio.volume = Math.max(0, Math.min(1, safeVolume));
 
       let settled = false;
       let timer = null;
@@ -473,10 +451,9 @@ export class TTSQueue {
       });
     });
   }
-
   #speakLocal(item) {
     return new Promise((resolve) => {
-      if (typeof window === 'undefined' || !window.speechSynthesis) {
+      if (this.isMuted || typeof window === 'undefined' || !window.speechSynthesis) {
         resolve();
         return;
       }
@@ -499,22 +476,23 @@ export class TTSQueue {
       };
 
       const utterance = new SpeechSynthesisUtterance(item.text);
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        const voices = window.speechSynthesis.getVoices() || [];
-        const voiceName = item.voiceId?.startsWith('local:')
-          ? item.voiceId.slice(6)
-          : item.voiceName || '';
-        const match = voices.find((v) => v.name === voiceName || v.voiceURI === voiceName);
-        if (match) {
-          utterance.voice = match;
-          utterance.lang = match.lang;
-        } else {
-          utterance.lang = item.voiceLanguage || 'es-ES';
-        }
+      const voices = synth.getVoices() || [];
+      const voiceName = item.voiceId?.startsWith('local:')
+        ? item.voiceId.slice(6)
+        : item.voiceName || '';
+      const match = voiceName
+        ? voices.find((v) => v.name === voiceName || v.voiceURI === voiceName)
+        : null;
+      if (match) {
+        utterance.voice = match;
+        utterance.lang = match.lang;
       } else {
         utterance.lang = item.voiceLanguage || 'es-ES';
       }
-      utterance.volume = Math.max(0, Math.min(1, Number(item.volume ?? 0.8)));
+
+      const rawVolume = Number(item.volume ?? 0.8);
+      const safeVolume = Number.isFinite(rawVolume) ? rawVolume : 0.8;
+      utterance.volume = Math.max(0, Math.min(1, safeVolume));
       this.currentUtterance = utterance;
 
       utterance.onend = done;

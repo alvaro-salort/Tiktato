@@ -21,6 +21,10 @@ let state = null;
 let toastTimer = null;
 let toastHideTimer = null;
 let editingRuleId = null;
+let renderRafId = null;
+let pendingRenderState = null;
+let giftSearchTimer = null;
+const ipcUnsubscribers = [];
 
 const EVENT_LABELS = {
   gift: 'Regalo',
@@ -101,6 +105,27 @@ function escapeHtml(value) {
     .replace(/'/g, '&#039;');
 }
 
+function safeImageUrl(url) {
+  const raw = String(url ?? '').trim();
+  if (!raw) return '';
+  if (!raw.includes(':') && !raw.startsWith('//') && !raw.includes('..') && /^[a-zA-Z0-9_./-]+$/.test(raw)) {
+    return raw;
+  }
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    if (parsed.protocol === 'https:') return parsed.href;
+    if (
+      parsed.protocol === 'http:' &&
+      (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost')
+    ) {
+      return parsed.href;
+    }
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 function normalizeText(value) {
   return String(value ?? '')
     .trim()
@@ -133,16 +158,14 @@ function formatBytes(bytes) {
 }
 
 function showToast(message, kind = 'info') {
-  // Solo se muestran los errores: las confirmaciones de éxito ya se ven en la UI.
-  if (kind !== 'error') return;
   const toast = $('#toast');
-  if (!toast) return;
+  if (!toast || !message) return;
   if (toastTimer) window.clearTimeout(toastTimer);
   if (toastHideTimer) window.clearTimeout(toastHideTimer);
   toastTimer = null;
   toastHideTimer = null;
   toast.textContent = message;
-  toast.classList.add('is-error');
+  toast.classList.toggle('is-error', kind === 'error');
   // Si hay un diálogo abierto, el aviso debe vivir dentro de él para quedar por encima.
   const host = document.querySelector('dialog[open]') || document.body;
   if (toast.parentElement !== host) host.appendChild(toast);
@@ -153,14 +176,18 @@ function showToast(message, kind = 'info') {
     toastHideTimer = window.setTimeout(() => {
       toast.hidden = true;
       toast.classList.remove('is-error');
+      if (toast.parentElement !== document.body && !document.querySelector('dialog[open]')) {
+        document.body.appendChild(toast);
+      }
       toastHideTimer = null;
     }, 200);
-  }, 5000);
+  }, kind === 'error' ? 5000 : 3000);
 }
 
 function confirmAction({ title = 'Confirmar acción', message = '', acceptLabel = 'Aceptar' } = {}) {
   const dialog = $('#confirmDialog');
   if (!dialog) return Promise.resolve(window.confirm(message || title));
+  if (dialog.open) dialog.close();
   const titleEl = $('#confirmDialogTitle');
   const textEl = $('#confirmDialogText');
   const accept = $('#btnConfirmAccept');
@@ -274,33 +301,53 @@ function findGeneralRule(type) {
   return rules.find((rule) => rule.eventType === type) || null;
 }
 
+let specificRulesById = new Map();
+let specificRulesByName = new Map();
+
 function getSpecificGiftRules() {
   return (state?.rules || [])
     .filter((rule) => rule.eventType === 'gift' && (rule.giftId || rule.giftName))
     .sort((left, right) => (left.order || 0) - (right.order || 0));
 }
 
+function rebuildSpecificRulesIndex() {
+  specificRulesById = new Map();
+  specificRulesByName = new Map();
+  for (const rule of getSpecificGiftRules()) {
+    if (rule.giftId) {
+      const idKey = String(rule.giftId);
+      if (!specificRulesById.has(idKey)) specificRulesById.set(idKey, rule);
+      continue;
+    }
+    const nameKey = stripCoinSuffix(rule.giftName);
+    if (nameKey && !specificRulesByName.has(nameKey)) {
+      specificRulesByName.set(nameKey, rule);
+    }
+    const testKey = stripTestSuffix(rule.giftName);
+    if (testKey && !specificRulesByName.has(testKey)) {
+      specificRulesByName.set(testKey, rule);
+    }
+  }
+}
+
 function findRuleForCatalogGift(gift) {
   if (!gift) return null;
-  const giftRules = getSpecificGiftRules();
-  const byId = giftRules.find((rule) => rule.giftId && String(rule.giftId) === String(gift.id));
-  if (byId) return byId;
+  if (gift.id && specificRulesById.has(String(gift.id))) {
+    return specificRulesById.get(String(gift.id));
+  }
   const targetEs = stripCoinSuffix(gift.name);
+  if (targetEs && specificRulesByName.has(targetEs)) {
+    return specificRulesByName.get(targetEs);
+  }
   const targetEn = stripCoinSuffix(gift.nameEn);
+  if (targetEn && specificRulesByName.has(targetEn)) {
+    return specificRulesByName.get(targetEn);
+  }
   const testEs = stripTestSuffix(gift.name);
-  return (
-    giftRules.find((rule) => {
-      if (rule.giftId) return false;
-      const ruleName = stripCoinSuffix(rule.giftName);
-      const testRuleName = stripTestSuffix(rule.giftName);
-      return (
-        ruleName &&
-        (ruleName === targetEs ||
-          ruleName === targetEn ||
-          (testRuleName && (testRuleName === targetEs || testRuleName === testEs)))
-      );
-    }) || null
-  );
+  if (testEs && specificRulesByName.has(testEs)) {
+    return specificRulesByName.get(testEs);
+  }
+  return null;
 }
 
 function defaultSoundForNewGiftRule() {
@@ -392,6 +439,18 @@ function setInputChecked(selector, checked) {
 let lastStaticConfigSig = '';
 let lastGiftsDigest = '';
 
+function scheduleRender(nextState) {
+  if (!nextState) return;
+  pendingRenderState = nextState;
+  if (renderRafId !== null) return;
+  renderRafId = window.requestAnimationFrame(() => {
+    renderRafId = null;
+    const target = pendingRenderState;
+    pendingRenderState = null;
+    if (target) render(target);
+  });
+}
+
 function render(nextState) {
   if (!nextState) return;
   const hasExplicitGifts = Array.isArray(nextState.gifts);
@@ -401,29 +460,38 @@ function render(nextState) {
     nextState = { ...nextState, gifts: state.gifts };
   }
   state = nextState;
+  rebuildSpecificRulesIndex();
 
   setInputValue('#username', state.username);
   setInputValue('#overlayUrl', state.overlayUrl);
-  setInputValue('#overlayTitle', state.overlay.title);
-  setInputValue('#overlayAccent', state.overlay.accent);
-  setInputValue('#overlayDuration', state.overlay.durationMs);
-  $('#overlayPosition').value = state.overlay.position;
-  $('#overlayGiftImage').checked = state.overlay.showGiftImage;
-  $('#autoConnect').checked = state.autoConnect;
-  $('#playInDashboard').checked = state.playInDashboard;
+  setInputValue('#overlayTitle', state.overlay?.title ?? '');
+  setInputValue('#overlayAccent', state.overlay?.accent ?? '#e83e5f');
+  setInputValue('#overlayDuration', state.overlay?.durationMs ?? 4500);
+  setInputValue('#overlayPosition', state.overlay?.position ?? 'bottom');
+  setInputChecked('#overlayGiftImage', state.overlay?.showGiftImage !== false);
+  setInputChecked('#autoConnect', state.autoConnect);
+  setInputChecked('#playInDashboard', state.playInDashboard);
   const themeSelect = $('#themeSelect');
   if (themeSelect && document.activeElement !== themeSelect) {
     themeSelect.value = ['light', 'dark', 'auto'].includes(state.theme) ? state.theme : 'auto';
   }
-  $('#masterVolume').value = Math.round(state.masterVolume * 100);
-  $('#volumeValue').textContent = `${Math.round(state.masterVolume * 100)}%`;
-  $('#sessionState').textContent = state.hasSession
-    ? 'Sesión guardada cifrada'
-    : 'Sin sesión guardada';
+  const masterVolPct = Math.round((state.masterVolume ?? 0.8) * 100);
+  setInputValue('#masterVolume', masterVolPct);
+  const volumeValue = $('#volumeValue');
+  if (volumeValue) volumeValue.textContent = `${masterVolPct}%`;
+  const sessionState = $('#sessionState');
+  if (sessionState) {
+    sessionState.textContent = state.hasSession
+      ? 'Sesión guardada cifrada'
+      : 'Sin sesión guardada';
+  }
 
-  $('#statGifts').textContent = formatNumber(state.stats.gifts);
-  $('#statCoins').textContent = formatNumber(state.stats.coins);
-  $('#statFollows').textContent = formatNumber(state.stats.follows);
+  const statGifts = $('#statGifts');
+  if (statGifts) statGifts.textContent = formatNumber(state.stats?.gifts ?? 0);
+  const statCoins = $('#statCoins');
+  if (statCoins) statCoins.textContent = formatNumber(state.stats?.coins ?? 0);
+  const statFollows = $('#statFollows');
+  if (statFollows) statFollows.textContent = formatNumber(state.stats?.follows ?? 0);
 
   if (state.appVersion) {
     const sideVer = $('#sidebarVersion');
@@ -436,7 +504,8 @@ function render(nextState) {
     rules: state.rules,
     sounds: state.sounds,
     giftsDigest: lastGiftsDigest,
-    playEveryStreak: state.tts?.playEveryStreak
+    playEveryStreak: state.tts?.playEveryStreak,
+    soundsPlayEveryStreak: state.soundsPlayEveryStreak
   });
   if (staticSig !== lastStaticConfigSig) {
     lastStaticConfigSig = staticSig;
@@ -515,15 +584,19 @@ function renderGiftPresets() {
       const existing = findRuleForCatalogGift(gift);
       const displayName = String(gift.name).replace(/\s*\(\d+\)\s*$/, '');
       const soundTitle = existing ? soundName(existing.soundId) : '';
+      const titleText = existing
+        ? `${displayName}: ${soundTitle} · Toca para personalizar`
+        : `Asignar sonido a ${displayName}`;
+      const imgUrl = safeImageUrl(gift.imageUrl);
       return `
         <button
           class="gift-preset-chip ${existing ? 'is-configured' : ''}"
           data-preset-gift-id="${escapeHtml(gift.id)}"
           type="button"
-          title="${existing ? `${displayName}: ${soundTitle} · Toca para personalizar` : `Asignar sonido a ${displayName}`}"
+          title="${escapeHtml(titleText)}"
         >
           <div class="preset-thumb-wrap">
-            ${gift.imageUrl ? `<img src="${escapeHtml(gift.imageUrl)}" alt="${escapeHtml(displayName)}" loading="lazy" />` : '<span class="preset-fallback-icon">🎁</span>'}
+            ${imgUrl ? `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(displayName)}" loading="lazy" />` : '<span class="preset-fallback-icon">🎁</span>'}
             ${existing ? '<span class="preset-check" aria-hidden="true">✓</span>' : ''}
           </div>
           <div class="preset-text-wrap">
@@ -553,7 +626,7 @@ function renderGiftQuickList() {
   container.innerHTML = giftRules
     .map((rule) => {
       const catalogGift = findCatalogGift({ giftId: rule.giftId, giftName: rule.giftName });
-      const imageUrl = rule.giftImageUrl || catalogGift?.imageUrl || '';
+      const imageUrl = safeImageUrl(rule.giftImageUrl || catalogGift?.imageUrl || '');
       const title = rule.giftName || catalogGift?.name || 'Regalo';
       const coins = catalogGift?.coins || rule.minCoins || 1;
       const enabled = rule.enabled !== false;
@@ -614,7 +687,7 @@ function renderQuickRules() {
             ${iconSvg('play')}
           </button>
           <label class="switch" title="${enabled ? 'Desactivar' : 'Activar'}">
-            <input type="checkbox" data-quick-toggle ${enabled ? 'checked' : ''} />
+            <input type="checkbox" data-quick-toggle aria-label="Activar sonido para ${escapeHtml(item.label)}" ${enabled ? 'checked' : ''} />
             <span></span>
           </label>
         </div>
@@ -642,13 +715,12 @@ function renderRules() {
         rule.eventType === 'gift'
           ? findCatalogGift({ giftId: rule.giftId, giftName: rule.giftName })
           : null;
-      const giftImageUrl = rule.giftImageUrl || catalogGift?.imageUrl || '';
-      const trigger =
+      const giftImageUrl = safeImageUrl(rule.giftImageUrl || catalogGift?.imageUrl || '');
+      const rawLabel =
         rule.eventType === 'gift'
-          ? rule.giftName
-            ? escapeHtml(rule.giftName)
-            : 'Cualquier otro regalo'
+          ? rule.giftName || 'Cualquier otro regalo'
           : EVENT_LABELS[rule.eventType] || rule.eventType;
+      const trigger = escapeHtml(rawLabel);
       const meta =
         rule.eventType === 'gift'
           ? `≥ ${formatNumber(rule.minCoins)} · ${rule.cooldownSeconds}s`
@@ -656,7 +728,7 @@ function renderRules() {
       return `
         <div class="rule-row ${rule.enabled ? '' : 'is-disabled'}" data-rule-id="${escapeHtml(rule.id)}">
           <label class="switch" title="${rule.enabled ? 'Desactivar' : 'Activar'}">
-            <input type="checkbox" data-action="toggle" ${rule.enabled ? 'checked' : ''} />
+            <input type="checkbox" data-action="toggle" aria-label="Activar regla para ${trigger}" ${rule.enabled ? 'checked' : ''} />
             <span></span>
           </label>
           <span class="event-badge event-${escapeHtml(rule.eventType)}">${escapeHtml(EVENT_LABELS[rule.eventType] || rule.eventType)}</span>
@@ -713,15 +785,18 @@ function renderGiftCatalog() {
         gift.nameEn && normalizeText(gift.nameEn) !== stripCoinSuffix(gift.name)
           ? gift.nameEn
           : '';
+      const imgUrl = safeImageUrl(gift.imageUrl);
       return `
         <button
           class="gift-card ${isSelected ? 'is-selected' : ''} ${existingRule ? 'has-rule' : ''}"
           data-catalog-gift-id="${escapeHtml(gift.id)}"
+          role="option"
+          aria-selected="${isSelected ? 'true' : 'false'}"
           type="button"
         >
           ${
-            gift.imageUrl
-              ? `<img class="gift-card-img" src="${escapeHtml(gift.imageUrl)}" alt="" loading="lazy" />`
+            imgUrl
+              ? `<img class="gift-card-img" src="${escapeHtml(imgUrl)}" alt="" loading="lazy" />`
               : `<span class="gift-card-fallback">${iconSvg('gift')}</span>`
           }
           <span class="gift-card-body">
@@ -781,31 +856,48 @@ function renderJar() {
   if (selWrap) selWrap.hidden = jar.giftType !== 'selectedGifts';
 }
 
-function populateVoiceOptions(selectedVoiceId, activeProvider = '') {
+function getResolvedTtsProvider(tts) {
+  const voiceId = String(tts?.voiceId || '').trim();
+  if (tts?.voiceProvider === 'fish' || voiceId.startsWith('fish:')) {
+    return 'fish';
+  }
+  return 'local';
+}
+
+function getResolvedVoiceId(tts) {
+  const raw = String(tts?.voiceId || '').trim();
+  if (!raw || raw.startsWith('google:') || tts?.voiceProvider === 'google') {
+    return 'local';
+  }
+  return raw;
+}
+
+function populateVoiceOptions(selectedVoiceId = 'local', activeProvider = '') {
   const select = $('#ttsVoiceProvider');
   const localGroup = $('#ttsLocalVoicesGroup');
   if (!select || !localGroup) return;
 
-  if (typeof window !== 'undefined' && window.speechSynthesis) {
-    const voices = window.speechSynthesis.getVoices() || [];
-    if (voices.length > 0) {
-      localGroup.innerHTML = voices
-        .map((v) => {
-          const val = `local:${v.name}`;
-          const isSelected = selectedVoiceId === val || (selectedVoiceId === 'local' && v.default);
-          const langLabel = v.lang ? ` (${v.lang})` : '';
-          return `<option value="${escapeHtml(val)}" ${isSelected ? 'selected' : ''}>${escapeHtml(v.name)}${langLabel}</option>`;
-        })
-        .join('');
-    }
-  }
-
-  const targetValue =
+  const targetVoiceId =
     activeProvider === 'fish' || String(selectedVoiceId || '').startsWith('fish:')
       ? 'fish'
-      : selectedVoiceId;
-  if (targetValue && select) {
-    select.value = targetValue;
+      : selectedVoiceId && !String(selectedVoiceId).startsWith('google:')
+        ? selectedVoiceId
+        : 'local';
+
+  const options = ['<option value="local">Predeterminada del sistema</option>'];
+  if (typeof window !== 'undefined' && window.speechSynthesis) {
+    const voices = window.speechSynthesis.getVoices() || [];
+    for (const v of voices) {
+      const val = `local:${v.name}`;
+      const langLabel = v.lang ? ` (${escapeHtml(v.lang)})` : '';
+      options.push(`<option value="${escapeHtml(val)}">${escapeHtml(v.name)}${langLabel}</option>`);
+    }
+  }
+  localGroup.innerHTML = options.join('');
+
+  if (document.activeElement !== select) {
+    const hasMatch = [...select.options].some((opt) => opt.value === targetVoiceId);
+    select.value = hasMatch ? targetVoiceId : 'local';
   }
 }
 
@@ -841,14 +933,13 @@ function fishInitials(name) {
   return String(words[0] || 'FA').slice(0, 2).toUpperCase();
 }
 
-function fishAvatarStyle(seed) {
+function fishAvatarClass(seed) {
   let hash = 0;
   const text = String(seed || 'fish');
   for (let i = 0; i < text.length; i += 1) {
     hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
   }
-  const hue = Math.abs(hash) % 360;
-  return `background: hsl(${hue}, 65%, 88%); color: hsl(${hue}, 70%, 24%);`;
+  return `fish-avatar-${Math.abs(hash) % 8}`;
 }
 
 function stopFishPreview() {
@@ -1009,7 +1100,7 @@ function renderFishVoicesGrid() {
       return `
         <article class="fish-voice-card ${isSelected ? 'is-selected' : ''}" data-fish-ref="${escapeHtml(voice.referenceId)}">
           <div class="fish-voice-card-head">
-            <span class="fish-avatar" style="${fishAvatarStyle(voice.name)}" aria-hidden="true">${escapeHtml(fishInitials(voice.name))}</span>
+            <span class="fish-avatar ${fishAvatarClass(voice.name)}" aria-hidden="true">${escapeHtml(fishInitials(voice.name))}</span>
             <div class="fish-voice-meta">
               <strong class="fish-voice-name" title="${escapeHtml(voice.name)}">${escapeHtml(voice.name)}</strong>
               <div class="fish-voice-badges">
@@ -1078,7 +1169,47 @@ async function loadFishVoices() {
   }
 }
 
+function applyFishKeyStatusBadge(badge, hasKey) {
+  if (!badge) return;
+  if (fishKeyTestState === 'testing') {
+    badge.textContent = 'PROBANDO…';
+    badge.className = 'chip';
+    badge.title = '';
+  } else if (fishKeyTestState === 'valid') {
+    badge.textContent = 'CONEXIÓN VERIFICADA';
+    badge.className = 'chip is-ok';
+    badge.title = fishKeyCredit !== null && fishKeyCredit !== undefined ? `Crédito disponible: ${fishKeyCredit}` : '';
+  } else if (fishKeyTestState === 'invalid') {
+    badge.textContent = 'CLAVE INVÁLIDA';
+    badge.className = 'chip is-error';
+    badge.title = fishKeyTestMessage || '';
+  } else if (hasKey) {
+    badge.textContent = 'API KEY GUARDADA';
+    badge.className = 'chip is-ok';
+    badge.title = '';
+  } else {
+    badge.textContent = 'SIN API KEY';
+    badge.className = 'chip';
+    badge.title = '';
+  }
+}
+
+function renderFishKeySettings() {
+  const hasKey = Boolean(state?.hasFishApiKey);
+  applyFishKeyStatusBadge($('#settingsFishKeyStatus'), hasKey);
+  const clearBtn = $('#btnClearFishKey');
+  if (clearBtn) clearBtn.hidden = !hasKey;
+  const settingsInput = $('#settingsFishApiKey');
+  if (settingsInput && document.activeElement !== settingsInput) {
+    settingsInput.placeholder = hasKey
+      ? 'API Key guardada cifrada (pega otra para reemplazar)…'
+      : 'Pega tu API Key de Fish Audio…';
+  }
+}
+
 function renderFishSection(activeProvider) {
+  renderFishKeySettings();
+
   const box = $('#ttsFishConfigBox');
   const tabs = $$('#ttsProviderTabs [data-tts-provider]');
   for (const btn of tabs) {
@@ -1092,37 +1223,11 @@ function renderFishSection(activeProvider) {
 
   const hasKey = Boolean(state?.hasFishApiKey);
   const keyBadge = $('#ttsFishKeyStatus');
-  const clearBtn = $('#btnClearFishKey');
-  const keyInput = $('#ttsFishApiKey');
-  if (clearBtn) clearBtn.hidden = !hasKey;
-  if (keyInput) {
-    keyInput.placeholder = hasKey
-      ? 'API Key guardada cifrada (pega otra para reemplazar)…'
-      : 'Pega tu API Key de Fish Audio…';
-  }
-  if (keyBadge) {
-    if (fishKeyTestState === 'testing') {
-      keyBadge.textContent = 'PROBANDO…';
-      keyBadge.className = 'chip';
-      keyBadge.title = '';
-    } else if (fishKeyTestState === 'valid') {
-      keyBadge.textContent = 'CONEXIÓN VERIFICADA';
-      keyBadge.className = 'chip is-ok';
-      keyBadge.title = fishKeyCredit !== null && fishKeyCredit !== undefined ? `Crédito disponible: ${fishKeyCredit}` : '';
-    } else if (fishKeyTestState === 'invalid') {
-      keyBadge.textContent = 'CLAVE INVÁLIDA';
-      keyBadge.className = 'chip is-error';
-      keyBadge.title = fishKeyTestMessage || '';
-    } else if (hasKey) {
-      keyBadge.textContent = 'API KEY GUARDADA';
-      keyBadge.className = 'chip is-ok';
-      keyBadge.title = '';
-    } else {
-      keyBadge.textContent = 'SIN API KEY';
-      keyBadge.className = 'chip';
-      keyBadge.title = '';
-    }
-  }
+  const keyControlsWrap = $('#ttsFishKeyControlsWrap');
+  const configuredBanner = $('#ttsFishConfiguredBanner');
+  if (keyControlsWrap) keyControlsWrap.hidden = hasKey;
+  if (configuredBanner) configuredBanner.hidden = !hasKey;
+  applyFishKeyStatusBadge(keyBadge, hasKey);
 
   const voiceId = String(state?.tts?.voiceId || '');
   const activeRef = voiceId.startsWith('fish:') ? voiceId.slice(5) : '';
@@ -1137,7 +1242,7 @@ function renderFishSection(activeProvider) {
   const idEl = $('#ttsFishSelectedId');
   if (avatarEl) {
     avatarEl.textContent = activeRef ? fishInitials(selectedName) : 'FA';
-    avatarEl.setAttribute('style', activeRef ? fishAvatarStyle(selectedName) : '');
+    avatarEl.className = `fish-avatar ${activeRef ? fishAvatarClass(selectedName) : ''}`.trim();
   }
   if (nameEl) nameEl.textContent = selectedName;
   if (idEl) idEl.textContent = activeRef ? `reference_id: ${activeRef}` : 'Sin reference_id activo';
@@ -1171,21 +1276,21 @@ function renderTTS() {
   const minCoinsSlider = $('#ttsMinCoins');
   const minCoinsLabel = $('#ttsMinCoinsValue');
 
-  if (chatCheckbox) chatCheckbox.checked = tts.chatEnabled !== false;
-  if (readUsernameCheckbox) readUsernameCheckbox.checked = tts.readUsername !== false;
-  if (giftsCheckbox) giftsCheckbox.checked = tts.giftsEnabled !== false;
+  setInputChecked('#ttsChatEnabled', tts.chatEnabled !== false);
+  setInputChecked('#ttsReadUsername', tts.readUsername !== false);
+  setInputChecked('#ttsGiftsEnabled', tts.giftsEnabled !== false);
 
   const duckingEnabled = tts.ducking !== false;
   const duckingPct = Math.round((tts.duckingLevel ?? 0.25) * 100);
 
-  if (duckingCheckbox) duckingCheckbox.checked = duckingEnabled;
+  setInputChecked('#ttsDucking', duckingEnabled);
   if (duckingSlider) {
     duckingSlider.disabled = !duckingEnabled;
     if (document.activeElement !== duckingSlider) duckingSlider.value = duckingPct;
   }
   if (duckingLabel) duckingLabel.textContent = `${duckingPct}%`;
 
-  if (settingsDucking) settingsDucking.checked = duckingEnabled;
+  setInputChecked('#settingsAudioDucking', duckingEnabled);
   if (settingsDuckingSlider) {
     settingsDuckingSlider.disabled = !duckingEnabled;
     if (document.activeElement !== settingsDuckingSlider) settingsDuckingSlider.value = duckingPct;
@@ -1193,17 +1298,13 @@ function renderTTS() {
   if (settingsDuckingLabel) settingsDuckingLabel.textContent = `${duckingPct}%`;
 
   const duckingWrap = $('#ttsDuckingLevelWrap');
-  if (duckingWrap) duckingWrap.style.opacity = duckingEnabled ? '1' : '0.5';
+  if (duckingWrap) duckingWrap.classList.toggle('is-dimmed', !duckingEnabled);
   const settingsWrap = $('#settingsAudioDuckingLevelWrap');
-  if (settingsWrap) settingsWrap.style.opacity = duckingEnabled ? '1' : '0.5';
-  if (streaksCheckbox) streaksCheckbox.checked = tts.playEveryStreak !== false;
-  const soundsStreaks = $('#soundsPlayEveryStreak');
-  if (soundsStreaks) {
-    const soundsStreakVal = state?.sounds?.playEveryStreak ?? state?.soundsPlayEveryStreak;
-    soundsStreaks.checked = soundsStreakVal !== false;
-  }
-  if (antiSpamCheckbox) antiSpamCheckbox.checked = Boolean(tts.antiSpam);
-  if (filterChatCheckbox) filterChatCheckbox.checked = Boolean(tts.filterChatByRole);
+  if (settingsWrap) settingsWrap.classList.toggle('is-dimmed', !duckingEnabled);
+  setInputChecked('#ttsPlayEveryStreak', tts.playEveryStreak !== false);
+  setInputChecked('#soundsPlayEveryStreak', state?.soundsPlayEveryStreak !== false);
+  setInputChecked('#ttsAntiSpam', Boolean(tts.antiSpam));
+  setInputChecked('#ttsFilterChatByRole', Boolean(tts.filterChatByRole));
   if (roleFiltersBox) roleFiltersBox.hidden = !tts.filterChatByRole;
 
   setInputChecked('#ttsAllowModerators', tts.allowModerators !== false);
@@ -1216,31 +1317,21 @@ function renderTTS() {
   setInputChecked('#ttsAllowMember', Boolean(tts.allowMember));
   setInputValue('#ttsMinMemberLevel', tts.minMemberLevel ?? 1);
 
-  const currentVoiceId =
-    tts.voiceId ||
-    (tts.voiceProvider === 'google'
-      ? `google:${tts.voiceLanguage || 'es-ES'}`
-      : tts.voiceProvider === 'fish'
-        ? 'fish:'
-        : 'local');
-  const activeProvider =
-    tts.voiceProvider === 'fish' || String(currentVoiceId).startsWith('fish:')
-      ? 'fish'
-      : tts.voiceProvider === 'local' || String(currentVoiceId).startsWith('local')
-        ? 'local'
-        : 'google';
-  populateVoiceOptions(currentVoiceId, activeProvider);
-  if (providerSelect) {
-    providerSelect.value = activeProvider === 'fish' ? 'fish' : currentVoiceId;
+  const currentVoiceId = getResolvedVoiceId(tts);
+  const activeProvider = getResolvedTtsProvider(tts);
+  if (providerSelect && document.activeElement !== providerSelect) {
+    const targetSelectVal = activeProvider === 'fish' ? 'fish' : currentVoiceId;
+    const hasMatch = [...providerSelect.options].some((opt) => opt.value === targetSelectVal);
+    providerSelect.value = hasMatch ? targetSelectVal : 'local';
   }
   renderFishSection(activeProvider);
 
   const volPercent = Math.round((tts.volume ?? 0.8) * 100);
-  if (volumeSlider) volumeSlider.value = volPercent;
+  setInputValue('#ttsVolume', volPercent);
   if (volumeLabel) volumeLabel.textContent = `${volPercent}%`;
 
   const minCoins = Number(tts.minCoins ?? 1);
-  if (minCoinsSlider) minCoinsSlider.value = minCoins;
+  setInputValue('#ttsMinCoins', minCoins);
   if (minCoinsLabel) minCoinsLabel.textContent = formatNumber(minCoins);
 
   updateTtsQueueUI({
@@ -1315,8 +1406,8 @@ function handleIncomingEventForTTS(event) {
       msgId: event.msgId || '',
       userId: event.userId || '',
       type: 'chat',
-      voiceId: ttsSettings.voiceId,
-      voiceProvider: ttsSettings.voiceProvider || 'google',
+      voiceId: getResolvedVoiceId(ttsSettings),
+      voiceProvider: getResolvedTtsProvider(ttsSettings),
       voiceLanguage: ttsSettings.voiceLanguage || 'es-ES',
       fishModel: ttsSettings.fishModel || undefined,
       volume: (state.masterVolume ?? 0.8) * (ttsSettings.volume ?? 0.8),
@@ -1338,8 +1429,8 @@ function handleIncomingEventForTTS(event) {
       msgId: event.msgId || '',
       userId: event.userId || '',
       type: 'gift',
-      voiceId: ttsSettings.voiceId,
-      voiceProvider: ttsSettings.voiceProvider || 'google',
+      voiceId: getResolvedVoiceId(ttsSettings),
+      voiceProvider: getResolvedTtsProvider(ttsSettings),
       voiceLanguage: ttsSettings.voiceLanguage || 'es-ES',
       fishModel: ttsSettings.fishModel || undefined,
       volume: (state.masterVolume ?? 0.8) * (ttsSettings.volume ?? 0.8),
@@ -1381,13 +1472,23 @@ function renderSounds() {
     .join('');
 }
 
+let lastActivitySig = '';
+
 function renderActivity() {
   const list = $('#activityList');
   const empty = $('#activityEmpty');
-  const activity = state.activity || [];
+  if (!list || !empty) return;
+  const activity = state?.activity || [];
   empty.hidden = activity.length > 0;
+  const activitySig = activity
+    .map((item) => `${item.id || ''}:${item.type}:${item.username || ''}:${item.repeatCount || 0}:${item.coins || 0}:${item.timestamp || ''}`)
+    .join('|');
+  if (activitySig === lastActivitySig) return;
+  lastActivitySig = activitySig;
+
   list.innerHTML = activity
     .map((item) => {
+      const safeImg = safeImageUrl(item.giftImageUrl);
       const detail =
         item.type === 'gift'
           ? `envió <strong>${escapeHtml(item.giftName || 'un regalo')}</strong>${item.repeatCount > 1 ? ` ×${formatNumber(item.repeatCount)}` : ''}`
@@ -1405,8 +1506,8 @@ function renderActivity() {
       return `
         <div class="activity-row ${item.test ? 'is-test' : ''}">
           <span class="activity-icon">${
-            item.giftImageUrl
-              ? `<img class="activity-gift-img" src="${escapeHtml(item.giftImageUrl)}" alt="" />`
+            safeImg
+              ? `<img class="activity-gift-img" src="${escapeHtml(safeImg)}" alt="" loading="lazy" />`
               : iconSvg(EVENT_ICONS[item.type] || 'music')
           }</span>
           <span class="activity-user">${escapeHtml(item.displayName || item.username)}</span>
@@ -1585,8 +1686,10 @@ async function saveRules(rules, message = 'Reglas guardadas') {
     state = await api.saveRules(rules);
     render(state);
     showToast(message);
+    return true;
   } catch (error) {
     showToast(error.message || 'No se pudieron guardar las reglas', 'error');
+    return false;
   }
 }
 
@@ -1616,18 +1719,22 @@ async function triggerTestForRule(rule) {
     rule.eventType === 'gift'
       ? Math.max(1, Number(rule.minCoins) || Number(catalogGift?.coins) || 1)
       : 0;
-  const result = await api.testEvent({
-    type: rule.eventType,
-    giftId: rule.giftId || catalogGift?.id || '',
-    giftName,
-    giftImageUrl: rule.giftImageUrl || catalogGift?.imageUrl || '',
-    coins,
-    repeatCount: rule.eventType === 'like' ? 25 : 1
-  });
-  if (result.alert) {
-    showToast(`Probando alerta de ${giftName || EVENT_LABELS[rule.eventType] || 'evento'}`);
+  try {
+    const result = await api.testEvent({
+      type: rule.eventType,
+      giftId: rule.giftId || catalogGift?.id || '',
+      giftName,
+      giftImageUrl: safeImageUrl(rule.giftImageUrl || catalogGift?.imageUrl || ''),
+      coins,
+      repeatCount: rule.eventType === 'like' ? 25 : 1
+    });
+    if (result?.alert) {
+      showToast(`Probando alerta de ${giftName || EVENT_LABELS[rule.eventType] || 'evento'}`);
+    }
+    if (result?.state) render(result.state);
+  } catch (error) {
+    showToast(error.message || 'No se pudo enviar el evento de prueba', 'error');
   }
-  if (result.state) render(result.state);
 }
 
 function wireEvents() {
@@ -1641,6 +1748,12 @@ function wireEvents() {
   $$('dialog').forEach((dialog) => {
     dialog.addEventListener('click', (event) => {
       if (event.target === dialog) dialog.close();
+    });
+    dialog.addEventListener('close', () => {
+      const toast = $('#toast');
+      if (toast && toast.parentElement === dialog) {
+        document.body.appendChild(toast);
+      }
     });
   });
 
@@ -1948,8 +2061,12 @@ function wireEvents() {
       acceptLabel: 'Borrar sesión'
     });
     if (!confirmed) return;
-    await api.logoutTikTok();
-    await updateSettings({ clearSession: true }, 'Sesión borrada');
+    try {
+      await api.logoutTikTok();
+      await updateSettings({ clearSession: true }, 'Sesión borrada');
+    } catch (error) {
+      showToast(error.message || 'No se pudo borrar la sesión', 'error');
+    }
   });
 
   $('#btnCopyOverlay').addEventListener('click', async () => {
@@ -1961,8 +2078,16 @@ function wireEvents() {
     }
   });
 
-  $('#btnOpenOverlay').addEventListener('click', () => api.openOverlay());
-  $('#btnOpenData').addEventListener('click', () => api.openDataFolder());
+  $('#btnOpenOverlay').addEventListener('click', () => {
+    Promise.resolve(api.openOverlay()).catch((err) => {
+      showToast(err?.message || 'No se pudo abrir el overlay', 'error');
+    });
+  });
+  $('#btnOpenData').addEventListener('click', () => {
+    Promise.resolve(api.openDataFolder()).catch((err) => {
+      showToast(err?.message || 'No se pudo abrir la carpeta de datos', 'error');
+    });
+  });
 
   $('#btnCopyJar').addEventListener('click', async () => {
     try {
@@ -1973,14 +2098,22 @@ function wireEvents() {
     }
   });
 
-  $('#btnOpenJar').addEventListener('click', () => api.openJar());
+  $('#btnOpenJar').addEventListener('click', () => {
+    Promise.resolve(api.openJar()).catch((err) => {
+      showToast(err?.message || 'No se pudo abrir el frasco', 'error');
+    });
+  });
 
   $('#btnOpenJarStudio')?.addEventListener('click', async () => {
-    const res = await api.openJarStudio?.({ bg: 'green' });
-    if (res?.error) {
-      showToast(res.error, 'error');
-    } else {
-      showToast('Ventana del frasco abierta para TikTok LIVE Studio');
+    try {
+      const res = await api.openJarStudio?.({ bg: 'green' });
+      if (res?.error) {
+        showToast(res.error, 'error');
+      } else {
+        showToast('Ventana del frasco abierta para TikTok LIVE Studio');
+      }
+    } catch (error) {
+      showToast(error.message || 'No se pudo abrir la ventana del frasco', 'error');
     }
   });
 
@@ -1993,21 +2126,37 @@ function wireEvents() {
     }
   });
 
-  $('#btnOpenJarTest')?.addEventListener('click', () => api.openJarTest());
+  $('#btnOpenJarTest')?.addEventListener('click', () => {
+    Promise.resolve(api.openJarTest()).catch((err) => {
+      showToast(err?.message || 'No se pudo abrir el frasco de prueba', 'error');
+    });
+  });
 
   $('#btnTestGiftRose')?.addEventListener('click', async () => {
-    await api.testJarGift({ giftName: 'Rosa', coins: 1, repeatCount: 1 });
-    showToast('Rosa de prueba enviada al frasco');
+    try {
+      await api.testJarGift({ giftName: 'Rosa', coins: 1, repeatCount: 1 });
+      showToast('Rosa de prueba enviada al frasco');
+    } catch (error) {
+      showToast(error.message || 'No se pudo enviar el regalo de prueba', 'error');
+    }
   });
 
   $('#btnTestGiftCombo')?.addEventListener('click', async () => {
-    await api.testJarGift({ giftName: 'Rosa', coins: 1, repeatCount: 10 });
-    showToast('Combo Rosa x10 enviado al frasco');
+    try {
+      await api.testJarGift({ giftName: 'Rosa', coins: 1, repeatCount: 10 });
+      showToast('Combo Rosa x10 enviado al frasco');
+    } catch (error) {
+      showToast(error.message || 'No se pudo enviar el combo de prueba', 'error');
+    }
   });
 
   $('#btnTestGiftGalaxy')?.addEventListener('click', async () => {
-    await api.testJarGift({ giftName: 'Galaxia', coins: 1000, repeatCount: 1 });
-    showToast('Galaxia de prueba enviada al frasco');
+    try {
+      await api.testJarGift({ giftName: 'Galaxia', coins: 1000, repeatCount: 1 });
+      showToast('Galaxia de prueba enviada al frasco');
+    } catch (error) {
+      showToast(error.message || 'No se pudo enviar el regalo de prueba', 'error');
+    }
   });
 
   $('#btnResetJar').addEventListener('click', async () => {
@@ -2017,9 +2166,16 @@ function wireEvents() {
       acceptLabel: 'Vaciar frasco'
     });
     if (!confirmed) return;
-    state = await api.resetJar();
-    render(state);
-    showToast('Frasco reiniciado');
+    try {
+      const nextState = await api.resetJar();
+      if (nextState) {
+        state = nextState;
+        render(state);
+      }
+      showToast('Frasco reiniciado');
+    } catch (error) {
+      showToast(error.message || 'No se pudo reiniciar el frasco', 'error');
+    }
   });
 
   $('#jarGoal').addEventListener('change', (event) => {
@@ -2070,7 +2226,13 @@ function wireEvents() {
   $('#btnCancelRule').addEventListener('click', closeRuleForm);
   $('#ruleEventType').addEventListener('change', toggleGiftFields);
 
-  $('#giftSearch')?.addEventListener('input', () => renderGiftCatalog());
+  $('#giftSearch')?.addEventListener('input', () => {
+    if (giftSearchTimer) window.clearTimeout(giftSearchTimer);
+    giftSearchTimer = window.setTimeout(() => {
+      giftSearchTimer = null;
+      renderGiftCatalog();
+    }, 150);
+  });
 
   $('#btnClearGiftSelection')?.addEventListener('click', () => {
     selectGiftInRuleForm(null);
@@ -2133,7 +2295,8 @@ function wireEvents() {
 
   $('#btnPreviewRuleSound')?.addEventListener('click', async () => {
     const soundId = $('#ruleSound').value;
-    const volume = (Number($('#ruleVolume').value) || 100) / 100;
+    const rawVol = Number($('#ruleVolume').value);
+    const volume = (Number.isFinite(rawVol) ? rawVol : 100) / 100;
     await previewSoundById(soundId, volume);
   });
 
@@ -2182,11 +2345,14 @@ function wireEvents() {
       giftName,
       giftImageUrl:
         eventType === 'gift' && !giftName.includes('*')
-          ? giftImageUrl || catalogGift?.imageUrl || ''
+          ? safeImageUrl(giftImageUrl || catalogGift?.imageUrl || '')
           : '',
       minCoins: eventType === 'gift' ? Number($('#ruleMinCoins').value) || 0 : 0,
       soundId: $('#ruleSound').value === '__import__' ? 'builtin:coin' : $('#ruleSound').value,
-      volume: (Number($('#ruleVolume').value) || 100) / 100,
+      volume: (() => {
+        const rawVol = Number($('#ruleVolume').value);
+        return (Number.isFinite(rawVol) ? rawVol : 100) / 100;
+      })(),
       cooldownSeconds: Number($('#ruleCooldown').value) || 0,
       enabled: true,
       order: state.rules.length
@@ -2230,13 +2396,21 @@ function wireEvents() {
       await saveRules(state.rules.filter((item) => item.id !== rule.id), 'Regla eliminada');
       return;
     }
-    if (action === 'toggle') {
-      const enabled = event.target.checked;
-      await saveRules(
-        state.rules.map((item) => (item.id === rule.id ? { ...item, enabled } : item)),
-        enabled ? 'Regla activada' : 'Regla desactivada'
-      );
-    }
+  });
+
+  $('#rulesList').addEventListener('change', async (event) => {
+    const toggle = event.target.closest('input[data-action="toggle"]');
+    if (!toggle) return;
+    const row = toggle.closest('[data-rule-id]');
+    if (!row) return;
+    const rule = state.rules.find((item) => item.id === row.dataset.ruleId);
+    if (!rule) return;
+    const enabled = toggle.checked;
+    const ok = await saveRules(
+      state.rules.map((item) => (item.id === rule.id ? { ...item, enabled } : item)),
+      enabled ? 'Regla activada' : 'Regla desactivada'
+    );
+    if (!ok) toggle.checked = !enabled;
   });
 
   $('#builtinSounds').addEventListener('click', async (event) => {
@@ -2258,14 +2432,18 @@ function wireEvents() {
         acceptLabel: 'Eliminar'
       });
       if (!confirmed) return;
-      const result = await api.deleteSound(sound.id);
-      if (!result.ok) {
-        showToast(result.error || 'No se pudo eliminar', 'error');
-        return;
+      try {
+        const result = await api.deleteSound(sound.id);
+        if (!result?.ok) {
+          showToast(result?.error || 'No se pudo eliminar', 'error');
+          return;
+        }
+        state = await api.bootstrap();
+        render(state);
+        showToast('Sonido eliminado');
+      } catch (error) {
+        showToast(error.message || 'No se pudo eliminar el sonido', 'error');
       }
-      state = await api.bootstrap();
-      render(state);
-      showToast('Sonido eliminado');
       return;
     }
     await previewSoundById(sound.id, 1);
@@ -2285,15 +2463,19 @@ function wireEvents() {
           return;
         }
       }
-      const result = await api.testEvent({
-        type,
-        giftId: type === 'gift' ? '5655' : '',
-        giftName: type === 'gift' ? 'Rosa' : '',
-        coins: type === 'gift' ? 1 : 0,
-        repeatCount: type === 'like' ? 25 : 1,
-        message: type === 'chat' ? '¡Hola a todos! Este es un mensaje de prueba de chat en directo.' : ''
-      });
-      if (result.state) render(result.state);
+      try {
+        const result = await api.testEvent({
+          type,
+          giftId: type === 'gift' ? '5655' : '',
+          giftName: type === 'gift' ? 'Rosa' : '',
+          coins: type === 'gift' ? 1 : 0,
+          repeatCount: type === 'like' ? 25 : 1,
+          message: type === 'chat' ? '¡Hola a todos! Este es un mensaje de prueba de chat en directo.' : ''
+        });
+        if (result?.state) render(result.state);
+      } catch (error) {
+        showToast(error.message || 'No se pudo enviar el evento de prueba', 'error');
+      }
     });
   });
 
@@ -2316,9 +2498,9 @@ function wireEvents() {
     if ($('#ttsDuckingLevel')) $('#ttsDuckingLevel').disabled = !checked;
     if ($('#settingsAudioDuckingLevel')) $('#settingsAudioDuckingLevel').disabled = !checked;
     const duckingWrap = $('#ttsDuckingLevelWrap');
-    if (duckingWrap) duckingWrap.style.opacity = checked ? '1' : '0.5';
+    if (duckingWrap) duckingWrap.classList.toggle('is-dimmed', !checked);
     const settingsWrap = $('#settingsAudioDuckingLevelWrap');
-    if (settingsWrap) settingsWrap.style.opacity = checked ? '1' : '0.5';
+    if (settingsWrap) settingsWrap.classList.toggle('is-dimmed', !checked);
   };
 
   $('#ttsDucking')?.addEventListener('change', (e) => onDuckingToggle(e.target.checked));
@@ -2422,127 +2604,153 @@ function wireEvents() {
     const provider = pill.dataset.ttsProvider;
     if (provider === 'fish') {
       selectFishProvider();
-    } else if (provider === 'local') {
-      stopFishPreview();
-      saveTtsPatch({ voiceProvider: 'local', voiceLanguage: 'es-ES', voiceId: 'local' });
     } else {
       stopFishPreview();
-      const lang = state?.tts?.voiceLanguage || 'es-ES';
-      saveTtsPatch({ voiceProvider: 'google', voiceLanguage: lang, voiceId: `google:${lang}` });
+      saveTtsPatch({ voiceProvider: 'local', voiceLanguage: 'es-ES', voiceId: 'local' });
     }
   });
 
   $('#ttsVoiceProvider')?.addEventListener('change', (e) => {
-    const val = e.target.value;
+    const val = e.target.value || 'local';
     if (val === 'fish') {
       selectFishProvider();
-    } else if (val.startsWith('google:')) {
-      stopFishPreview();
-      const lang = val.split(':')[1] || 'es-ES';
-      saveTtsPatch({ voiceProvider: 'google', voiceLanguage: lang, voiceId: val });
-    } else if (val.startsWith('local')) {
-      stopFishPreview();
-      saveTtsPatch({ voiceProvider: 'local', voiceLanguage: 'es-ES', voiceId: val });
-    } else {
-      stopFishPreview();
-      saveTtsPatch({ voiceProvider: val, voiceId: val });
-    }
-  });
-
-  $('#btnToggleFishKey')?.addEventListener('click', () => {
-    const input = $('#ttsFishApiKey');
-    if (!input) return;
-    input.type = input.type === 'password' ? 'text' : 'password';
-  });
-
-  $('#ttsFishApiKey')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      $('#btnSaveFishKey')?.click();
-    }
-  });
-
-  $('#btnSaveFishKey')?.addEventListener('click', async () => {
-    const input = $('#ttsFishApiKey');
-    const raw = String(input?.value || '').trim();
-    if (!raw) {
-      showToast('Pega tu API Key de Fish Audio antes de guardar.', 'error');
-      input?.focus();
       return;
     }
-    try {
-      const res = await api.fishSetApiKey(raw);
-      if (input) {
-        input.value = '';
-        input.type = 'password';
+    stopFishPreview();
+    let lang = 'es-ES';
+    if (val.startsWith('local:') && typeof window !== 'undefined' && window.speechSynthesis) {
+      const name = val.slice(6);
+      const match = (window.speechSynthesis.getVoices() || []).find((v) => v.name === name);
+      if (match?.lang) lang = match.lang;
+    }
+    saveTtsPatch({ voiceProvider: 'local', voiceLanguage: lang, voiceId: val });
+  });
+
+  const wireFishKeyControls = ({ inputSel, toggleSel, saveSel, testSel, clearSel }) => {
+    $(toggleSel)?.addEventListener('click', () => {
+      const input = $(inputSel);
+      if (!input) return;
+      input.type = input.type === 'password' ? 'text' : 'password';
+    });
+
+    $(inputSel)?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        $(saveSel)?.click();
       }
-      fishKeyTestState = null;
+    });
+
+    $(saveSel)?.addEventListener('click', async () => {
+      const input = $(inputSel);
+      const raw = String(input?.value || '').trim();
+      if (!raw) {
+        showToast('Pega tu API Key de Fish Audio antes de guardar.', 'error');
+        input?.focus();
+        return;
+      }
+      try {
+        const res = await api.fishSetApiKey(raw);
+        if (input) {
+          input.value = '';
+          input.type = 'password';
+        }
+        fishKeyTestState = null;
+        fishKeyTestMessage = '';
+        fishKeyCredit = null;
+        if (state) state.hasFishApiKey = Boolean(res?.hasFishApiKey);
+        renderTTS();
+        loadFishVoices();
+        showToast('API Key de Fish Audio guardada');
+      } catch (err) {
+        showToast(err?.message || 'No se pudo guardar la API Key', 'error');
+      }
+    });
+
+    $(testSel)?.addEventListener('click', async () => {
+      const input = $(inputSel);
+      const typed = String(input?.value || '').trim();
+      if (!typed && !state?.hasFishApiKey) {
+        showToast('Pega tu API Key de Fish Audio para probar la conexión.', 'error');
+        input?.focus();
+        return;
+      }
+      fishKeyTestState = 'testing';
       fishKeyTestMessage = '';
       fishKeyCredit = null;
-      if (state) state.hasFishApiKey = Boolean(res?.hasFishApiKey);
-      renderTTS();
-      loadFishVoices();
-    } catch (err) {
-      showToast(err?.message || 'No se pudo guardar la API Key', 'error');
-    }
-  });
-
-  $('#btnTestFishKey')?.addEventListener('click', async () => {
-    const input = $('#ttsFishApiKey');
-    const typed = String(input?.value || '').trim();
-    if (!typed && !state?.hasFishApiKey) {
-      showToast('Pega tu API Key de Fish Audio para probar la conexión.', 'error');
-      input?.focus();
-      return;
-    }
-    fishKeyTestState = 'testing';
-    fishKeyTestMessage = '';
-    fishKeyCredit = null;
-    renderFishSection('fish');
-    try {
-      const res = await api.fishTestKey(typed);
-      if (res?.valid) {
-        if (typed) {
-          await api.fishSetApiKey(typed);
-          if (input) {
-            input.value = '';
-            input.type = 'password';
+      renderFishSection(getResolvedTtsProvider(state?.tts));
+      try {
+        const res = await api.fishTestKey(typed);
+        if (res?.valid) {
+          if (typed) {
+            await api.fishSetApiKey(typed);
+            if (input) {
+              input.value = '';
+              input.type = 'password';
+            }
+            if (state) state.hasFishApiKey = true;
           }
-          if (state) state.hasFishApiKey = true;
+          fishKeyTestState = 'valid';
+          fishKeyTestMessage = '';
+          fishKeyCredit = res?.credit ?? null;
+          loadFishVoices();
+          showToast('Conexión con Fish Audio verificada');
+        } else {
+          fishKeyTestState = 'invalid';
+          fishKeyTestMessage = res?.error || 'API Key inválida';
+          fishKeyCredit = null;
+          showToast(fishKeyTestMessage, 'error');
         }
-        fishKeyTestState = 'valid';
-        fishKeyTestMessage = '';
-        fishKeyCredit = res?.credit ?? null;
-        loadFishVoices();
-      } else {
+      } catch (err) {
         fishKeyTestState = 'invalid';
-        fishKeyTestMessage = res?.error || 'API Key inválida';
+        fishKeyTestMessage = err?.message || 'Error al probar conexión';
         fishKeyCredit = null;
         showToast(fishKeyTestMessage, 'error');
       }
-    } catch (err) {
-      fishKeyTestState = 'invalid';
-      fishKeyTestMessage = err?.message || 'Error al probar conexión';
-      fishKeyCredit = null;
-      showToast(fishKeyTestMessage, 'error');
+      renderFishSection(getResolvedTtsProvider(state?.tts));
+    });
+
+    if (clearSel) {
+      $(clearSel)?.addEventListener('click', async () => {
+        const confirmed = await confirmAction({
+          title: 'Borrar API Key de Fish Audio',
+          message: 'Se eliminará tu clave guardada de este equipo.',
+          acceptLabel: 'Borrar clave'
+        });
+        if (!confirmed) return;
+        try {
+          await api.fishSetApiKey('');
+          fishKeyTestState = null;
+          fishKeyTestMessage = '';
+          fishKeyCredit = null;
+          if (state) state.hasFishApiKey = false;
+          renderTTS();
+          loadFishVoices();
+          showToast('API Key de Fish Audio eliminada');
+        } catch (err) {
+          showToast(err?.message || 'No se pudo eliminar la API Key', 'error');
+        }
+      });
     }
-    renderFishSection('fish');
+  };
+
+  wireFishKeyControls({
+    inputSel: '#ttsFishApiKey',
+    toggleSel: '#btnToggleFishKey',
+    saveSel: '#btnSaveFishKey',
+    testSel: '#btnTestFishKey'
   });
 
-  $('#btnClearFishKey')?.addEventListener('click', async () => {
-    const confirmed = await confirmAction({
-      title: 'Borrar API Key de Fish Audio',
-      message: 'Se eliminará tu clave guardada de este equipo.',
-      acceptLabel: 'Borrar clave'
-    });
-    if (!confirmed) return;
-    await api.fishSetApiKey('');
-    fishKeyTestState = null;
-    fishKeyTestMessage = '';
-    fishKeyCredit = null;
-    if (state) state.hasFishApiKey = false;
-    renderTTS();
-    loadFishVoices();
+  wireFishKeyControls({
+    inputSel: '#settingsFishApiKey',
+    toggleSel: '#btnToggleSettingsFishKey',
+    saveSel: '#btnSaveSettingsFishKey',
+    testSel: '#btnTestSettingsFishKey',
+    clearSel: '#btnClearFishKey'
+  });
+
+  $('#btnManageFishKeyInSettings')?.addEventListener('click', () => {
+    openDialog('#settingsDialog');
+    $('#settingsFishApiKey')?.focus();
   });
 
   $('#btnClearFishCache')?.addEventListener('click', async () => {
@@ -2670,9 +2878,15 @@ function wireEvents() {
 
   $('#btnTestTTS')?.addEventListener('click', async () => {
     stopFishPreview();
-    await audio.unlock();
-    const currentVoiceId = state?.tts?.voiceId || (state?.tts?.voiceProvider === 'google' ? `google:${state?.tts?.voiceLanguage || 'es-ES'}` : 'local');
-    if (state?.tts?.voiceProvider === 'fish' && !state?.hasFishApiKey) {
+    try {
+      await audio.unlock();
+    } catch (error) {
+      showToast(error.message || 'No se pudo activar el audio', 'error');
+      return;
+    }
+    const currentVoiceId = getResolvedVoiceId(state?.tts);
+    const activeProvider = getResolvedTtsProvider(state?.tts);
+    if (activeProvider === 'fish' && !state?.hasFishApiKey) {
       showToast('Configura tu API Key de Fish Audio para usar esta voz (reproduciendo respaldo).', 'error');
     }
     ttsQueue.enqueue({
@@ -2680,7 +2894,7 @@ function wireEvents() {
       username: 'TikTato',
       type: 'test',
       voiceId: currentVoiceId,
-      voiceProvider: state?.tts?.voiceProvider || 'google',
+      voiceProvider: activeProvider,
       voiceLanguage: state?.tts?.voiceLanguage || 'es-ES',
       fishModel: state?.tts?.fishModel || undefined,
       volume: (state?.masterVolume ?? 0.8) * (state?.tts?.volume ?? 0.8),
@@ -2708,35 +2922,39 @@ function wireEvents() {
     }
   });
 
-  $('#btnSidebarSettings')?.addEventListener('click', () => openDialog('#settingsDialog'));
-  $('#btnSidebarHelp')?.addEventListener('click', () => openDialog('#helpDialog'));
   $('#soundsPlayEveryStreak')?.addEventListener('change', async (e) => {
     const checked = e.target.checked;
-    await api.updateSettings({
-      soundsPlayEveryStreak: checked,
-      sounds: { playEveryStreak: checked }
-    });
+    const ok = await updateSettings({ soundsPlayEveryStreak: checked });
+    if (!ok) e.target.checked = !checked;
   });
 
-  api.onIncomingEvent?.((event) => {
-    handleIncomingEventForTTS(event);
-  });
+  const registerUnsub = (unsub) => {
+    if (typeof unsub === 'function') ipcUnsubscribers.push(unsub);
+  };
 
-  api.onAlert((alert) => {
-    if ((!state?.playInDashboard && !alert?.test) || !alert?.sound) return;
-    const master = alert?.test
-      ? Math.max(0.25, Number(state?.masterVolume ?? 0.8))
-      : Number(state?.masterVolume ?? 0.8);
-    audio.play(alert.sound, master * Number(alert.sound.volume ?? 1));
-  });
+  registerUnsub(
+    api.onIncomingEvent?.((event) => {
+      handleIncomingEventForTTS(event);
+    })
+  );
 
-  api.onState((nextState) => render(nextState));
-  api.onStatus((status) => updateStatus(status));
+  registerUnsub(
+    api.onAlert((alert) => {
+      if ((!state?.playInDashboard && !alert?.test) || !alert?.sound) return;
+      const master = alert?.test
+        ? Math.max(0.25, Number(state?.masterVolume ?? 0.8))
+        : Number(state?.masterVolume ?? 0.8);
+      audio.play(alert.sound, master * Number(alert.sound.volume ?? 1));
+    })
+  );
+
+  registerUnsub(api.onState((nextState) => scheduleRender(nextState)));
+  registerUnsub(api.onStatus((status) => updateStatus(status)));
 
   document.addEventListener(
     'click',
     () => {
-      audio.unlock();
+      Promise.resolve(audio.unlock()).catch(() => {});
     },
     { once: true }
   );
@@ -2759,10 +2977,17 @@ function setupUpdater() {
     btnDownload.textContent = 'Descargando…';
     if (progressWrap) progressWrap.hidden = false;
     try {
-      await api.downloadUpdate?.();
+      const res = await api.downloadUpdate?.();
+      if (res && res.ok === false) {
+        btnDownload.disabled = false;
+        btnDownload.textContent = 'Descargar';
+        if (progressWrap) progressWrap.hidden = true;
+        showToast(res.error || 'Error al descargar la actualización', 'error');
+      }
     } catch (err) {
       btnDownload.disabled = false;
       btnDownload.textContent = 'Descargar';
+      if (progressWrap) progressWrap.hidden = true;
       showToast(err.message || 'Error al descargar la actualización', 'error');
     }
   });
@@ -2777,7 +3002,7 @@ function setupUpdater() {
     banner.hidden = true;
   });
 
-  api.onUpdateStatus((info) => {
+  const unsubUpdate = api.onUpdateStatus((info) => {
     if (!info) return;
     if (info.status === 'available') {
       banner.hidden = false;
@@ -2807,13 +3032,17 @@ function setupUpdater() {
         btnInstall.disabled = false;
       }
     } else if (info.status === 'error') {
+      const errorMsg = info.error || info.message || 'Error al descargar la actualización';
+      if (desc) desc.textContent = errorMsg;
       if (btnDownload) {
         btnDownload.disabled = false;
         btnDownload.textContent = 'Reintentar';
       }
       if (progressWrap) progressWrap.hidden = true;
+      showToast(errorMsg, 'error');
     }
   });
+  if (typeof unsubUpdate === 'function') ipcUnsubscribers.push(unsubUpdate);
 }
 
 const THEME_STORAGE_KEY = 'tiktato.theme';
@@ -2966,18 +3195,42 @@ async function init() {
   setupTabs();
   syncThemeToggle();
   setupUpdater();
+  populateVoiceOptions('local');
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     window.speechSynthesis.onvoiceschanged = () => {
-      const currentVoiceId = state?.tts?.voiceId || (state?.tts?.voiceProvider === 'google' ? `google:${state?.tts?.voiceLanguage || 'es-ES'}` : 'local');
-      populateVoiceOptions(currentVoiceId, state?.tts?.voiceProvider);
+      populateVoiceOptions(getResolvedVoiceId(state?.tts), getResolvedTtsProvider(state?.tts));
     };
   }
+  window.addEventListener('beforeunload', () => {
+    stopThemeClock();
+    stopFishPreview();
+    if (toastTimer) window.clearTimeout(toastTimer);
+    if (toastHideTimer) window.clearTimeout(toastHideTimer);
+    if (giftSearchTimer) window.clearTimeout(giftSearchTimer);
+    if (fishSearchDebounce) window.clearTimeout(fishSearchDebounce);
+    if (renderRafId !== null) window.cancelAnimationFrame(renderRafId);
+    toastTimer = null;
+    toastHideTimer = null;
+    giftSearchTimer = null;
+    fishSearchDebounce = null;
+    renderRafId = null;
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = null;
+    }
+    while (ipcUnsubscribers.length > 0) {
+      const unsub = ipcUnsubscribers.pop();
+      try {
+        unsub?.();
+      } catch {}
+    }
+  });
   if (!api) {
     setError('Esta interfaz debe abrirse dentro de TikTato (Electron).');
     return;
   }
   try {
     state = await api.bootstrap();
+    populateVoiceOptions(getResolvedVoiceId(state?.tts));
     render(state);
     applyConfiguredTheme();
     wireEvents();

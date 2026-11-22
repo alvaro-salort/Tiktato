@@ -54,6 +54,18 @@ function cooldownKey(rule, event) {
   return `${rule.id}:${event.userId || event.username || 'anon'}`;
 }
 
+const ACTIVE_COMBO_STALE_MS = 60_000;
+const activeCombosByCooldowns = new WeakMap();
+
+function getActiveCombos(cooldowns) {
+  let map = activeCombosByCooldowns.get(cooldowns);
+  if (!map) {
+    map = new Map();
+    activeCombosByCooldowns.set(cooldowns, map);
+  }
+  return map;
+}
+
 function isRuleEligible(rule, event, cooldowns, now) {
   if (!rule || rule.enabled === false) return false;
   if (rule.eventType !== event.type) return false;
@@ -76,13 +88,22 @@ function isRuleEligible(rule, event, cooldowns, now) {
 
   if (event.test) return true;
 
+  const key = cooldownKey(rule, event);
   if (event.type === 'gift' && event.repeatEnd === false) {
-    return true;
+    const active = getActiveCombos(cooldowns).get(key);
+    if (active && now - active.lastSeen < ACTIVE_COMBO_STALE_MS) {
+      const eventGroupId = String(event.groupId || '');
+      const sameGroup = !eventGroupId || !active.groupId || eventGroupId === active.groupId;
+      const count = Math.max(1, Number(event.repeatCount) || 1);
+      if (sameGroup && count >= active.lastRepeatCount) {
+        return true;
+      }
+    }
   }
 
   const cooldownMs = Math.max(0, Number(rule.cooldownSeconds) || 0) * 1000;
   if (cooldownMs <= 0) return true;
-  const lastPlayed = cooldowns.get(cooldownKey(rule, event)) || 0;
+  const lastPlayed = cooldowns.get(key) || 0;
   return now - lastPlayed >= cooldownMs;
 }
 
@@ -114,15 +135,32 @@ function selectRule(rules, event, cooldowns = new Map(), now = Date.now()) {
 const MAX_COOLDOWN_ENTRIES = 2000;
 
 function markPlayed(rule, event, cooldowns = new Map(), now = Date.now(), maxEntries = MAX_COOLDOWN_ENTRIES) {
+  const key = cooldownKey(rule, event);
+  const activeCombos = getActiveCombos(cooldowns);
+  const limit = Math.max(1, Number(maxEntries) || MAX_COOLDOWN_ENTRIES);
+
   if (event.type === 'gift' && event.repeatEnd === false) {
+    if (activeCombos.has(key)) {
+      activeCombos.delete(key);
+    }
+    activeCombos.set(key, {
+      groupId: String(event.groupId || ''),
+      lastRepeatCount: Math.max(1, Number(event.repeatCount) || 1),
+      lastSeen: now
+    });
+    while (activeCombos.size > limit) {
+      const oldestKey = activeCombos.keys().next().value;
+      if (oldestKey === undefined) break;
+      activeCombos.delete(oldestKey);
+    }
     return cooldowns;
   }
-  const key = cooldownKey(rule, event);
+
+  activeCombos.delete(key);
   if (cooldowns.has(key)) {
     cooldowns.delete(key);
   }
   cooldowns.set(key, now);
-  const limit = Math.max(1, Number(maxEntries) || MAX_COOLDOWN_ENTRIES);
   while (cooldowns.size > limit) {
     const oldestKey = cooldowns.keys().next().value;
     if (oldestKey === undefined) break;
