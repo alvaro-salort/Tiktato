@@ -90,71 +90,6 @@ const CURATED_FISH_VOICES = [
     description: 'Voz con acento urbano en español.',
     sampleAudioUrl: 'https://platform.r2.fish.audio/task/d5dc752042fe49bbaf389afdb1d10568.mp3'
   }
-  /* Otros idiomas deshabilitados por ahora (solo español activo):
-  ,{
-    referenceId: '90e65eaaf50e4470b8e6d43ee6afd7d5',
-    name: 'Super Smash Announcer',
-    category: 'characters',
-    languages: ['en'],
-    tags: ['male', 'announcer', 'gaming', 'dramatic'],
-    description: 'Anunciador épico de torneos y videojuegos.',
-    sampleAudioUrl: 'https://platform.r2.fish.audio/task/265105e4556b4c0f906b0f426de988da.mp3'
-  },
-  {
-    referenceId: 'd13f84b987ad4f22b56d2b47f4eb838e',
-    name: 'Mortal Kombat Announcer',
-    category: 'characters',
-    languages: ['en'],
-    tags: ['male', 'character-voice', 'deep', 'gaming'],
-    description: 'Voz profunda y dramática de arcade.',
-    sampleAudioUrl: 'https://platform.r2.fish.audio/task/ba41215cabb3430b8f9a153fd720b385.mp3'
-  },
-  {
-    referenceId: '297484e192e0486286d45f3441b5ce1f',
-    name: 'Mr Bean',
-    category: 'characters',
-    languages: ['en'],
-    tags: ['male', 'comedy', 'character'],
-    description: 'Voz cómica de personaje clásico.',
-    sampleAudioUrl: ''
-  },
-  {
-    referenceId: '51987d6290b54b299b3feba6a92c664d',
-    name: 'Bluey',
-    category: 'characters',
-    languages: ['en'],
-    tags: ['cartoon', 'character', 'cheerful'],
-    description: 'Voz animada alegre y familiar.',
-    sampleAudioUrl: ''
-  },
-  {
-    referenceId: '88b15132c1c246f9aa9ae83c48f785ab',
-    name: 'Rhea Ripley (WWE)',
-    category: 'celebrities',
-    languages: ['en'],
-    tags: ['female', 'celebrity', 'wwe', 'confident'],
-    description: 'Voz de celebridad del wrestling.',
-    sampleAudioUrl: ''
-  },
-  {
-    referenceId: '8ec9973300874562962bbcb300f82213',
-    name: 'Guyzo (Acento Italiano)',
-    category: 'accents',
-    languages: ['it', 'en'],
-    tags: ['male', 'accent', 'italian', 'entertainment'],
-    description: 'Voz expresiva con acento italiano.',
-    sampleAudioUrl: 'https://platform.r2.fish.audio/tasks/2026-08-30/f2a5d881409d41ae961a20893a78073f.mp3'
-  },
-  {
-    referenceId: '933563129e564b19a115bedd57b7406a',
-    name: 'Sarah (Conversacional)',
-    category: 'everyday',
-    languages: ['en'],
-    tags: ['female', 'conversational', 'narration'],
-    description: 'Voz clara y natural en inglés.',
-    sampleAudioUrl: 'https://platform.r2.fish.audio/task/4e204945670c460c86fdab57512cb308.mp3'
-  }
-  */
 ].map((voice) => ({
   ...voice,
   id: `fish:${voice.referenceId}`,
@@ -234,7 +169,9 @@ class FishAudioService {
     maxMemoryBytes = 15 * 1024 * 1024,
     maxDiskEntries = 150,
     maxDiskBytes = 40 * 1024 * 1024,
-    diskTtlMs = 24 * 60 * 60 * 1000
+    diskTtlMs = 24 * 60 * 60 * 1000,
+    diskPruneIntervalMs = 60_000,
+    synthesizeTimeoutMs = 8_000
   } = {}) {
     this.userDataDir = userDataDir || '';
     this.cacheDir = this.userDataDir ? path.join(this.userDataDir, 'tts-cache') : '';
@@ -245,10 +182,16 @@ class FishAudioService {
     this.maxDiskEntries = Math.max(1, Number(maxDiskEntries) || 150);
     this.maxDiskBytes = Math.max(1024, Number(maxDiskBytes) || 40 * 1024 * 1024);
     this.diskTtlMs = Math.max(60_000, Number(diskTtlMs) || 24 * 60 * 60 * 1000);
+    const parsedPrune = Number(diskPruneIntervalMs);
+    this.diskPruneIntervalMs = Number.isFinite(parsedPrune) && parsedPrune >= 0 ? parsedPrune : 60_000;
+    const parsedTimeout = Number(synthesizeTimeoutMs);
+    this.synthesizeTimeoutMs = Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 8_000;
 
     this.memoryCache = new Map();
     this.memoryBytes = 0;
     this.inFlight = new Map();
+    this.lastDiskPruneAt = 0;
+    this.diskWriteQueue = Promise.resolve();
   }
 
   getCuratedVoices({ query = '', category = 'all', language = '' } = {}) {
@@ -509,6 +452,18 @@ class FishAudioService {
     }
   }
 
+  #enqueueDiskWrite(key, buffer) {
+    if (!this.cacheDir || !Buffer.isBuffer(buffer) || buffer.length === 0) return;
+    if (buffer.length > this.maxDiskBytes) return;
+    this.diskWriteQueue = this.diskWriteQueue
+      .catch(() => {})
+      .then(() => this.#setDiskCache(key, buffer));
+  }
+
+  async flushDiskCache() {
+    await this.diskWriteQueue.catch(() => {});
+  }
+
   async #setDiskCache(key, buffer) {
     if (!this.cacheDir || !Buffer.isBuffer(buffer) || buffer.length === 0) return;
     if (buffer.length > this.maxDiskBytes) return;
@@ -519,7 +474,11 @@ class FishAudioService {
       await fs.promises.mkdir(this.cacheDir, { recursive: true });
       await fs.promises.writeFile(temp, buffer);
       await fs.promises.rename(temp, file);
-      await this.#pruneDiskCache();
+      const now = Date.now();
+      if (now - this.lastDiskPruneAt >= this.diskPruneIntervalMs) {
+        this.lastDiskPruneAt = now;
+        await this.#pruneDiskCache();
+      }
     } catch (error) {
       await fs.promises.unlink(temp).catch(() => {});
       this.logger?.warn?.('[fish-audio] no se pudo guardar caché en disco', error?.message || error);
@@ -572,6 +531,7 @@ class FishAudioService {
   async clearCache() {
     this.memoryCache.clear();
     this.memoryBytes = 0;
+    await this.flushDiskCache();
     if (!this.cacheDir) return { ok: true };
     try {
       const names = await fs.promises.readdir(this.cacheDir);
@@ -587,6 +547,7 @@ class FishAudioService {
   }
 
   async getCacheStats() {
+    await this.flushDiskCache();
     let diskEntries = 0;
     let diskBytes = 0;
     if (this.cacheDir) {
@@ -703,7 +664,7 @@ class FishAudioService {
             model: cleanModel
           },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(15_000)
+          signal: AbortSignal.timeout(this.synthesizeTimeoutMs)
         });
 
         if (response.status === 401 || response.status === 403) {
@@ -748,7 +709,7 @@ class FishAudioService {
         }
 
         this.#setMemoryCache(cacheKey, buffer);
-        await this.#setDiskCache(cacheKey, buffer);
+        this.#enqueueDiskWrite(cacheKey, buffer);
 
         return {
           ok: true,

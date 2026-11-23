@@ -1,8 +1,10 @@
 const { EventEmitter } = require('node:events');
 const { createStreakTracker, normalizeTikTokEvent } = require('./events.cjs');
+const { detectSystemLanguage, detectSystemRegion } = require('./gifts-catalog.cjs');
 
 const MAX_BACKLOG_CHAT = 5;
 const MAX_SEEN_MSG_IDS = 2000;
+const CHAT_DEDUP_WINDOW_MS = 3_000;
 
 function cleanUsername(input) {
   return String(input || '')
@@ -62,13 +64,15 @@ function sessionCookie(sessionId, ttTargetIdc) {
 }
 
 async function resolveRoomId(username, cookie = '', options = {}) {
+  const lang = detectSystemLanguage();
+  const region = detectSystemRegion();
   const params = new URLSearchParams({
     aid: '1988',
     app_name: 'tiktok_web',
     device_platform: 'web_pc',
-    app_language: 'es',
-    browser_language: 'es',
-    region: 'ES',
+    app_language: lang,
+    browser_language: lang,
+    region,
     user_is_login: cookie ? 'true' : 'false',
     sourceType: '54',
     staleTime: '600000',
@@ -161,6 +165,7 @@ class TikTokService extends EventEmitter {
     this.lastConnectArgs = null;
     this.streakTracker = createStreakTracker();
     this.seenMsgIds = new Set();
+    this.recentChatFingerprints = new Map();
     this.trackedRoomKey = '';
     this.isBacklogPhase = false;
     this.backlogBuffer = [];
@@ -279,8 +284,45 @@ class TikTokService extends EventEmitter {
     }
   }
 
-  ingestEvent(type, data) {
-    const event = normalizeTikTokEvent(type, data, Date.now(), {
+  #isDuplicateChat(event, now) {
+    if (event?.type !== 'chat') return false;
+    const normalizedText = String(event.comment || event.message || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+    if (!normalizedText) return false;
+
+    const userId = String(event.userId || '').trim().toLowerCase();
+    const username = String(event.username || '').trim().toLowerCase();
+    const keys = [];
+    if (username) keys.push(`u:${username}:${normalizedText}`);
+    if (userId && userId !== username) keys.push(`id:${userId}:${normalizedText}`);
+    if (keys.length === 0) return false;
+
+    for (const key of keys) {
+      const lastSeen = this.recentChatFingerprints.get(key);
+      if (lastSeen !== undefined && now >= lastSeen && now - lastSeen < CHAT_DEDUP_WINDOW_MS) {
+        return true;
+      }
+    }
+    for (const key of keys) {
+      this.recentChatFingerprints.delete(key);
+      this.recentChatFingerprints.set(key, now);
+    }
+    if (this.recentChatFingerprints.size > 500) {
+      for (const [entryKey, ts] of this.recentChatFingerprints.entries()) {
+        if (now - ts >= CHAT_DEDUP_WINDOW_MS || this.recentChatFingerprints.size > 500) {
+          this.recentChatFingerprints.delete(entryKey);
+        } else {
+          break;
+        }
+      }
+    }
+    return false;
+  }
+
+  ingestEvent(type, data, now = Date.now()) {
+    const event = normalizeTikTokEvent(type, data, now, {
       ...this.options,
       streakTracker: this.streakTracker
     });
@@ -314,6 +356,10 @@ class TikTokService extends EventEmitter {
       return null;
     }
 
+    if (this.#isDuplicateChat(event, now)) {
+      return null;
+    }
+
     const isHistorical = Boolean(data?.isHistory || data?.common?.isHistory);
     if (event.type === 'chat' && (this.isBacklogPhase || isHistorical)) {
       this.backlogBuffer.push(event);
@@ -330,30 +376,27 @@ class TikTokService extends EventEmitter {
 
   #startPolling({ initialDelayMs = 0 } = {}) {
     this.#stopPolling();
+    if (this.status.state === 'connected') return;
     let secondsLeft = 20;
-    let connectedPollSeconds = 20;
 
     const tick = () => {
-      if (this.intentionalDisconnect || !this.lastConnectArgs) {
+      if (this.intentionalDisconnect || !this.lastConnectArgs || this.status.state === 'connected') {
         this.#stopPolling();
         return;
       }
-      if (this.status.state !== 'connected') {
-        this.#setStatus({
-          state: 'connecting',
-          reconnecting: true,
-          retryIn: secondsLeft,
-          message: `Buscando directo... reintentando en ${secondsLeft}s`
-        });
-      }
+      this.#setStatus({
+        state: 'connecting',
+        reconnecting: true,
+        retryIn: secondsLeft,
+        message: `Buscando directo... reintentando en ${secondsLeft}s`
+      });
     };
 
     const run = () => {
-      if (this.status.state !== 'connected') {
-        tick();
-      }
+      if (this.status.state === 'connected') return;
+      tick();
       this.pollTimer = setInterval(async () => {
-        if (this.intentionalDisconnect || !this.lastConnectArgs) {
+        if (this.intentionalDisconnect || !this.lastConnectArgs || this.status.state === 'connected') {
           this.#stopPolling();
           return;
         }
@@ -361,27 +404,6 @@ class TikTokService extends EventEmitter {
         this.pollingInFlight = true;
 
         try {
-          if (this.status.state === 'connected') {
-            connectedPollSeconds--;
-            if (connectedPollSeconds <= 0) {
-              connectedPollSeconds = 20;
-              const clean = cleanUsername(this.lastConnectArgs.username);
-              if (!clean) return;
-              const cookie = sessionCookie(this.lastConnectArgs.sessionId, this.lastConnectArgs.ttTargetIdc);
-              const savedArgs = { ...this.lastConnectArgs };
-              try {
-                const latestRoomId = await resolveRoomId(clean, cookie);
-                if (latestRoomId && this.status.roomId && latestRoomId !== this.status.roomId) {
-                  this.logger.info?.(`[tiktok] sala cambió de ${this.status.roomId} a ${latestRoomId}, reconectando…`);
-                  await this.connect({ ...savedArgs, roomId: latestRoomId });
-                }
-              } catch (error) {
-                this.logger.warn?.('[tiktok] error comprobando cambio de sala', error);
-              }
-            }
-            return;
-          }
-
           secondsLeft--;
           if (secondsLeft > 0) {
             tick();
@@ -461,6 +483,7 @@ class TikTokService extends EventEmitter {
     await this.disconnect({ preserveHistory: isSameRoomTarget });
     if (!isSameRoomTarget) {
       this.seenMsgIds.clear();
+      this.recentChatFingerprints.clear();
       this.streakTracker.reset();
       this.trackedRoomKey = nextRoomKey;
     }
@@ -632,6 +655,7 @@ class TikTokService extends EventEmitter {
 
       if (this.status.roomId && this.status.roomId !== connectedRoomId) {
         this.seenMsgIds.clear();
+        this.recentChatFingerprints.clear();
         this.streakTracker.reset();
       }
       this.trackedRoomKey = `${clean.toLowerCase()}:${manualRoom}`;
@@ -646,7 +670,7 @@ class TikTokService extends EventEmitter {
         viewerCount: 0
       });
       this.logger.info?.(`[tiktok] conectado a ${clean ? `@${clean}` : 'sala manual'} roomId=${connectedRoomId}`);
-      this.#startPolling();
+      this.#stopPolling();
       return this.getStatus();
     } catch (error) {
       this.#cleanupClient(client);
@@ -677,6 +701,7 @@ class TikTokService extends EventEmitter {
     this.backlogBuffer = [];
     if (!preserveHistory) {
       this.seenMsgIds.clear();
+      this.recentChatFingerprints.clear();
       this.streakTracker.reset();
       this.trackedRoomKey = '';
     }

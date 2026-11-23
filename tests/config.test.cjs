@@ -8,7 +8,7 @@ const {
   deleteSoundFile,
   flushConfigSave,
   hasPendingConfigSave,
-  importSound,
+  importSoundAsync,
   loadConfig,
   normalizeConfig,
   publicConfig,
@@ -60,12 +60,12 @@ test('permite guardar una lista vacía de reglas', () => {
   }
 });
 
-test('importa, publica y elimina un sonido', () => {
+test('importa, publica y elimina un sonido', async () => {
   const dir = tempDir();
   try {
     const source = path.join(dir, 'sample.mp3');
     fs.writeFileSync(source, Buffer.from('fake mp3'));
-    const sound = importSound(dir, source, 'Mi sonido');
+    const sound = await importSoundAsync(dir, source, 'Mi sonido');
     assert.match(sound.id, /^sound_/);
     assert.equal(sound.name, 'Mi sonido');
     assert.equal(fs.existsSync(path.join(soundsDir(dir), sound.filename)), true);

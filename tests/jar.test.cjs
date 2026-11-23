@@ -1165,3 +1165,46 @@ test('jar.js: tope de cola/combos, acumulador fuera de topN, hidratación tras f
   assert.equal(bodies[0].render.sprite, undefined);
   assert.ok(ctxOps.includes('drawImage'));
 });
+
+test('jar.js espera loadGiftCatalog antes de loadState y usa catálogo o Rosa en botones de prueba, rehidratación y alertas sin coin-icon.svg', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const jarSource = fs.readFileSync(path.join(__dirname, '..', 'overlay', 'jar.js'), 'utf8');
+
+  assert.match(jarSource, /await loadGiftCatalog\(\);\s*await loadState\(\);/);
+  const setupTestBlock = jarSource.match(/function setupTestMode\(\)[\s\S]*?function scheduleQueueLoop\(\)/);
+  assert.ok(setupTestBlock);
+  assert.doesNotMatch(setupTestBlock[0], /\/assets\/coin-icon\.svg/);
+
+  const testVm = createJarVmSandbox({ search: '?test=1', pathname: '/jar' });
+  const catalogRose = 'https://cdn.example.com/fresh-rose.webp';
+  const catalogGalaxy = 'https://cdn.example.com/fresh-galaxy.webp';
+  testVm.api.applyConfig({
+    gifts: [
+      { id: '5655', name: 'Rosa', nameEn: 'Rose', imageUrl: catalogRose },
+      { id: '11046', name: 'Galaxia', nameEn: 'Galaxy', imageUrl: catalogGalaxy }
+    ]
+  });
+
+  testVm.getEl('#btnTestRose').click();
+  testVm.getEl('#btnTestGalaxy').click();
+  testVm.getEl('#btnTestUniverse').click();
+  const queued = testVm.api.getQueue();
+  assert.equal(queued.length, 3);
+  assert.equal(queued[0].giftPictureUrl, catalogRose);
+  assert.equal(queued[1].giftPictureUrl, catalogGalaxy);
+  assert.equal(queued[2].giftPictureUrl, catalogRose);
+
+  // Rehidratación con recentGifts sin imageUrl resuelve desde el catálogo cargado antes de caer a Rosa
+  const plan = testVm.api.buildRehydrationPlan(1000, [{ name: 'Galaxia', coins: 1000, imageUrl: '' }]);
+  assert.equal(plan[0].giftPictureUrl, catalogGalaxy);
+
+  // showAlert con giftPictureUrl vacío usa respaldo Rosa (sin coin-icon.svg) y restaura visibilidad
+  testVm.api.resetJar();
+  testVm.getEl('#alertGiftIcon').hidden = true;
+  testVm.api.enqueueGift({ giftId: 'unknown', value: 5, giftName: 'Especial', giftPictureUrl: '', repeatCount: 1, username: 'ana' });
+  testVm.api.processQueueTick();
+  assert.equal(testVm.getEl('#alertGiftIcon').src, catalogRose);
+  assert.equal(testVm.getEl('#alertGiftIcon').hidden, false);
+  assert.notEqual(testVm.getEl('#alertGiftIcon').src, '/assets/coin-icon.svg');
+});

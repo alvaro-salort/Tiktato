@@ -55,7 +55,7 @@ test('los chips presets abren el formulario de regla sin guardar silenciosamente
   const presetBlock = appJs.match(/\$\('#giftPresets'\)\?\.addEventListener\('click'[\s\S]*?\$\('#giftQuickList'\)/);
   assert.ok(presetBlock, 'Debe existir el handler de giftPresets');
   assert.doesNotMatch(presetBlock[0], /await\s+saveRules\(/, 'No debe auto-guardar sin confirmación del usuario');
-  assert.match(presetBlock[0], /openRuleForm\(savedRule \|\| newRule\)/);
+  assert.match(presetBlock[0], /openRuleForm\(newRule\)/);
 });
 
 test('app.js deshabilita btnConnect y username cuando está conectado o reconectando', () => {

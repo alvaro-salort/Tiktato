@@ -292,3 +292,50 @@ test('rechaza Range malformado (416), WS con Origin externo (403), path traversa
   }
 });
 
+test('compatibilidad TikTok LIVE Studio: sin frame-ancestors none, acepta Origin null con token y distingue clientes jar vs overlay', async () => {
+  const { server, sounds } = makeServer();
+  try {
+    await server.start();
+    const port = server.port;
+
+    const overlayRes = await fetch(`http://127.0.0.1:${port}/overlay`);
+    const overlayCsp = overlayRes.headers.get('content-security-policy') || '';
+    assert.doesNotMatch(overlayCsp, /frame-ancestors\s+'none'/i);
+
+    const jarRes = await fetch(`http://127.0.0.1:${port}/jar`);
+    const jarCsp = jarRes.headers.get('content-security-policy') || '';
+    assert.doesNotMatch(jarCsp, /frame-ancestors\s+'none'/i);
+
+    // WS con Origin: 'null' y token válido debe conectar
+    const wsNullOrigin = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${token}&client=jar`, {
+      headers: { Origin: 'null' }
+    });
+    await new Promise((resolve, reject) => {
+      wsNullOrigin.once('open', resolve);
+      wsNullOrigin.once('error', reject);
+    });
+    assert.equal(server.hasAlertOverlayClients(), false);
+
+    // WS con Origin: 'null' SIN token debe ser rechazado (401)
+    const wsNullNoToken = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { Origin: 'null' }
+    });
+    const noTokenErr = await new Promise((resolve) => wsNullNoToken.once('error', resolve));
+    assert.match(noTokenErr.message, /401/);
+
+    // Conectar un overlay de alertas activa hasAlertOverlayClients()
+    const wsOverlay = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${token}&client=overlay`);
+    await new Promise((resolve, reject) => {
+      wsOverlay.once('open', resolve);
+      wsOverlay.once('error', reject);
+    });
+    assert.equal(server.hasAlertOverlayClients(), true);
+
+    wsOverlay.close();
+    wsNullOrigin.close();
+  } finally {
+    await server.stop();
+    fs.rmSync(sounds, { recursive: true, force: true });
+  }
+});
+

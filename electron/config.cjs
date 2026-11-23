@@ -11,7 +11,16 @@ const BUILTIN_IDS = [
   'builtin:horn',
   'builtin:drum'
 ];
-const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.webm']);
+const AUDIO_MIME_TYPES = {
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.flac': 'audio/flac',
+  '.webm': 'audio/webm'
+};
+const AUDIO_EXTENSIONS = new Set(Object.keys(AUDIO_MIME_TYPES));
 const MAX_SOUND_BYTES = 30 * 1024 * 1024;
 
 function makeId(prefix) {
@@ -113,7 +122,7 @@ function createDefaultConfig() {
       ducking: true,
       duckingLevel: 0.25,
       antiSpam: true,
-      playEveryStreak: true,
+      playEveryStreak: false,
       maxChars: 120,
       filterChatByRole: false,
       allowModerators: true,
@@ -329,7 +338,7 @@ function normalizeTts(input) {
     ducking: tts.ducking !== false,
     duckingLevel: clampNumber(tts.duckingLevel, defaults.duckingLevel, 0, 1),
     antiSpam: tts.antiSpam !== undefined ? Boolean(tts.antiSpam) : true,
-    playEveryStreak: tts.playEveryStreak !== false,
+    playEveryStreak: tts.playEveryStreak === true,
     maxChars: Math.round(clampNumber(tts.maxChars, defaults.maxChars, 20, 500)),
     filterChatByRole: tts.filterChatByRole === true,
     allowModerators: tts.allowModerators !== false,
@@ -390,8 +399,6 @@ function normalizeConfig(input) {
     sounds,
     soundsPlayEveryStreak
   };
-  delete result.fishApiKey;
-  return result;
 }
 
 function configPath(userDataDir) {
@@ -645,29 +652,7 @@ async function importSoundAsync(userDataDir, sourcePath, displayName) {
     id,
     name: String(displayName || path.basename(sourcePath, extension)).trim().slice(0, 80) || 'Sonido',
     filename,
-    mime: mimeForExtension(extension),
-    size: stats.size,
-    createdAt: new Date().toISOString()
-  };
-}
-
-function importSound(userDataDir, sourcePath, displayName) {
-  const stats = fs.statSync(sourcePath);
-  if (!stats.isFile()) throw new Error('El archivo seleccionado no es válido.');
-  if (stats.size > MAX_SOUND_BYTES) throw new Error('El sonido supera el límite de 30 MB.');
-  const extension = path.extname(sourcePath).toLowerCase();
-  if (!AUDIO_EXTENSIONS.has(extension)) {
-    throw new Error('Formato no compatible. Usa MP3, WAV, OGG, M4A, AAC, FLAC o WEBM.');
-  }
-  ensureDirectories(userDataDir);
-  const id = makeId('sound');
-  const filename = `${id}${extension}`;
-  fs.copyFileSync(sourcePath, path.join(soundsDir(userDataDir), filename));
-  return {
-    id,
-    name: String(displayName || path.basename(sourcePath, extension)).trim().slice(0, 80) || 'Sonido',
-    filename,
-    mime: mimeForExtension(extension),
+    mime: AUDIO_MIME_TYPES[extension] || 'application/octet-stream',
     size: stats.size,
     createdAt: new Date().toISOString()
   };
@@ -677,19 +662,6 @@ function deleteSoundFile(userDataDir, sound) {
   if (!sound || !sound.filename) return;
   const file = path.join(soundsDir(userDataDir), path.basename(sound.filename));
   if (fs.existsSync(file)) fs.unlinkSync(file);
-}
-
-function mimeForExtension(extension) {
-  const map = {
-    '.mp3': 'audio/mpeg',
-    '.wav': 'audio/wav',
-    '.ogg': 'audio/ogg',
-    '.m4a': 'audio/mp4',
-    '.aac': 'audio/aac',
-    '.flac': 'audio/flac',
-    '.webm': 'audio/webm'
-  };
-  return map[extension] || 'application/octet-stream';
 }
 
 function publicJar(config) {
@@ -753,6 +725,7 @@ function publicConfig(config, { overlayUrl } = {}) {
 
 module.exports = {
   AUDIO_EXTENSIONS,
+  AUDIO_MIME_TYPES,
   BUILTIN_IDS,
   EVENT_TYPES,
   MAX_SOUND_BYTES,
@@ -763,7 +736,6 @@ module.exports = {
   deleteSoundFile,
   flushConfigSave,
   hasPendingConfigSave,
-  importSound,
   importSoundAsync,
   loadConfig,
   normalizeConfig,

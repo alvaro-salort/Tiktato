@@ -999,8 +999,6 @@ function updateTotalCoinsHud() {
 }
 
 /* ───────── HUD: LEADERBOARD ROTATIVO (Sección 8.2) ───────── */
-const MAX_STORED_DONORS = 20;
-
 function getRankLimit() {
   if (currentConfig.numberOfRanks === 'top3') return 3;
   if (currentConfig.numberOfRanks === 'top10') return 10;
@@ -1037,15 +1035,6 @@ function updateLeaderboardWithGift(username, displayName, avatarUrl, coins) {
   renderCurrentLeaderboardItem();
 }
 
-function getRankLimit() {
-  if (currentConfig.numberOfRanks === 'top3') return 3;
-  if (currentConfig.numberOfRanks === 'top10') return 10;
-  return 5;
-}
-
-function getVisibleDonors() {
-  return topDonorsList.slice(0, getRankLimit());
-}
 function renderCurrentLeaderboardItem() {
   if (!leaderboardBox) return;
   if (currentConfig.displayLeaderboard === false) {
@@ -1166,16 +1155,20 @@ function showAlert(item) {
   alertCoinsValue.textContent = `(${formatNumber(totalValue)} ${coinWord})`;
 
   const safeGiftUrl = isSafeImageUrl(item.giftPictureUrl) ? item.giftPictureUrl.trim() : '';
+  const roseFallback = getRoseFallbackUrl();
   if (safeGiftUrl) {
     alertGiftIcon.onerror = () => {
       alertGiftIcon.onerror = null;
-      alertGiftIcon.src = '/assets/coin-icon.svg';
+      if (alertGiftIcon.src !== roseFallback) {
+        alertGiftIcon.src = roseFallback;
+      }
     };
     alertGiftIcon.src = safeGiftUrl;
     alertGiftIcon.hidden = false;
   } else {
     alertGiftIcon.onerror = null;
-    alertGiftIcon.src = '/assets/coin-icon.svg';
+    alertGiftIcon.src = roseFallback;
+    alertGiftIcon.hidden = false;
   }
 
   const safeProfileUrl = isSafeImageUrl(item.profilePictureUrl) ? item.profilePictureUrl.trim() : '';
@@ -1260,8 +1253,11 @@ function buildRehydrationPlan(totalCoins, recentGifts = []) {
     if (giftCoins <= remaining) {
       plan.push({
         singleValue: giftCoins,
+        giftId: gift?.giftId || '',
         giftName: gift?.name || 'Regalo',
-        giftPictureUrl: isSafeImageUrl(gift?.imageUrl) ? gift.imageUrl : getRoseFallbackUrl()
+        giftPictureUrl: isSafeImageUrl(gift?.imageUrl)
+          ? gift.imageUrl
+          : resolveTestGiftPictureUrl(gift?.giftId, gift?.name)
       });
       remaining -= giftCoins;
     }
@@ -1462,7 +1458,7 @@ function connect() {
   }
 
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const ws = new WebSocket(`${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+  const ws = new WebSocket(`${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}&client=jar`);
   socket = ws;
 
   ws.addEventListener('open', () => {
@@ -1516,6 +1512,14 @@ function connect() {
 }
 
 /* ───────── MODO DE PRUEBA / DEMO ───────── */
+function resolveTestGiftPictureUrl(giftId, giftName) {
+  return (
+    (giftId ? giftCatalogMap.get(`id:${String(giftId).trim().toLowerCase()}`) : '') ||
+    (giftName ? giftCatalogMap.get(`name:${String(giftName).trim().toLowerCase()}`) : '') ||
+    getRoseFallbackUrl()
+  );
+}
+
 function setupTestMode() {
   if (testHud) {
     testHud.hidden = !isTestMode;
@@ -1527,7 +1531,7 @@ function setupTestMode() {
       giftId: '5655',
       value: 1,
       giftName: 'Rosa',
-      giftPictureUrl: '/assets/coin-icon.svg',
+      giftPictureUrl: resolveTestGiftPictureUrl('5655', 'Rosa'),
       repeatCount: 1,
       username: 'ViewerDePrueba',
       displayName: 'Viewer de Prueba',
@@ -1540,7 +1544,7 @@ function setupTestMode() {
       giftId: '5655',
       value: 1,
       giftName: 'Rosa',
-      giftPictureUrl: '/assets/coin-icon.svg',
+      giftPictureUrl: resolveTestGiftPictureUrl('5655', 'Rosa'),
       repeatCount: 10,
       username: 'ComboMaster',
       displayName: 'Combo Master 🔥',
@@ -1550,10 +1554,10 @@ function setupTestMode() {
 
   $('#btnTestGalaxy')?.addEventListener('click', () => {
     enqueueGift({
-      giftId: '1000_galaxy',
+      giftId: '11046',
       value: 1000,
       giftName: 'Galaxia',
-      giftPictureUrl: '/assets/coin-icon.svg',
+      giftPictureUrl: resolveTestGiftPictureUrl('11046', 'Galaxia'),
       repeatCount: 1,
       username: 'GalacticWhale',
       displayName: 'Galactic Whale 🌌',
@@ -1566,7 +1570,7 @@ function setupTestMode() {
       giftId: '44999_universe',
       value: 44999,
       giftName: 'TikTok Universe',
-      giftPictureUrl: '/assets/coin-icon.svg',
+      giftPictureUrl: resolveTestGiftPictureUrl('44999_universe', 'TikTok Universe'),
       repeatCount: 1,
       username: 'SuperVIP',
       displayName: 'Super VIP 👑',
@@ -1591,10 +1595,10 @@ function setupTestMode() {
   const sampleGifts = [
     { giftId: '5655', value: 1, giftName: 'Rosa', repeatCount: 1, username: 'RosaFan' },
     { giftId: '5655', value: 1, giftName: 'Rosa', repeatCount: 5, username: 'ComboFan' },
-    { giftId: '5_finger_heart', value: 5, giftName: 'Dedo Corazón', repeatCount: 1, username: 'Corazonero' },
-    { giftId: '99_cap', value: 99, giftName: 'Gorra TikTato', repeatCount: 1, username: 'ModGamer' },
-    { giftId: '500_money_gun', value: 500, giftName: 'Máquina de dinero', repeatCount: 1, username: 'DonanteTop' },
-    { giftId: '1000_galaxy', value: 1000, giftName: 'Galaxia', repeatCount: 1, username: 'ElenaLive' }
+    { giftId: '5487', value: 5, giftName: 'Corazón coreano', repeatCount: 1, username: 'Corazonero' },
+    { giftId: '6104', value: 99, giftName: 'Gorra', repeatCount: 1, username: 'ModGamer' },
+    { giftId: '7168', value: 500, giftName: 'Pistola de dinero', repeatCount: 1, username: 'DonanteTop' },
+    { giftId: '11046', value: 1000, giftName: 'Galaxia', repeatCount: 1, username: 'ElenaLive' }
   ];
 
   if (isTestMode || isStudioMode) {
@@ -1603,7 +1607,7 @@ function setupTestMode() {
       const randomItem = sampleGifts[Math.floor(Math.random() * sampleGifts.length)];
       enqueueGift({
         ...randomItem,
-        giftPictureUrl: '/assets/coin-icon.svg',
+        giftPictureUrl: resolveTestGiftPictureUrl(randomItem.giftId, randomItem.giftName),
         displayName: randomItem.username,
         profilePictureUrl: ''
       });
@@ -1629,7 +1633,8 @@ function scheduleQueueLoop() {
   initPhysics();
   setupStudioMode();
   setupTestMode();
-  await Promise.all([loadState(), loadGiftCatalog()]);
+  await loadGiftCatalog();
+  await loadState();
   connect();
   renderCurrentLeaderboardItem();
   startLeaderboardCarousel();

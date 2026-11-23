@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const { WebSocketServer, WebSocket } = require('ws');
+const { AUDIO_MIME_TYPES } = require('./config.cjs');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -15,13 +16,7 @@ const MIME = {
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
   '.gif': 'image/gif',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg',
-  '.m4a': 'audio/mp4',
-  '.aac': 'audio/aac',
-  '.flac': 'audio/flac',
-  '.webm': 'audio/webm'
+  ...AUDIO_MIME_TYPES
 };
 
 function tokenMatches(expected, received) {
@@ -224,8 +219,14 @@ class OverlayServer {
   async start() {
     if (this.server) return this.port;
     this.wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
-    this.wss.on('connection', (socket) => {
+    this.wss.on('connection', (socket, request) => {
       socket.isAlive = true;
+      let clientType = 'overlay';
+      try {
+        const reqUrl = new URL(request?.url || '/', `http://127.0.0.1:${this.port || 3477}`);
+        if (reqUrl.searchParams.get('client') === 'jar') clientType = 'jar';
+      } catch {}
+      socket.clientType = clientType;
       this.clients.add(socket);
       this.#send(socket, { type: 'hello', config: this.config, jar: this.jar, gifts: this.gifts });
       socket.on('pong', () => {
@@ -334,7 +335,7 @@ class OverlayServer {
     }
 
     const overlayCsp =
-      "default-src 'self' https: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; media-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; object-src 'none'; frame-ancestors 'none';";
+      "default-src 'self' https: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; media-src 'self' http://127.0.0.1:* http://localhost:* https: data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; object-src 'none';";
 
     if (pathname === '/health') {
       sendJson(response, 200, { ok: true, service: 'tiktato-overlay', clients: this.clients.size }, { origin: allowedOrigin });
@@ -463,11 +464,11 @@ class OverlayServer {
       return;
     }
 
-    const origin = String(request.headers.origin || '').toLowerCase();
+    const origin = String(request.headers.origin || '').trim().toLowerCase();
     const activePort = this.port || 3477;
     const localOrigin = `http://127.0.0.1:${activePort}`;
     const localhostOrigin = `http://localhost:${activePort}`;
-    if (origin && origin !== localOrigin && origin !== localhostOrigin) {
+    if (origin && origin !== 'null' && origin !== localOrigin && origin !== localhostOrigin) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
       return;
@@ -476,6 +477,15 @@ class OverlayServer {
     this.wss.handleUpgrade(request, socket, head, (websocket) => {
       this.wss.emit('connection', websocket, request);
     });
+  }
+
+  hasAlertOverlayClients() {
+    for (const client of this.clients) {
+      if (client.readyState === WebSocket.OPEN && client.clientType !== 'jar') {
+        return true;
+      }
+    }
+    return false;
   }
 
   setConfig(config) {

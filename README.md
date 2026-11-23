@@ -2,112 +2,40 @@
 
 [![Versión](https://img.shields.io/github/v/release/alvaro-salort/Tiktato?style=for-the-badge&logo=github&logoColor=white&color=2ea44f&label=VERSION)](https://github.com/alvaro-salort/Tiktato/releases/latest)
 [![Descargas](https://img.shields.io/github/downloads/alvaro-salort/Tiktato/total?style=for-the-badge&logo=windows&logoColor=white&color=0078D4&label=DESCARGAS)](https://github.com/alvaro-salort/Tiktato/releases)
-[![TikTok LIVE](https://img.shields.io/badge/TIKTOK_LIVE-GRATIS-010101?style=for-the-badge&logo=tiktok&logoColor=white)](https://github.com/alvaro-salort/Tiktato)
 [![Licencia](https://img.shields.io/badge/LICENCIA-GPLv3-E95420?style=for-the-badge&logo=gnu&logoColor=white)](LICENSE)
-[![OBS Ready](https://img.shields.io/badge/OBS_STUDIO-OVERLAYS-302E31?style=for-the-badge&logo=obsstudio&logoColor=white)](https://github.com/alvaro-salort/Tiktato)
 
-**TikTato** es una aplicación de escritorio de código abierto diseñada para streamers de **TikTok LIVE** que permite automatizar y configurar alertas de sonido, overlays para **OBS Studio** y **TikTok LIVE Studio**, leer los mensajes del chat con voz (TTS) e interactuar con la audiencia en tiempo real, sin suscripciones ni paywalls.
+App de escritorio gratuita y de código abierto para Windows. Conecta tu directo de TikTok LIVE con alertas de sonido, overlays y voz en tiempo real para OBS Studio y TikTok LIVE Studio.
 
-> Proyecto independiente de código abierto (GPLv3). No está afiliado a TikTok. Úsalo solo con directos y cuentas que tengas derecho a gestionar.
+> Proyecto independiente bajo GPLv3, sin afiliación con TikTok. Úsalo solo en directos y cuentas que tengas derecho a gestionar.
 
 ## Descargar
 
-- [Instalador de Windows v1.3.1 (`Tiktato-Setup-1.3.1.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
-- [Versión portable v1.3.1 (`Tiktato-Portable-1.3.1.exe`)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+- [Instalador de Windows (NSIS, con actualizaciones automáticas)](https://github.com/alvaro-salort/Tiktato/releases/latest)
+- [Versión portable para Windows](https://github.com/alvaro-salort/Tiktato/releases/latest)
 
-También puedes ejecutarlo desde el código fuente con `npm install` y `npm start`.
+Requiere Windows 10 u 11 de 64 bits.
 
-![Panel principal de TikTato en tema claro](docs/dashboard.png)
+![Panel principal de TikTato](docs/dashboard.png)
 
-![El mismo panel en modo oscuro](docs/dashboard-dark.png)
+## Qué hace
 
-## Novedades de la versión 1.3.0
-
-- **Nuevo nombre e identidad**: TikTato estrena logo (la papa dentro del anillo REC) en la app, el instalador, los overlays y el icono de Windows.
-- **Modo oscuro automático**: el tema sigue la hora del equipo (oscuro de 20:00 a 07:00). Podés fijar claro u oscuro desde la barra lateral o en **Ajustes → Apariencia**; la elección se recuerda entre sesiones.
-- **Estado de conexión siempre visible**: el indicador Conectado / Desconectado se movió a la barra lateral, junto al logo, para verlo desde cualquier pestaña.
-- **Interfaz más clara**: mejor jerarquía de botones, acciones de sonido consolidadas, visor de actividad a la misma altura que la tarjeta de sonidos, textos más legibles y confirmaciones propias para acciones destructivas.
-- **Errores visibles**: los fallos de guardado, importación o copiado ahora se muestran como aviso flotante; las confirmaciones de éxito quedan en el estado de la interfaz para no interrumpir.
-
-## Qué incluye
-
-- **Menú lateral con 4 secciones dedicadas**: Navegación ágil y accesible entre *Sonidos y Alertas*, *Overlay de Alertas*, *Frasco de Donaciones* y *Voz del Chat (TTS)*, con personalización rápida de regalos destacados, estado de conexión fijo en la barra lateral y controles organizados.
-- **Conexión directa y resiliente**: Conéctate a tu TikTok LIVE simplemente con tu nombre de usuario, con validación estricta de sala en vivo (`status === 2`), respaldo por scraping de perfil y detección en tiempo real de pausas, reanudaciones y cortes del directo.
-- **Reglas de sonido personalizables**: Asigna sonidos específicos a **regalos**, **follows**, **shares**, **likes**, **suscripciones / superfans** y **entradas al directo**.
-- **Manejo preciso de rachas de regalos**: Opción activable para que una racha de $N$ regalos (ej. 5 rosas) reproduzca $N$ veces su sonido asignado una detrás de otra, evitando duplicados cuando se envía un único regalo.
-- **Catálogo de regalos integrado**: Tarjetas rápidas y detección por `giftId` oficial (Rosa, Eres increíble, GG, Maracas, Galaxia, TikTok Universe, etc.) con coincidencia bilingüe (español/inglés) y comodines.
-- **Biblioteca y sonidos propios**: Incluye sonidos sintetizados de fábrica (moneda, campanilla, pop, destello, fanfarria, redoble) y permite importar tus propios archivos de audio (MP3, WAV, OGG, M4A, AAC, FLAC, WEBM hasta 30 MB).
-- **Overlay de alertas para OBS y TikTok LIVE Studio**: Notificación animada transparente con avatar centrado, badge de monedas, etiqueta y barra de progreso.
-- **Frasco de Donaciones (Física 2D con Matter.js)**:
-  - Botella de vidrio multicapa SVG con efectos de transparencia y reflejos.
-  - Simulación física 2D en tiempo real: los regalos caen y rebotan dentro de la botella como esferas con el ícono de cada regalo.
-  - Escala logarítmica de radio según el valor del regalo ($R \in [11, 100]\text{ px}$).
-  - Embudos de rebote superiores para impedir expulsión accidental.
-  - Carrusel rotativo de máximos donantes (*Leaderboard*) con medallas e insignias.
-  - Alerta emergente en cada donación y partículas de celebración al alcanzar la meta.
-  - **Modo Ventana Nativa para TikTok LIVE Studio**: Permite abrir el Frasco en una ventana dedicada (`TikTato - Frasco`) con selector rápido de fondo (**Verde Chroma**, **Oscuro**, **Azul Chroma**, **Magenta** o **Transparente**) para quienes transmiten directamente desde TikTok LIVE Studio sin OBS.
-  - Modo de calibración/prueba con HUD interactivo (`/jar?test=1`).
-- **Voz para Chat y Regalos (TTS)**:
-  - Síntesis de voz local con todas las voces del sistema instaladas en Windows (Web Speech API) por defecto y soporte opcional para **Fish Audio (BYOK)** con voces personalizadas en español.
-  - **Lectura opcional del nombre de usuario**: Elige si el TTS lee el nombre del espectador antes del mensaje (`Usuario: hola`) o directamente el mensaje (`hola`), sin muletillas innecesarias.
-  - **Filtros opcionales de chat por rol/nivel**: Por defecto lee todos los mensajes del chat (ideal para canales en crecimiento), con opción de restringir la lectura solo a **Moderadores**, **Suscriptores / Superfans**, **Mensajes destacados**, **Amigos**, **Seguidores**, **Donadores** (nivel mínimo configurable) o **Miembros del club**.
-  - **Moderación automática en vivo**: Si un moderador borra un mensaje o banea a un usuario en TikTok LIVE, TikTato cancela y elimina automáticamente sus mensajes de la cola de voz.
-  - **Control de historial (backlog)**: Lee como máximo los últimos 5 mensajes y evita repetir mensajes ya leídos tras reconexiones.
-  - Cola inteligente con **auto-ducking** (atenúa los efectos sonoros mientras habla el TTS) y filtro anti-spam.
-- **Seguridad y privacidad**: URLs locales protegidas mediante tokens únicos. Credenciales de sesión cifradas localmente con el llavero seguro de Windows (`safeStorage`).
-- **Tema claro y oscuro automático**: por defecto sigue la hora del equipo (oscuro de 20:00 a 07:00); podés fijar claro u oscuro desde la barra lateral o en **Ajustes → Apariencia**, y la elección se recuerda entre sesiones.
-
-![Overlay de alertas](docs/overlay.png)
+- **Alertas y sonidos:** asigna audios propios (MP3, WAV, OGG, M4A, AAC, FLAC o WEBM hasta 30 MB) o los 6 sonidos integrados a regalos, follows, shares, likes, suscripciones y entradas. Incluye catálogo de regalos según tu región y control de rachas por regalo.
+- **Overlay de alertas:** página local transparente con token único para agregar como fuente de navegador en OBS Studio o TikTok LIVE Studio.
+- **Frasco de donaciones 2D:** los regalos caen con física (Matter.js) dentro de un frasco SVG con meta, alertas y ranking rotativo de donantes. Se puede usar como enlace de navegador o como ventana dedicada con fondo chroma (verde, azul, magenta, oscuro o transparente) para TikTok LIVE Studio.
+- **Voz del chat y regalos (TTS):** usa las voces locales de Windows por defecto y admite Fish Audio con tu propia API key. Trae filtros por rol, atenuación automática de sonidos al hablar (ducking), filtro anti-spam y borrado automático en cola si un moderador elimina el mensaje.
+- **Privacidad y apariencia:** las sesiones de TikTok y claves de API se cifran localmente con DPAPI de Windows (`safeStorage`). El tema cambia solo entre claro y oscuro según la hora (oscuro de 20:00 a 07:00) o se fija manualmente.
 
 ![Frasco de donaciones](docs/jar.png)
 
-![Configuración de TTS](docs/tts.png)
+## Versión portable y actualizaciones
 
-## Estructura del proyecto
+La versión instalada con NSIS (`Tiktato-Setup-*.exe`) se actualiza sola desde GitHub Releases sin pedir permisos de administrador. La portable no puede auto-actualizarse porque Windows bloquea el ejecutable mientras corre.
 
-```text
-Tiktato/
-├── electron/
-│   ├── main.cjs            # Proceso principal de Electron y ventana Studio
-│   ├── config.cjs          # Gestión y persistencia segura de la configuración (config.json)
-│   ├── events.cjs          # Normalización y enriquecimiento de eventos de TikTok LIVE
-│   ├── alert-matcher.cjs   # Motor de coincidencia de reglas y cooldowns
-│   ├── fish-audio.cjs      # Integración opcional con Fish Audio TTS (BYOK) y caché local
-│   ├── gifts-catalog.cjs   # Catálogo de regalos de TikTok LIVE con detección automática de región
-│   ├── overlay-server.cjs  # Servidor HTTP/WebSocket local para overlays
-│   ├── tiktok-service.cjs  # Cliente de conexión TikTok LIVE (piratetok-live-js) con reconexión
-│   ├── updater.cjs         # Auto-actualizador (electron-updater) para builds NSIS
-│   ├── jar-studio-preload.cjs # Context bridge para la ventana nativa del Frasco
-│   └── preload.cjs         # Context bridge seguro para el panel de control
-├── renderer/
-│   ├── index.html          # Panel de control de escritorio con menú lateral
-│   ├── styles.css          # Estilos Bento / Material 3 y componentes de UI
-│   ├── app.js              # Lógica de la interfaz de usuario, navegación y gráficos
-│   ├── theme-init.js       # Aplica el tema claro u oscuro antes del primer pintado
-│   └── assets/             # Logo, íconos y tipografías Nunito y Fredoka
-├── overlay/
-│   ├── index.html          # Página web transparente para OBS Browser Source
-│   ├── overlay.css         # Animaciones y diseño de la tarjeta de alerta
-│   ├── overlay.js          # Cliente WebSocket y cola de renderizado
-│   ├── jar.html            # Overlay del Frasco de Donaciones 2D
-│   ├── jar.css             # Estilos del frasco, ventana nativa y leaderboard
-│   ├── jar.js              # Motor de física 2D (Matter.js) y renderizado SVG
-│   ├── matter.min.js       # Biblioteca Matter.js local para física 2D
-│   └── assets/             # Recursos estáticos de los overlays
-├── shared/
-│   ├── audio-engine.js     # Motor de audio Web Audio API / HTML5 Audio con ducking y volumen > 100%
-│   └── tts-engine.js       # Motor de síntesis de voz local (Web Speech API / voces del sistema)
-├── tests/                  # Pruebas unitarias automáticas con el runner nativo de Node.js
-└── package.json            # Scripts, dependencias y configuración de electron-builder
-```
+Si usas la portable en un pendrive, crea una carpeta `tiktato-data` junto al `.exe` para guardar allí la configuración y los sonidos en vez de `%APPDATA%\tiktato`. Las sesiones y claves cifradas con DPAPI dependen de cada PC, así que al cambiar de equipo tendrás que volver a iniciar sesión.
 
-## Requisitos
+## Desarrollo
 
-- **Windows 10 / 11** (64 bits).
-- Conexión a Internet para conectar con TikTok LIVE.
-- Para ejecutar desde el código fuente: **Node.js 22 LTS** o superior.
-
-## Instalación para desarrollo
+Requiere Node.js 22 o superior en Windows 10/11:
 
 ```bash
 git clone https://github.com/alvaro-salort/Tiktato.git
@@ -117,22 +45,12 @@ npm test
 npm start
 ```
 
-## Empaquetar instaladores
-
-Para compilar el instalador estándar (`.exe` con NSIS) y la versión portable:
+Para generar el instalador NSIS y el portable en `dist/`:
 
 ```bash
 npm run dist
 ```
 
-Los binarios resultantes se generarán en la carpeta `dist/`.
-
-### Notas sobre la versión Portable y Actualizaciones
-
-- **Auto-actualizaciones**: La versión instalada con NSIS (`Tiktato-Setup-*.exe`) se actualiza automáticamente de forma diferencial mediante GitHub Releases sin necesidad de privilegios de administrador (UAC). La versión portable no puede auto-actualizarse debido a que Windows mantiene el `.exe` bloqueado mientras está en ejecución.
-- **Portabilidad real de datos**: Para que la configuración viaje con la versión portable (ej. en un pendrive USB), crea una carpeta llamada `tiktato-data` al lado del ejecutable `Tiktato-Portable-*.exe`. Si la carpeta existe, TikTato guardará su configuración, sonidos y registros allí en lugar de `%APPDATA%\tiktato`.
-- **Seguridad de sesión TikTok (DPAPI)**: Las credenciales de sesión opcional (`sessionid` y `tt-target-idc`) se cifran mediante `safeStorage` (DPAPI de Windows). Si copias la carpeta `tiktato-data` a otra computadora, Windows no podrá descifrar la clave y deberás volver a iniciar sesión mediante el código QR.
-
 ## Licencia
 
-Distribuido bajo la licencia **GNU General Public License v3.0**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
+[GNU General Public License v3.0](LICENSE).

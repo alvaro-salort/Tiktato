@@ -628,3 +628,113 @@ test('normalizeTikTokEvent no marca como test regalos reales que contienen subca
   }
 });
 
+test('TikTokService deduplica chat y barrage del mismo usuario y texto normalizado en ventana de 3s', () => {
+  const service = new TikTokService();
+  const emitted = [];
+  service.on('event', (ev) => emitted.push(ev));
+
+  // Mismo usuario envía chat y TikTok duplica como barrage con distinto msgId y espacios/mayúsculas
+  service.ingestEvent(
+    'chat',
+    { msgId: 'chat_1', user: { id: 'u1', uniqueId: 'ana', nickname: 'Ana' }, content: 'Hola   Mundo' },
+    10_000
+  );
+  service.ingestEvent(
+    'barrage',
+    { msgId: 'barrage_1', user: { id: 'u1', uniqueId: 'ana', nickname: 'Ana' }, content: 'hola mundo' },
+    10_500
+  );
+  assert.equal(emitted.length, 1);
+
+  // Barrage sin userId numérico (solo uniqueId) del mismo usuario también se deduplica
+  service.ingestEvent(
+    'barrage',
+    { msgId: 'barrage_no_uid', user: { uniqueId: 'ana', nickname: 'Ana' }, content: 'hola mundo' },
+    10_700
+  );
+  assert.equal(emitted.length, 1);
+
+  // Otro usuario diciendo exactamente lo mismo dentro de 3s SÍ se emite
+  service.ingestEvent(
+    'chat',
+    { msgId: 'chat_2', user: { id: 'u2', uniqueId: 'leo', nickname: 'Leo' }, content: 'hola mundo' },
+    10_800
+  );
+  assert.equal(emitted.length, 2);
+
+  // El mismo usuario repitiendo tras >= 3s SÍ se emite
+  service.ingestEvent(
+    'chat',
+    { msgId: 'chat_3', user: { id: 'u1', uniqueId: 'ana', nickname: 'Ana' }, content: 'hola mundo' },
+    13_100
+  );
+  assert.equal(emitted.length, 3);
+
+  // Salto de reloj hacia atrás no suprime falsamente un mensaje nuevo
+  service.ingestEvent(
+    'chat',
+    { msgId: 'chat_back_clock', user: { id: 'u1', uniqueId: 'ana', nickname: 'Ana' }, content: 'hola mundo' },
+    12_000
+  );
+  assert.equal(emitted.length, 4);
+
+  // LRU eviction (>500 entradas) no expulsa una clave recién refrescada
+  const baseTime = 50_000;
+  for (let i = 0; i < 520; i += 1) {
+    service.ingestEvent(
+      'chat',
+      { msgId: `fill_${i}`, user: { id: `uf_${i}`, uniqueId: `user_${i}` }, content: `msg ${i}` },
+      baseTime + i
+    );
+  }
+  const beforeRepeat = emitted.length;
+  service.ingestEvent(
+    'chat',
+    { msgId: 'ana_refresh', user: { id: 'u1', uniqueId: 'ana' }, content: 'hola mundo' },
+    baseTime + 1000
+  );
+  assert.equal(emitted.length, beforeRepeat + 1);
+  // Duplicado 200ms después debe seguir siendo deduplicado aunque la tabla haya evacuado >500 entradas
+  service.ingestEvent(
+    'barrage',
+    { msgId: 'ana_refresh_dup', user: { id: 'u1', uniqueId: 'ana' }, content: 'hola mundo' },
+    baseTime + 1200
+  );
+  assert.equal(emitted.length, beforeRepeat + 1);
+});
+
+test('TikTokService no sondea resolveRoomId mientras está conectado y usa región dinámica del sistema', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { detectSystemLanguage, detectSystemRegion } = require('../electron/gifts-catalog.cjs');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'electron', 'tiktok-service.cjs'), 'utf8');
+
+  assert.doesNotMatch(src, /connectedPollSeconds/);
+  assert.doesNotMatch(src, /region:\s*'ES'/);
+  assert.match(src, /detectSystemRegion\(\)/);
+  assert.match(src, /if \(this\.status\.state === 'connected'\) return;/);
+
+  // Verificación conductual: resolveRoomId envía la región/idioma detectados del sistema
+  const origFetch = globalThis.fetch;
+  let capturedUrl = '';
+  globalThis.fetch = async (url) => {
+    capturedUrl = String(url);
+    return {
+      ok: true,
+      async json() {
+        return { statusCode: 0, data: { user: { roomId: '987654', status: 2 }, liveRoom: { status: 2 } } };
+      }
+    };
+  };
+  try {
+    const roomId = await resolveRoomId('streamer_demo');
+    assert.equal(roomId, '987654');
+    const parsed = new URL(capturedUrl);
+    assert.equal(parsed.searchParams.get('region'), detectSystemRegion());
+    assert.equal(parsed.searchParams.get('app_language'), detectSystemLanguage());
+    assert.equal(parsed.searchParams.get('browser_language'), detectSystemLanguage());
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+});
+

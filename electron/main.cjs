@@ -60,6 +60,8 @@ const BROWSER_UA =
 const cooldowns = new Map();
 const soundStreakTracker = createStreakTracker();
 const jarStreakTracker = createStreakTracker();
+const ttsStreakTracker = createStreakTracker();
+const stateVersions = { settings: 1, rules: 1, jar: 1, tts: 1 };
 let jarEventSeq = 0;
 const recentActivity = [];
 const stats = {
@@ -278,7 +280,8 @@ function publicState({ includeGifts = true } = {}) {
       likes: stats.likes,
       uniqueUsers: stats.uniqueUsers.size
     },
-    activity: recentActivity
+    activity: recentActivity,
+    versions: { ...stateVersions }
   };
   if (includeGifts) {
     payload.gifts = getActiveCatalog();
@@ -308,8 +311,10 @@ function scheduleStateUpdate() {
 }
 
 function sendAlert(alert) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('alert', alert);
+  const hasOverlay = Boolean(overlayServer?.hasAlertOverlayClients?.());
+  const shouldPlayInDashboard = Boolean(config?.playInDashboard) || (!hasOverlay && Boolean(alert?.test));
+  if (shouldPlayInDashboard && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('alert', { ...alert, hasOverlay });
   }
   overlayServer?.broadcast({ type: 'alert', alert });
 }
@@ -503,6 +508,7 @@ function addToJar(event) {
       }
     }
     config = scheduleSaveConfig(app.getPath('userData'), config);
+    stateVersions.jar += 1;
     updateJarOverlay();
   }
 
@@ -512,7 +518,6 @@ function addToJar(event) {
     id: `jar_${Date.now()}_${jarEventSeq}_${Math.random().toString(36).slice(2, 6)}`,
     giftId: event.giftId || '',
     value,
-    giftId: event.giftId || '',
     giftPictureUrl: event.giftImageUrl || '',
     giftName: event.giftName || 'Regalo',
     repeatCount: delta,
@@ -555,30 +560,31 @@ function processEvent(event) {
   const now = Date.now();
   const rule = selectRule(config.rules, event, cooldowns, now);
   const soundPerStreak = config.soundsPlayEveryStreak !== false;
+  const ttsPerStreak = config.tts?.playEveryStreak === true;
 
   let soundTracked = null;
+  let ttsTracked = null;
   if (event.type === 'gift') {
     if (event.test) {
       soundTracked = {
         suppressAlert: false,
         streakDelta: Number(event.streakDelta || event.repeatCount || 1)
       };
+      ttsTracked = { ...soundTracked };
     } else {
-      soundTracked = soundStreakTracker.process(
-        {
-          userId: event.userId,
-          username: event.username,
-          giftId: event.giftId,
-          giftName: event.giftName,
-          groupId: event.groupId,
-          msgId: event.msgId,
-          giftType: event.giftType,
-          repeatCount: event.repeatCount,
-          repeatEnd: event.repeatEnd
-        },
-        now,
-        { playEveryStreak: soundPerStreak }
-      );
+      const streakInput = {
+        userId: event.userId,
+        username: event.username,
+        giftId: event.giftId,
+        giftName: event.giftName,
+        groupId: event.groupId,
+        msgId: event.msgId,
+        giftType: event.giftType,
+        repeatCount: event.repeatCount,
+        repeatEnd: event.repeatEnd
+      };
+      soundTracked = soundStreakTracker.process(streakInput, now, { playEveryStreak: soundPerStreak });
+      ttsTracked = ttsStreakTracker.process(streakInput, now, { playEveryStreak: ttsPerStreak });
     }
   }
 
@@ -610,7 +616,14 @@ function processEvent(event) {
   registerActivity(event, alert);
   addToJar(event);
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('event:incoming', event);
+    const incomingEvent = event.type === 'gift' && ttsTracked
+      ? {
+          ...event,
+          ttsSuppress: Boolean(ttsTracked.suppressAlert || ttsTracked.streakDelta === 0),
+          ttsStreakDelta: ttsTracked.streakDelta
+        }
+      : event;
+    mainWindow.webContents.send('event:incoming', incomingEvent);
   }
   if (event.test) {
     sendState();
@@ -646,7 +659,7 @@ async function startOverlayServer() {
 function syncTikTokStreakOption() {
   const allowCombos =
     Boolean(config.soundsPlayEveryStreak !== false) ||
-    Boolean(config.tts?.playEveryStreak !== false);
+    Boolean(config.tts?.playEveryStreak === true);
   tiktok?.setOptions({ playEveryStreak: allowCombos, emitAllPackets: true });
 }
 
@@ -734,7 +747,38 @@ function applySettings(patch) {
     config.fishApiKeyEncrypted = '';
   }
 
-  config = saveConfig(app.getPath('userData'), config);
+  stateVersions.settings += 1;
+  if (patch.jar && typeof patch.jar === 'object') stateVersions.jar += 1;
+  if (
+    (patch.tts && typeof patch.tts === 'object') ||
+    patch.ducking !== undefined ||
+    patch.duckingLevel !== undefined ||
+    patch.soundsPlayEveryStreak !== undefined ||
+    patch.sounds?.playEveryStreak !== undefined ||
+    typeof patch.fishApiKey === 'string' ||
+    patch.clearFishApiKey === true
+  ) {
+    stateVersions.tts += 1;
+  }
+  if (
+    patch.soundsPlayEveryStreak !== undefined ||
+    patch.sounds?.playEveryStreak !== undefined ||
+    patch.tts?.playEveryStreak !== undefined
+  ) {
+    stateVersions.rules += 1;
+  }
+
+  const hasCriticalChange = Boolean(
+    (typeof patch.sessionId === 'string' && patch.sessionId.trim()) ||
+    (typeof patch.ttTargetIdc === 'string' && patch.ttTargetIdc.trim()) ||
+    patch.clearSession === true ||
+    typeof patch.fishApiKey === 'string' ||
+    patch.clearFishApiKey === true ||
+    patch.overlay?.port !== undefined
+  );
+  config = hasCriticalChange
+    ? saveConfig(app.getPath('userData'), config)
+    : scheduleSaveConfig(app.getPath('userData'), config);
   if (patch.theme !== undefined) applyWindowTheme();
 }
 
@@ -744,6 +788,9 @@ async function restartOverlayIfPortChanged(previousPort) {
   if (previousPort !== config.overlay.port) {
     try {
       await startOverlayServer();
+      stateVersions.settings += 1;
+      stateVersions.rules += 1;
+      stateVersions.jar += 1;
       if (jarStudioWindow && !jarStudioWindow.isDestroyed() && jarUrl()) {
         jarStudioWindow.loadURL(`${jarUrl()}&studio=1&bg=${encodeURIComponent(lastJarStudioBg)}`);
       }
@@ -751,6 +798,9 @@ async function restartOverlayIfPortChanged(previousPort) {
       logger.error('[overlay] no se pudo reiniciar, volviendo al anterior', error);
       config.overlay.port = previousPort;
       config = saveConfig(app.getPath('userData'), config);
+      stateVersions.settings += 1;
+      stateVersions.rules += 1;
+      stateVersions.jar += 1;
       try {
         await startOverlayServer();
       } catch {}
@@ -919,6 +969,29 @@ function applyWindowTheme() {
   }
 }
 
+function attachSmokeScreenshot(win, destPath) {
+  win.webContents.once('did-finish-load', () => {
+    const targetTab = (process.env.TIKTATO_SMOKE_TAB || '').trim();
+    if (targetTab) {
+      win.webContents
+        .executeJavaScript(`document.getElementById('tab-' + ${JSON.stringify(targetTab)})?.click();`)
+        .catch(() => {});
+    }
+    setTimeout(async () => {
+      try {
+        const image = await win.webContents.capturePage();
+        const dest = path.resolve(destPath);
+        fs.writeFileSync(dest, image.toPNG());
+        logger.info(`[smoke] captura guardada en ${dest}`);
+      } catch (error) {
+        logger.error('[smoke] no se pudo capturar la ventana', error);
+      } finally {
+        app.quit();
+      }
+    }, 1500);
+  });
+}
+
 function createWindow() {
   const smokeScreenshot = allowDevHarness ? (process.env.TIKTATO_SMOKE_SCREENSHOT || '').trim() : '';
   mainWindow = new BrowserWindow({
@@ -936,113 +1009,13 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      backgroundThrottling: false,
       v8CacheOptions: 'code'
     }
   });
 
   if (smokeScreenshot) {
-    if (process.env.TIKTATO_SMOKE_HEIGHT) {
-      mainWindow.setContentSize(1320, parseInt(process.env.TIKTATO_SMOKE_HEIGHT, 10));
-    } else if (process.env.TIKTATO_SMOKE_TALL === '1') {
-      mainWindow.setContentSize(1320, 1160);
-    }
-    mainWindow.webContents.once('did-finish-load', () => {
-      mainWindow.webContents.executeJavaScript(`
-        (() => {
-          const t = document.getElementById('toast');
-          if (t) t.remove();
-          return true;
-        })()
-      `);
-      if (process.env.TIKTATO_SMOKE_TAB) {
-        const targetTab = process.env.TIKTATO_SMOKE_TAB.trim();
-        mainWindow.webContents.executeJavaScript(`
-          document.getElementById('tab-' + ${JSON.stringify(targetTab)})?.click();
-        `);
-      }
-      if (process.env.TIKTATO_SMOKE_TEST_EVENT === '1') {
-        setTimeout(async () => {
-          await mainWindow.webContents.executeJavaScript(`
-            document.querySelector('[data-test="gift"]')?.click();
-            setTimeout(() => document.querySelector('[data-test="follow"]')?.click(), 180);
-            setTimeout(() => document.querySelector('[data-test="like"]')?.click(), 360);
-            setTimeout(() => document.querySelector('[data-test="chat"]')?.click(), 540);
-          `);
-        }, 600);
-      }
-      setTimeout(async () => {
-        try {
-          if (process.env.TIKTATO_SMOKE_TALL === '1') {
-            const docHeight = await mainWindow.webContents.executeJavaScript(`
-              (() => {
-                const app = document.querySelector('.app');
-                return app ? Math.ceil(app.getBoundingClientRect().height + 36) : 1120;
-              })()
-            `);
-            if (docHeight && docHeight > 600) {
-              mainWindow.setContentSize(1320, docHeight);
-              await new Promise((resolve) => setTimeout(resolve, 300));
-            }
-          } else if (process.env.TIKTATO_SMOKE_SCROLL === 'bottom') {
-            await mainWindow.webContents.executeJavaScript('window.scrollTo(0, document.body.scrollHeight)');
-            await new Promise((resolve) => setTimeout(resolve, 350));
-          }
-          await mainWindow.webContents.executeJavaScript(`
-            (() => {
-              const badge = document.getElementById('liveBadge');
-              if (badge) {
-                badge.className = 'badge-live is-live';
-                badge.textContent = 'LIVE';
-              }
-              const pill = document.getElementById('statusPill');
-              if (pill) pill.className = 'status-pill status-connected';
-              const label = document.getElementById('statusLabel');
-              if (label) label.textContent = 'Conectado';
-              const msg = document.getElementById('connectionMessage');
-              if (msg) msg.textContent = '';
-              const user = document.getElementById('username');
-              if (user) {
-                user.value = '';
-                user.placeholder = '@usuario';
-              }
-              const conn = document.getElementById('btnConnect');
-              if (conn) conn.disabled = true;
-              const disc = document.getElementById('btnDisconnect');
-              if (disc) disc.disabled = false;
-              
-              const v = document.getElementById('statViewers'); if (v) v.textContent = '1.420';
-              const g = document.getElementById('statGifts'); if (g) g.textContent = '86';
-              const c = document.getElementById('statCoins'); if (c) c.textContent = '3.540';
-              const f = document.getElementById('statFollows'); if (f) f.textContent = '38';
-              
-              const ver = document.getElementById('appVersion');
-              if (ver) ver.textContent = 'v1.0.0';
-              
-              const t = document.getElementById('toast');
-              if (t) {
-                t.style.display = 'none';
-                t.className = 'toast';
-              }
-            })()
-          `);
-          await mainWindow.webContents.executeJavaScript(`
-            new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-          `);
-          await new Promise((resolve) => setTimeout(resolve, 400));
-          const image = await mainWindow.webContents.capturePage();
-          const dest = path.resolve(smokeScreenshot);
-          fs.writeFileSync(dest, image.toPNG());
-          logger.info(`[smoke] captura guardada en ${dest}`);
-        } catch (error) {
-          logger.error('[smoke] no se pudo capturar la ventana', error);
-        } finally {
-          app.quit();
-        }
-      }, 3200);
-    });
-    mainWindow.webContents.on('did-fail-load', (_event, code, description) => {
-      logger.error(`[smoke] falló la carga (${code}): ${description}`);
-    });
+    attachSmokeScreenshot(mainWindow, smokeScreenshot);
   }
 
   mainWindow.webContents.on('console-message', (event) => {
@@ -1150,6 +1123,7 @@ function registerIpc() {
     const normalized = (Array.isArray(rules) ? rules : []).map(normalizeRule).filter(Boolean);
     config.rules = normalized;
     config = saveConfig(app.getPath('userData'), config);
+    stateVersions.rules += 1;
     sendState();
     return publicState();
   });
@@ -1171,11 +1145,13 @@ function registerIpc() {
         imported.push({ ...sound, url: soundUrl(sound) });
       }
       config = saveConfig(app.getPath('userData'), config);
+      stateVersions.rules += 1;
       sendState();
       return { canceled: false, sound: imported[0], sounds: imported };
     } catch (error) {
       if (imported.length > 0) {
         config = saveConfig(app.getPath('userData'), config);
+        stateVersions.rules += 1;
         sendState();
       }
       return { canceled: false, error: error.message, sounds: imported };
@@ -1185,6 +1161,7 @@ function registerIpc() {
   handleIpc('gifts:refresh', async () => {
     await refreshGiftsCatalog(app.getPath('userData'));
     overlayServer?.setGifts(getActiveCatalog());
+    stateVersions.rules += 1;
     sendState();
     return publicState();
   });
@@ -1202,6 +1179,7 @@ function registerIpc() {
       rule.soundId === soundId ? { ...rule, soundId: 'builtin:coin' } : rule
     );
     config = saveConfig(app.getPath('userData'), config);
+    stateVersions.rules += 1;
     sendState();
     return { ok: true };
   });
@@ -1369,6 +1347,7 @@ function registerIpc() {
     config.jar.recentGifts = [];
     config.jar.topDonors = [];
     config = saveConfig(app.getPath('userData'), config);
+    stateVersions.jar += 1;
     updateJarOverlay();
     overlayServer?.broadcast({ type: 'coin-jar:reset' });
     sendState();
@@ -1385,6 +1364,7 @@ function registerIpc() {
     const trimmed = String(raw || '').trim();
     config.fishApiKeyEncrypted = trimmed ? encryptSecret(trimmed) : '';
     config = saveConfig(app.getPath('userData'), config);
+    stateVersions.tts += 1;
     sendState({ includeGifts: false });
     return {
       ok: true,
@@ -1456,6 +1436,7 @@ function wireTikTok() {
     } else if (status.state === 'disconnected' || status.state === 'error') {
       soundStreakTracker.reset();
       jarStreakTracker.reset();
+      ttsStreakTracker.reset();
       releaseStreamResources();
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1474,6 +1455,7 @@ async function bootstrap() {
   refreshGiftsCatalog(app.getPath('userData'))
     .then(() => {
       overlayServer?.setGifts(getActiveCatalog());
+      stateVersions.rules += 1;
       sendState();
     })
     .catch((err) => {

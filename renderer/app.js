@@ -6,11 +6,11 @@ const audio = new SoundEngine();
 const ttsQueue = new TTSQueue({
   soundEngine: audio,
   onStateChange: (stateData) => updateTtsQueueUI(stateData),
-  fishSynthesizer: async ({ text, referenceId, model }) => {
+  fishSynthesizer: async ({ text, referenceId, model, speed }) => {
     if (!api?.fishSynthesize) {
       return { ok: false, error: 'Síntesis de Fish Audio no disponible' };
     }
-    return api.fishSynthesize({ text, referenceId, model });
+    return api.fishSynthesize({ text, referenceId, model, speed });
   }
 });
 
@@ -436,12 +436,21 @@ function setInputChecked(selector, checked) {
   input.checked = Boolean(checked);
 }
 
-let lastStaticConfigSig = '';
-let lastGiftsDigest = '';
+let lastRenderedVersions = { settings: 0, rules: 0, jar: 0, tts: 0 };
+
+function applyNextState(nextState) {
+  if (!nextState) return null;
+  if (!Array.isArray(nextState.gifts) && Array.isArray(state?.gifts)) {
+    nextState = { ...nextState, gifts: state.gifts };
+  }
+  state = nextState;
+  return state;
+}
 
 function scheduleRender(nextState) {
-  if (!nextState) return;
-  pendingRenderState = nextState;
+  const merged = applyNextState(nextState);
+  if (!merged) return;
+  pendingRenderState = merged;
   if (renderRafId !== null) return;
   renderRafId = window.requestAnimationFrame(() => {
     renderRafId = null;
@@ -452,38 +461,42 @@ function scheduleRender(nextState) {
 }
 
 function render(nextState) {
-  if (!nextState) return;
-  const hasExplicitGifts = Array.isArray(nextState.gifts);
-  if (hasExplicitGifts) {
-    lastGiftsDigest = nextState.gifts.map((g) => `${g.id}:${g.name}:${g.coins}:${g.imageUrl || ''}`).join('|');
-  } else if (Array.isArray(state?.gifts)) {
-    nextState = { ...nextState, gifts: state.gifts };
+  if (!applyNextState(nextState)) return;
+  if (renderRafId !== null) {
+    window.cancelAnimationFrame(renderRafId);
+    renderRafId = null;
   }
-  state = nextState;
-  rebuildSpecificRulesIndex();
+  pendingRenderState = null;
+  const v = state.versions && typeof state.versions === 'object' ? state.versions : null;
+  const settingsChanged = !v || v.settings !== lastRenderedVersions.settings;
+  const rulesChanged = !v || v.rules !== lastRenderedVersions.rules;
+  const jarChanged = !v || v.jar !== lastRenderedVersions.jar;
+  const ttsChanged = !v || v.tts !== lastRenderedVersions.tts;
 
-  setInputValue('#username', state.username);
-  setInputValue('#overlayUrl', state.overlayUrl);
-  setInputValue('#overlayTitle', state.overlay?.title ?? '');
-  setInputValue('#overlayAccent', state.overlay?.accent ?? '#e83e5f');
-  setInputValue('#overlayDuration', state.overlay?.durationMs ?? 4500);
-  setInputValue('#overlayPosition', state.overlay?.position ?? 'bottom');
-  setInputChecked('#overlayGiftImage', state.overlay?.showGiftImage !== false);
-  setInputChecked('#autoConnect', state.autoConnect);
-  setInputChecked('#playInDashboard', state.playInDashboard);
-  const themeSelect = $('#themeSelect');
-  if (themeSelect && document.activeElement !== themeSelect) {
-    themeSelect.value = ['light', 'dark', 'auto'].includes(state.theme) ? state.theme : 'auto';
-  }
-  const masterVolPct = Math.round((state.masterVolume ?? 0.8) * 100);
-  setInputValue('#masterVolume', masterVolPct);
-  const volumeValue = $('#volumeValue');
-  if (volumeValue) volumeValue.textContent = `${masterVolPct}%`;
-  const sessionState = $('#sessionState');
-  if (sessionState) {
-    sessionState.textContent = state.hasSession
-      ? 'Sesión guardada cifrada'
-      : 'Sin sesión guardada';
+  if (settingsChanged) {
+    setInputValue('#username', state.username);
+    setInputValue('#overlayUrl', state.overlayUrl);
+    setInputValue('#overlayTitle', state.overlay?.title ?? '');
+    setInputValue('#overlayAccent', state.overlay?.accent ?? '#e83e5f');
+    setInputValue('#overlayDuration', state.overlay?.durationMs ?? 4500);
+    setInputValue('#overlayPosition', state.overlay?.position ?? 'bottom');
+    setInputChecked('#overlayGiftImage', state.overlay?.showGiftImage !== false);
+    setInputChecked('#autoConnect', state.autoConnect);
+    setInputChecked('#playInDashboard', state.playInDashboard);
+    const themeSelect = $('#themeSelect');
+    if (themeSelect && document.activeElement !== themeSelect) {
+      themeSelect.value = ['light', 'dark', 'auto'].includes(state.theme) ? state.theme : 'auto';
+    }
+    const masterVolPct = Math.round((state.masterVolume ?? 0.8) * 100);
+    setInputValue('#masterVolume', masterVolPct);
+    const volumeValue = $('#volumeValue');
+    if (volumeValue) volumeValue.textContent = `${masterVolPct}%`;
+    const sessionState = $('#sessionState');
+    if (sessionState) {
+      sessionState.textContent = state.hasSession
+        ? 'Sesión guardada cifrada'
+        : 'Sin sesión guardada';
+    }
   }
 
   const statGifts = $('#statGifts');
@@ -500,15 +513,8 @@ function render(nextState) {
 
   updateStatus(state.status);
 
-  const staticSig = JSON.stringify({
-    rules: state.rules,
-    sounds: state.sounds,
-    giftsDigest: lastGiftsDigest,
-    playEveryStreak: state.tts?.playEveryStreak,
-    soundsPlayEveryStreak: state.soundsPlayEveryStreak
-  });
-  if (staticSig !== lastStaticConfigSig) {
-    lastStaticConfigSig = staticSig;
+  if (rulesChanged) {
+    rebuildSpecificRulesIndex();
     renderGiftPresets();
     renderGiftQuickList();
     renderQuickRules();
@@ -522,8 +528,12 @@ function render(nextState) {
   }
 
   renderActivity();
-  renderJar();
-  renderTTS();
+  if (jarChanged) renderJar();
+  if (ttsChanged) renderTTS();
+
+  if (v) {
+    lastRenderedVersions = { ...v };
+  }
 }
 
 function soundOptionsHtml(selectedId, { allowImport = true } = {}) {
@@ -818,7 +828,6 @@ function renderJar() {
   const percent = Math.max(0, Math.min(100, Number(jar.percent) || 0));
   setInputValue('#jarGoal', jar.goalCoins);
   setInputValue('#jarUrl', state.jarUrl || '');
-  setInputValue('#jarTestUrl', state.jarTestUrl || '');
   const fill = $('#jarFill');
   const percentLabel = $('#jarPercent');
   const amount = $('#jarAmount');
@@ -1301,7 +1310,7 @@ function renderTTS() {
   if (duckingWrap) duckingWrap.classList.toggle('is-dimmed', !duckingEnabled);
   const settingsWrap = $('#settingsAudioDuckingLevelWrap');
   if (settingsWrap) settingsWrap.classList.toggle('is-dimmed', !duckingEnabled);
-  setInputChecked('#ttsPlayEveryStreak', tts.playEveryStreak !== false);
+  setInputChecked('#ttsPlayEveryStreak', Boolean(tts.playEveryStreak));
   setInputChecked('#soundsPlayEveryStreak', state?.soundsPlayEveryStreak !== false);
   setInputChecked('#ttsAntiSpam', Boolean(tts.antiSpam));
   setInputChecked('#ttsFilterChatByRole', Boolean(tts.filterChatByRole));
@@ -1371,8 +1380,7 @@ async function saveTtsPatch(patch) {
       tts: patch
     });
     if (nextState) {
-      state = nextState;
-      renderTTS();
+      render(nextState);
     }
   } catch (err) {
     showToast(err.message || 'No se pudo guardar la configuración de voz', 'error');
@@ -1406,6 +1414,7 @@ function handleIncomingEventForTTS(event) {
       msgId: event.msgId || '',
       userId: event.userId || '',
       type: 'chat',
+      test: Boolean(event.test),
       voiceId: getResolvedVoiceId(ttsSettings),
       voiceProvider: getResolvedTtsProvider(ttsSettings),
       voiceLanguage: ttsSettings.voiceLanguage || 'es-ES',
@@ -1418,15 +1427,22 @@ function handleIncomingEventForTTS(event) {
     });
   } else if (event.type === 'gift') {
     if (!ttsSettings.giftsEnabled) return;
-    if (Boolean(event.suppressAlert) || (event.repeatEnd === false && !ttsSettings.playEveryStreak)) return;
+    const shouldSuppress =
+      event.ttsSuppress !== undefined
+        ? Boolean(event.ttsSuppress)
+        : Boolean(event.suppressAlert) || (event.repeatEnd === false && !ttsSettings.playEveryStreak);
+    if (shouldSuppress) return;
     const minCoins = Number(ttsSettings.minCoins ?? 1);
     const coins = Number(event.coins || 0);
     if (coins < minCoins) return;
     const text = formatGiftTTS(username, event.giftName || 'un regalo', event.repeatCount || 1);
+    const giftMsgId = event.msgId
+      ? (ttsSettings.playEveryStreak ? `${event.msgId}:${event.repeatCount || 1}` : String(event.msgId))
+      : '';
     ttsQueue.enqueue({
       text,
       username,
-      msgId: event.msgId || '',
+      msgId: giftMsgId,
       userId: event.userId || '',
       type: 'gift',
       voiceId: getResolvedVoiceId(ttsSettings),
@@ -1683,8 +1699,7 @@ async function importAndReturnSound() {
 
 async function saveRules(rules, message = 'Reglas guardadas') {
   try {
-    state = await api.saveRules(rules);
-    render(state);
+    render(await api.saveRules(rules));
     showToast(message);
     return true;
   } catch (error) {
@@ -1695,8 +1710,7 @@ async function saveRules(rules, message = 'Reglas guardadas') {
 
 async function updateSettings(patch, message = '') {
   try {
-    state = await api.updateSettings(patch);
-    render(state);
+    render(await api.updateSettings(patch));
     if (message) showToast(message);
     return true;
   } catch (error) {
@@ -1842,8 +1856,7 @@ function wireEvents() {
       enabled: true,
       order: state.rules.length
     };
-    const savedRule = null;
-    openRuleForm(savedRule || newRule);
+    openRuleForm(newRule);
     showToast(`Configurando sonido para ${cleanName}: revisa y guarda la regla`);
   });
 
@@ -2115,21 +2128,6 @@ function wireEvents() {
     } catch (error) {
       showToast(error.message || 'No se pudo abrir la ventana del frasco', 'error');
     }
-  });
-
-  $('#btnCopyJarTest')?.addEventListener('click', async () => {
-    try {
-      await api.copyJarTestUrl();
-      showToast('URL del frasco de prueba copiada');
-    } catch {
-      showToast('No se pudo copiar la URL', 'error');
-    }
-  });
-
-  $('#btnOpenJarTest')?.addEventListener('click', () => {
-    Promise.resolve(api.openJarTest()).catch((err) => {
-      showToast(err?.message || 'No se pudo abrir el frasco de prueba', 'error');
-    });
   });
 
   $('#btnTestGiftRose')?.addEventListener('click', async () => {
@@ -2940,7 +2938,9 @@ function wireEvents() {
 
   registerUnsub(
     api.onAlert((alert) => {
-      if ((!state?.playInDashboard && !alert?.test) || !alert?.sound) return;
+      if (!alert?.sound) return;
+      const allowDashboard = Boolean(state?.playInDashboard) || (Boolean(alert?.test) && !alert?.hasOverlay);
+      if (!allowDashboard) return;
       const master = alert?.test
         ? Math.max(0.25, Number(state?.masterVolume ?? 0.8))
         : Number(state?.masterVolume ?? 0.8);

@@ -132,7 +132,7 @@ test('la barra de regalos presets muestra regalos configurados y permite persona
   // Al tocar un regalo configurado abre su edición personalizada
   assert.match(appJs, /openRuleForm\(existing\)/);
   // Al tocar un regalo nuevo crea la regla y abre su edición
-  assert.match(appJs, /openRuleForm\(savedRule \|\| newRule\)/);
+  assert.match(appJs, /openRuleForm\(newRule\)/);
   // Quick list tiene acción de editar
   assert.match(appJs, /data-gift-rule-action="edit"/);
 });

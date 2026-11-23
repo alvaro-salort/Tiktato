@@ -17,7 +17,7 @@ test('normaliza configuración de TTS y combos por defecto', () => {
   assert.equal(config.tts.ducking, true);
   assert.equal(config.tts.duckingLevel, 0.25);
   assert.equal(config.tts.antiSpam, true);
-  assert.equal(config.tts.playEveryStreak, true);
+  assert.equal(config.tts.playEveryStreak, false);
   assert.equal(config.tts.maxChars, 120);
 });
 
@@ -335,7 +335,7 @@ test('config.soundsPlayEveryStreak es independiente de config.tts.playEveryStrea
   assert.equal(defaults.soundsPlayEveryStreak, true);
   assert.equal(Array.isArray(defaults.sounds), true);
   assert.equal('playEveryStreak' in defaults.sounds, false);
-  assert.equal(defaults.tts.playEveryStreak, true);
+  assert.equal(defaults.tts.playEveryStreak, false);
 
   // Modificar solo soundsPlayEveryStreak (incluyendo migración desde propiedad legacy)
   const customSounds = normalizeConfig({
@@ -363,7 +363,7 @@ test('config.soundsPlayEveryStreak es independiente de config.tts.playEveryStrea
   // Ingesta de combos debe permitirse si cualquiera de los dos switches está activo
   const shouldIngestCombos = (cfg) =>
     Boolean(cfg.soundsPlayEveryStreak ?? true) ||
-    Boolean(cfg.tts?.playEveryStreak !== false);
+    Boolean(cfg.tts?.playEveryStreak === true);
 
   assert.equal(shouldIngestCombos({ soundsPlayEveryStreak: true, tts: { playEveryStreak: false } }), true);
   assert.equal(shouldIngestCombos({ soundsPlayEveryStreak: false, tts: { playEveryStreak: true } }), true);
@@ -553,7 +553,8 @@ test('FishAudioService valida clave, lista/filtra voces y sintetiza con caché a
       userDataDir: dir,
       fetchImpl: mockFetch,
       maxMemoryEntries: 2,
-      maxDiskEntries: 2
+      maxDiskEntries: 2,
+      diskPruneIntervalMs: 0
     });
 
     // 1. Validación de API key
@@ -616,6 +617,7 @@ test('FishAudioService valida clave, lista/filtra voces y sintetiza con caché a
     assert.equal(calls.filter((c) => c.url.includes('/v1/tts')).length, ttsCallsBefore);
 
     // 6. Nueva instancia lee caché desde disco sin API call
+    await service.flushDiskCache();
     const service2 = new FishAudioService({ userDataDir: dir, fetchImpl: mockFetch });
     const synthDisk = await service2.synthesize({
       apiKey: '',
@@ -1109,5 +1111,477 @@ test('SoundEngine respeta duck(0) y cancela la cola pendiente en stopAll() y pre
   } finally {
     if (origWindow === undefined) delete globalThis.window;
     else globalThis.window = origWindow;
+  }
+});
+
+test('FishAudioService guarda caché en disco sin bloquear síntesis, poda como máx 1 vez/min y usa timeout de 8s', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { FishAudioService } = require('../electron/fish-audio.cjs');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiktato-fish-async-'));
+  const origWriteFile = fs.promises.writeFile;
+  const origReaddir = fs.promises.readdir;
+  let releaseDiskWrite;
+  const diskGate = new Promise((resolve) => {
+    releaseDiskWrite = resolve;
+  });
+  let writeStarted = false;
+  let writeCompleted = false;
+  let readdirCalls = 0;
+
+  try {
+    fs.promises.writeFile = async (...args) => {
+      writeStarted = true;
+      await diskGate;
+      const out = await origWriteFile.apply(fs.promises, args);
+      writeCompleted = true;
+      return out;
+    };
+    fs.promises.readdir = async (...args) => {
+      readdirCalls += 1;
+      return origReaddir.apply(fs.promises, args);
+    };
+
+    const mockFetch = async (_url, init = {}) => {
+      const parsed = JSON.parse(init.body);
+      return new Response(Buffer.from(`MP3:${parsed.text}`), {
+        status: 200,
+        headers: { 'content-type': 'audio/mpeg' }
+      });
+    };
+
+    const service = new FishAudioService({
+      userDataDir: dir,
+      fetchImpl: mockFetch,
+      maxDiskEntries: 2
+    });
+    assert.equal(service.synthesizeTimeoutMs, 8_000);
+    assert.equal(service.diskPruneIntervalMs, 60_000);
+
+    // 1. synthesize() resuelve inmediatamente aunque writeFile en disco esté bloqueado
+    const res1 = await service.synthesize({
+      apiKey: 'k',
+      text: 'Sin bloqueo',
+      referenceId: '9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    assert.equal(res1.ok, true);
+    assert.equal(res1.cached, false);
+    assert.equal(writeCompleted, false);
+
+    for (let i = 0; i < 40 && !writeStarted; i += 1) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    assert.equal(writeStarted, true);
+    assert.equal(writeCompleted, false);
+
+    // Liberar escritura en disco y hacer 2 escrituras adicionales en ráfaga
+    releaseDiskWrite();
+    await service.flushDiskCache();
+    assert.equal(writeCompleted, true);
+    fs.promises.writeFile = origWriteFile;
+    await service.synthesize({ apiKey: 'k', text: 'Frase B', referenceId: '9f850ee9ada24b20a6866825eaefd3f8' });
+    await service.synthesize({ apiKey: 'k', text: 'Frase C', referenceId: '9f850ee9ada24b20a6866825eaefd3f8' });
+    await service.flushDiskCache();
+
+    // La poda de disco solo pudo ejecutarse 1 vez en el último minuto (no 3 veces)
+    assert.equal(readdirCalls, 1);
+
+    // 2. Timeout de síntesis aborta peticiones colgadas
+    const hangingService = new FishAudioService({
+      userDataDir: dir,
+      synthesizeTimeoutMs: 40,
+      fetchImpl: (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(init.signal.reason || new Error('Aborted')));
+        })
+    });
+    const timedOut = await hangingService.synthesize({
+      apiKey: 'k',
+      text: 'Colgada',
+      referenceId: '9f850ee9ada24b20a6866825eaefd3f8'
+    });
+    assert.equal(timedOut.ok, false);
+    assert.equal(timedOut.code, 'NETWORK_ERROR');
+  } finally {
+    fs.promises.writeFile = origWriteFile;
+    fs.promises.readdir = origReaddir;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('TTSQueue hace prefetch del siguiente ítem Fish, descarta chats >20s, llama synth.cancel() y no duplica voz tras iniciar audio', async () => {
+  const { TTSQueue } = await import('../shared/tts-engine.js');
+
+  const origAudio = globalThis.Audio;
+  const origWindow = globalThis.window;
+  const origUtterance = globalThis.SpeechSynthesisUtterance;
+
+  const eventsLog = [];
+  const finishCallbacks = [];
+  let failMidPlayback = false;
+  let failBeforeStart = false;
+
+  globalThis.Audio = class ControlledAudio {
+    constructor(src) {
+      this.src = src;
+      this.volume = 1;
+      this.listeners = {};
+    }
+    addEventListener(evt, cb) {
+      this.listeners[evt] = cb;
+    }
+    removeEventListener(evt) {
+      delete this.listeners[evt];
+    }
+    pause() {}
+    play() {
+      if (failBeforeStart) {
+        return Promise.reject(new Error('Autoplay blocked'));
+      }
+      eventsLog.push('audio:play');
+      this.listeners.playing?.();
+      if (failMidPlayback) {
+        setTimeout(() => this.listeners.error?.(), 5);
+        return Promise.resolve();
+      }
+      finishCallbacks.push(() => this.listeners.ended?.());
+      return Promise.resolve();
+    }
+  };
+
+  globalThis.SpeechSynthesisUtterance = class {
+    constructor(text) {
+      this.text = text;
+      this.lang = '';
+    }
+  };
+  let holdLocalEnd = false;
+  globalThis.window = {
+    speechSynthesis: {
+      speaking: false,
+      pending: false,
+      getVoices: () => [],
+      cancel() {
+        this.speaking = false;
+        this.pending = false;
+        eventsLog.push('local:cancel');
+      },
+      speak(u) {
+        eventsLog.push(`local:speak:${u.text}`);
+        if (holdLocalEnd) {
+          this.speaking = true;
+          return;
+        }
+        u.onend?.();
+      }
+    }
+  };
+
+  try {
+    // 1. Prefetch del segundo ítem Fish mientras suena el primero (sin duplicar síntesis)
+    const synthCalls = [];
+    const queue = new TTSQueue({
+      fishSynthesizer: async ({ text }) => {
+        synthCalls.push(text);
+        return {
+          ok: true,
+          audioBase64: Buffer.from(`MP3:${text}`).toString('base64'),
+          contentType: 'audio/mpeg'
+        };
+      }
+    });
+
+    queue.enqueue({ text: 'Primero', type: 'chat', voiceProvider: 'fish', voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8' });
+    queue.enqueue({ text: 'Segundo', type: 'chat', voiceProvider: 'fish', voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8' });
+    await new Promise((r) => setTimeout(r, 25));
+
+    // Mientras 'Primero' aún está sonando, 'Segundo' ya fue prefetched
+    assert.equal(finishCallbacks.length, 1);
+    assert.deepEqual(synthCalls, ['Primero', 'Segundo']);
+
+    // Al terminar 'Primero', 'Segundo' suena desde caché sin volver a llamar a fishSynthesizer
+    finishCallbacks.shift()();
+    await new Promise((r) => setTimeout(r, 25));
+    assert.equal(finishCallbacks.length, 1);
+    assert.deepEqual(synthCalls, ['Primero', 'Segundo']);
+    finishCallbacks.shift()();
+    await new Promise((r) => setTimeout(r, 20));
+
+    // 2. Descarta chats en cola con >20s de antigüedad pero conserva regalos antiguos
+    const staleSpoken = [];
+    const staleQueue = new TTSQueue();
+    staleQueue.isSpeaking = true;
+    staleQueue.enqueue({ text: 'Chat viejo', type: 'chat', enqueuedAt: Date.now() - 25_000 });
+    staleQueue.enqueue({ text: 'Regalo importante', type: 'gift', enqueuedAt: Date.now() - 25_000 });
+    staleQueue.isSpeaking = false;
+    eventsLog.length = 0;
+    staleQueue.enqueue({ text: 'Chat fresco', type: 'chat' });
+    await new Promise((r) => setTimeout(r, 30));
+    staleSpoken.push(...eventsLog.filter((e) => e.startsWith('local:speak:')));
+    assert.deepEqual(staleSpoken, ['local:speak:Regalo importante', 'local:speak:Chat fresco']);
+
+    // 3. #speakLocal solo llama synth.cancel() cuando speaking/pending están activos (con pausa breve para SAPI5)
+    assert.equal(eventsLog.includes('local:cancel'), false);
+
+    eventsLog.length = 0;
+    globalThis.window.speechSynthesis.speaking = true;
+    staleQueue.enqueue({ text: 'Tras atasco', type: 'chat' });
+    assert.deepEqual(eventsLog, ['local:cancel']);
+    await new Promise((r) => setTimeout(r, 80));
+    assert.deepEqual(eventsLog, ['local:cancel', 'local:speak:Tras atasco']);
+
+    eventsLog.length = 0;
+    globalThis.window.speechSynthesis.pending = true;
+    staleQueue.enqueue({ text: 'Saltado en pausa', type: 'chat' });
+    assert.deepEqual(eventsLog, ['local:cancel']);
+    staleQueue.skip();
+    await new Promise((r) => setTimeout(r, 80));
+    assert.deepEqual(eventsLog, ['local:cancel']);
+    assert.equal(staleQueue.isSpeaking, false);
+
+    eventsLog.length = 0;
+    globalThis.window.speechSynthesis.speaking = true;
+    staleQueue.enqueue({ text: 'Silenciado en pausa', type: 'chat' });
+    assert.deepEqual(eventsLog, ['local:cancel']);
+    staleQueue.mute(true);
+    await new Promise((r) => setTimeout(r, 80));
+    assert.deepEqual(eventsLog, ['local:cancel']);
+    assert.equal(staleQueue.isSpeaking, false);
+    staleQueue.mute(false);
+
+    eventsLog.length = 0;
+    holdLocalEnd = true;
+    staleQueue.enqueue({ text: 'Actual', type: 'chat' });
+    staleQueue.enqueue({ text: 'Siguiente', type: 'chat' });
+    assert.deepEqual(eventsLog, ['local:speak:Actual']);
+    holdLocalEnd = false;
+    staleQueue.skip();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.deepEqual(eventsLog, ['local:speak:Actual', 'local:cancel']);
+    await new Promise((r) => setTimeout(r, 80));
+    assert.deepEqual(eventsLog, ['local:speak:Actual', 'local:cancel', 'local:speak:Siguiente']);
+    assert.equal(staleQueue.isSpeaking, false);
+
+    // 4. Error de audio Fish DESPUÉS de empezar a reproducir NO dispara fallback local
+    const origWarn = console.warn;
+    console.warn = () => {};
+    try {
+      eventsLog.length = 0;
+      failMidPlayback = true;
+      queue.enqueue({ text: 'Corte a mitad', voiceProvider: 'fish', voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8' });
+      await new Promise((r) => setTimeout(r, 30));
+      assert.equal(eventsLog.some((e) => e.startsWith('local:speak:')), false);
+
+      // Error ANTES de empezar a reproducir SÍ hace fallback local
+      eventsLog.length = 0;
+      failMidPlayback = false;
+      failBeforeStart = true;
+      queue.enqueue({ text: 'Bloqueado antes', voiceProvider: 'fish', voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8' });
+      await new Promise((r) => setTimeout(r, 30));
+      assert.equal(eventsLog.includes('local:speak:Bloqueado antes'), true);
+    } finally {
+      console.warn = origWarn;
+    }
+  } finally {
+    if (origAudio === undefined) delete globalThis.Audio;
+    else globalThis.Audio = origAudio;
+    if (origWindow === undefined) delete globalThis.window;
+    else globalThis.window = origWindow;
+    if (origUtterance === undefined) delete globalThis.SpeechSynthesisUtterance;
+    else globalThis.SpeechSynthesisUtterance = origUtterance;
+  }
+});
+
+test('ttsStreakTracker independiente lee exactamente una vez el total del combo cuando soundsPlayEveryStreak es true y tts.playEveryStreak es false', () => {
+  const { createStreakTracker, normalizeTikTokEvent } = require('../electron/events.cjs');
+
+  const tiktokTracker = createStreakTracker();
+  const soundTracker = createStreakTracker();
+  const ttsTracker = createStreakTracker();
+
+  const soundPerStreak = true;
+  const ttsPerStreak = false;
+  const allowCombos = soundPerStreak || ttsPerStreak;
+
+  const packets = [
+    { repeatCount: 1, repeatEnd: 0, time: 1000 },
+    { repeatCount: 3, repeatEnd: 0, time: 1200 },
+    { repeatCount: 5, repeatEnd: 0, time: 1400 },
+    { repeatCount: 5, repeatEnd: 1, time: 2000 },
+    { repeatCount: 5, repeatEnd: 1, time: 2300 } // cierre duplicado
+  ];
+
+  let soundTotal = 0;
+  const ttsSpokenCounts = [];
+
+  for (const pkt of packets) {
+    const event = normalizeTikTokEvent(
+      'gift',
+      {
+        user: { uniqueId: 'ana', userId: '42' },
+        giftId: 5655,
+        repeatCount: pkt.repeatCount,
+        repeatEnd: pkt.repeatEnd,
+        gift: { type: 1, name: 'Rosa', diamondCount: 1 }
+      },
+      pkt.time,
+      { playEveryStreak: allowCombos, emitAllPackets: true, streakTracker: tiktokTracker }
+    );
+    assert.notEqual(event, null);
+
+    const soundTracked = soundTracker.process(event, pkt.time, { playEveryStreak: soundPerStreak });
+    if (!soundTracked.suppressAlert && soundTracked.streakDelta > 0) {
+      soundTotal += soundTracked.streakDelta;
+    }
+
+    const ttsTracked = ttsTracker.process(event, pkt.time, { playEveryStreak: ttsPerStreak });
+    if (!ttsTracked.suppressAlert && ttsTracked.streakDelta > 0) {
+      ttsSpokenCounts.push(event.repeatCount);
+    }
+  }
+
+  assert.equal(soundTotal, 5);
+  assert.deepEqual(ttsSpokenCounts, [5]);
+});
+
+test('TTSQueue: clearAudioCache evita race de prefetch, limita a 1 prefetch concurrente en ráfaga y hace prefetch durante fallback local', async () => {
+  const { TTSQueue } = await import('../shared/tts-engine.js');
+
+  const origAudio = globalThis.Audio;
+  const origWindow = globalThis.window;
+  const origUtterance = globalThis.SpeechSynthesisUtterance;
+
+  let finishPlayback = null;
+  let finishLocal = null;
+  let failWithCurrentTime = false;
+  const localSpoken = [];
+
+  class ControlledAudio {
+    constructor(src) {
+      this.src = src;
+      this.volume = 1;
+      this.currentTime = 0;
+      this.listeners = new Map();
+    }
+    addEventListener(type, fn) {
+      if (!this.listeners.has(type)) this.listeners.set(type, []);
+      this.listeners.get(type).push(fn);
+    }
+    removeEventListener(type, fn) {
+      const list = this.listeners.get(type);
+      if (!list) return;
+      const idx = list.indexOf(fn);
+      if (idx >= 0) list.splice(idx, 1);
+    }
+    emit(type) {
+      for (const fn of [...(this.listeners.get(type) || [])]) fn();
+    }
+    pause() {}
+    play() {
+      if (failWithCurrentTime) {
+        this.currentTime = 0.4;
+        queueMicrotask(() => this.emit('error'));
+        return new Promise(() => {});
+      }
+      queueMicrotask(() => this.emit('playing'));
+      finishPlayback = () => this.emit('ended');
+      return Promise.resolve();
+    }
+  }
+
+  globalThis.Audio = ControlledAudio;
+  globalThis.SpeechSynthesisUtterance = class {
+    constructor(text) {
+      this.text = text;
+    }
+  };
+  globalThis.window = {
+    speechSynthesis: {
+      paused: false,
+      getVoices: () => [],
+      cancel() {},
+      resume() {},
+      speak(u) {
+        localSpoken.push(u.text);
+        finishLocal = () => u.onend?.();
+      }
+    }
+  };
+
+  try {
+    const synthCalls = [];
+    const pendingSynths = new Map();
+    const queue = new TTSQueue({
+      fishSynthesizer: (payload) => {
+        synthCalls.push(payload.text);
+        if (payload.text === 'Falla') {
+          return Promise.resolve({ ok: false, error: 'boom' });
+        }
+        if (payload.text === 'Primero' || payload.text === 'ConTiempo') {
+          return Promise.resolve({ ok: true, audioBase64: Buffer.from(payload.text).toString('base64') });
+        }
+        return new Promise((resolve) => {
+          pendingSynths.set(payload.text, () =>
+            resolve({ ok: true, audioBase64: Buffer.from(payload.text).toString('base64') })
+          );
+        });
+      }
+    });
+
+    const fishOpts = { voiceProvider: 'fish', voiceId: 'fish:9f850ee9ada24b20a6866825eaefd3f8' };
+
+    // 1. Ráfaga de >5 mensajes mientras suena 'Primero' dispara como máximo 1 prefetch simultáneo
+    queue.enqueue({ text: 'Primero', ...fishOpts });
+    await new Promise((r) => setTimeout(r, 15));
+    for (let i = 1; i <= 7; i += 1) {
+      queue.enqueue({ text: `Burst ${i}`, ...fishOpts });
+    }
+    await new Promise((r) => setTimeout(r, 15));
+    assert.deepEqual(synthCalls, ['Primero', 'Burst 1']);
+
+    // 2. clearAudioCache() mientras 'Burst 1' está en vuelo impide repoblar audioCache al resolver
+    queue.clearAudioCache();
+    pendingSynths.get('Burst 1')?.();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.equal(queue.audioCache.size, 0);
+
+    queue.clear();
+    finishPlayback?.();
+    await new Promise((r) => setTimeout(r, 15));
+
+    // 3. Fallback Fish -> voz local hace prefetch del siguiente ítem Fish en cola
+    synthCalls.length = 0;
+    localSpoken.length = 0;
+    const origWarn = console.warn;
+    console.warn = () => {};
+    try {
+      queue.enqueue({ text: 'Falla', ...fishOpts });
+      queue.enqueue({ text: 'SiguienteFish', ...fishOpts });
+      await new Promise((r) => setTimeout(r, 20));
+      assert.deepEqual(localSpoken, ['Falla']);
+      assert.deepEqual(synthCalls, ['Falla', 'SiguienteFish']);
+      queue.clear();
+      finishLocal?.();
+      await new Promise((r) => setTimeout(r, 15));
+
+      // 4. Error con audio.currentTime > 0 antes del evento playing no duplica con voz local
+      localSpoken.length = 0;
+      failWithCurrentTime = true;
+      queue.enqueue({ text: 'ConTiempo', ...fishOpts });
+      await new Promise((r) => setTimeout(r, 20));
+      assert.deepEqual(localSpoken, []);
+    } finally {
+      console.warn = origWarn;
+    }
+  } finally {
+    if (origAudio === undefined) delete globalThis.Audio;
+    else globalThis.Audio = origAudio;
+    if (origWindow === undefined) delete globalThis.window;
+    else globalThis.window = origWindow;
+    if (origUtterance === undefined) delete globalThis.SpeechSynthesisUtterance;
+    else globalThis.SpeechSynthesisUtterance = origUtterance;
   }
 });

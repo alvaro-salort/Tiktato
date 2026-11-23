@@ -220,7 +220,7 @@ function connect() {
   }
 
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const ws = new WebSocket(`${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+  const ws = new WebSocket(`${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}&client=overlay`);
   socket = ws;
 
   ws.addEventListener('open', () => {

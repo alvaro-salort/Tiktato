@@ -79,6 +79,8 @@ export function formatGiftTTS(username, giftName, count = 1) {
   return `${name} envió ${gift}`;
 }
 
+const MAX_CHAT_AGE_MS = 20_000;
+
 export class TTSQueue {
   constructor({
     soundEngine = null,
@@ -96,11 +98,15 @@ export class TTSQueue {
     this.maxCacheBytes = Math.max(0, Number(maxCacheBytes ?? 5 * 1024 * 1024));
     this.audioCache = new Map();
     this.audioCacheBytes = 0;
+    this.cacheGen = 0;
+    this.prefetchPromises = new Map();
     this.queue = [];
     this.seenMsgIds = new Set();
     this.isSpeaking = false;
+    this.isPlayingAudio = false;
     this.currentItem = null;
     this.currentAbort = null;
+    this.lastLocalCancelAt = 0;
     this.isMuted = false;
   }
 
@@ -109,8 +115,10 @@ export class TTSQueue {
   }
 
   clearAudioCache() {
+    this.cacheGen += 1;
     this.audioCache.clear();
     this.audioCacheBytes = 0;
+    this.prefetchPromises.clear();
   }
 
   #getCachedAudio(key) {
@@ -166,20 +174,27 @@ export class TTSQueue {
     });
     if (!cleanText) return;
 
+    const now = Date.now();
     this.queue.push({
       ...item,
       msgId,
       userId: item.userId ? String(item.userId) : '',
       text: cleanText,
-      id: item.id || `tts_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      enqueuedAt: Number(item.enqueuedAt) || now,
+      id: item.id || `tts_${now}_${Math.random().toString(36).slice(2, 6)}`
     });
 
+    this.queue = this.queue.filter((entry) => !this.#isExpiredChat(entry, now));
     if (this.queue.length > this.maxQueueSize) {
       this.queue = this.queue.slice(-this.maxQueueSize);
     }
 
     this.#notify();
-    this.#process();
+    if (this.isSpeaking) {
+      if (this.isPlayingAudio) this.#prefetchNextFish();
+    } else {
+      this.#process();
+    }
   }
 
   removeByModeration({ deleteMsgIds = [], deleteUserIds = [] } = {}) {
@@ -229,6 +244,7 @@ export class TTSQueue {
 
   clear() {
     this.queue = [];
+    this.prefetchPromises.clear();
     this.skip();
     if (this.soundEngine) {
       this.soundEngine.restore();
@@ -256,10 +272,91 @@ export class TTSQueue {
     } catch {}
   }
 
+  #isFishItem(item) {
+    const rawVoiceId = String(item?.voiceId || '');
+    return (
+      rawVoiceId.startsWith('fish:') ||
+      (!rawVoiceId.startsWith('google:') && !rawVoiceId.startsWith('local:') && item?.voiceProvider === 'fish')
+    );
+  }
+
+  #fishParams(item) {
+    const voiceId = String(item?.voiceId || '');
+    const referenceId = String(
+      item?.referenceId || (voiceId.startsWith('fish:') ? voiceId.slice(5) : '')
+    ).trim();
+    const speed = item?.speed ?? 1;
+    const model = item?.fishModel || undefined;
+    const cacheKey = `${item?.fishModel || 'default'}|${referenceId}|${speed}|${item?.text || ''}`;
+    return { referenceId, speed, model, cacheKey };
+  }
+
+  #isExpiredChat(item, now = Date.now()) {
+    return item?.type === 'chat' && !item?.test && item.enqueuedAt > 0 && now - item.enqueuedAt > MAX_CHAT_AGE_MS;
+  }
+
+  #prefetchNextFish() {
+    if (
+      this.isMuted ||
+      typeof this.fishSynthesizer !== 'function' ||
+      this.queue.length === 0 ||
+      this.prefetchPromises.size > 0
+    ) {
+      return;
+    }
+    const now = Date.now();
+    const next = this.queue.find((candidate) => !this.#isExpiredChat(candidate, now));
+    if (!next || next.skipCache || !this.#isFishItem(next)) return;
+    const { referenceId, model, cacheKey } = this.#fishParams(next);
+    if (!referenceId || this.#getCachedAudio(cacheKey) || this.prefetchPromises.has(cacheKey)) return;
+
+    const cacheGen = this.cacheGen;
+    const promise = Promise.resolve()
+      .then(() =>
+        this.fishSynthesizer({
+          text: next.text,
+          referenceId,
+          model,
+          speed: next.speed
+        })
+      )
+      .then((result) => {
+        if (!this.isMuted && cacheGen === this.cacheGen && result?.ok && (result.audioBase64 || result.audioUrl)) {
+          const src =
+            result.audioUrl ||
+            `data:${result.contentType || 'audio/mpeg'};base64,${result.audioBase64}`;
+          this.#setCachedAudio(cacheKey, src);
+        }
+        return result;
+      })
+      .catch((err) => ({ ok: false, error: err?.message || 'Error al sintetizar en Fish Audio' }))
+      .finally(() => {
+        if (this.prefetchPromises.get(cacheKey) === promise) {
+          this.prefetchPromises.delete(cacheKey);
+        }
+      });
+
+    this.prefetchPromises.set(cacheKey, promise);
+  }
+
   async #process() {
     if (this.isSpeaking || this.queue.length === 0 || this.isMuted) return;
+
+    const now = Date.now();
+    let item = null;
+    while (this.queue.length > 0) {
+      const candidate = this.queue.shift();
+      if (this.#isExpiredChat(candidate, now)) continue;
+      item = candidate;
+      break;
+    }
+    if (!item) {
+      if (this.soundEngine) this.soundEngine.restore();
+      this.#notify();
+      return;
+    }
+
     this.isSpeaking = true;
-    const item = this.queue.shift();
     this.currentItem = item;
     this.#notify();
 
@@ -277,9 +374,7 @@ export class TTSQueue {
       item.voiceLanguage ||
       (rawVoiceId.startsWith('google:') ? rawVoiceId.slice(7) : '') ||
       'es-ES';
-    const isFish =
-      rawVoiceId.startsWith('fish:') ||
-      (!rawVoiceId.startsWith('google:') && !rawVoiceId.startsWith('local:') && item.voiceProvider === 'fish');
+    const isFish = this.#isFishItem(item);
 
     try {
       if (this.isMuted) return;
@@ -288,7 +383,9 @@ export class TTSQueue {
           await this.#speakFish(item);
         } catch (fishError) {
           console.warn('[tts] Fish Audio falló, intentando voz local', fishError);
-          if (!this.isMuted) {
+          if (!this.isMuted && !fishError?.playbackStarted) {
+            this.isPlayingAudio = true;
+            this.#prefetchNextFish();
             await this.#speakLocal({
               ...item,
               voiceProvider: 'local',
@@ -302,12 +399,15 @@ export class TTSQueue {
         const normalizedItem = rawVoiceId.startsWith('google:')
           ? { ...item, voiceProvider: 'local', voiceId: 'local', voiceLanguage: resolvedLang }
           : { ...item, voiceProvider: 'local', voiceLanguage: resolvedLang };
+        this.isPlayingAudio = true;
+        this.#prefetchNextFish();
         await this.#speakLocal(normalizedItem);
       }
     } catch (err) {
       console.warn('[tts] error durante la reproducción de voz', err);
     } finally {
       this.isSpeaking = false;
+      this.isPlayingAudio = false;
       this.currentItem = null;
       this.currentAbort = null;
 
@@ -320,20 +420,17 @@ export class TTSQueue {
   }
 
   async #speakFish(item) {
-    const voiceId = String(item.voiceId || '');
-    const referenceId = String(
-      item.referenceId || (voiceId.startsWith('fish:') ? voiceId.slice(5) : '')
-    ).trim();
+    const { referenceId, model, cacheKey } = this.#fishParams(item);
     if (!referenceId) {
       throw new Error('Falta reference_id de Fish Audio');
     }
 
-    const speed = item.speed ?? 1;
-    const cacheKey = `${item.fishModel || 'default'}|${referenceId}|${speed}|${item.text}`;
     let audioSrc = item.skipCache ? null : this.#getCachedAudio(cacheKey);
 
     if (!audioSrc) {
-      if (typeof this.fishSynthesizer !== 'function') {
+      const cacheGen = this.cacheGen;
+      const inFlightPrefetch = !item.skipCache ? this.prefetchPromises.get(cacheKey) : null;
+      if (!inFlightPrefetch && typeof this.fishSynthesizer !== 'function') {
         throw new Error('Sintetizador de Fish Audio no disponible');
       }
 
@@ -347,16 +444,18 @@ export class TTSQueue {
         resolveAbort?.({ __aborted: true });
       };
 
-      const synthPromise = Promise.resolve()
-        .then(() =>
-          this.fishSynthesizer({
-            text: item.text,
-            referenceId,
-            model: item.fishModel || undefined,
-            speed: item.speed
-          })
-        )
-        .catch((err) => ({ ok: false, error: err?.message || 'Error al sintetizar en Fish Audio' }));
+      const synthPromise =
+        inFlightPrefetch ||
+        Promise.resolve()
+          .then(() =>
+            this.fishSynthesizer({
+              text: item.text,
+              referenceId,
+              model,
+              speed: item.speed
+            })
+          )
+          .catch((err) => ({ ok: false, error: err?.message || 'Error al sintetizar en Fish Audio' }));
 
       let result;
       try {
@@ -375,13 +474,19 @@ export class TTSQueue {
       audioSrc =
         result.audioUrl ||
         `data:${result.contentType || 'audio/mpeg'};base64,${result.audioBase64}`;
-      if (!item.skipCache) {
+      if (!item.skipCache && cacheGen === this.cacheGen) {
         this.#setCachedAudio(cacheKey, audioSrc);
       }
     }
 
     if (this.isMuted) return;
-    await this.#playAudioUrl(audioSrc, item.volume, 'No se pudo reproducir audio de Fish Audio');
+    this.isPlayingAudio = true;
+    this.#prefetchNextFish();
+    try {
+      await this.#playAudioUrl(audioSrc, item.volume, 'No se pudo reproducir audio de Fish Audio');
+    } finally {
+      this.isPlayingAudio = false;
+    }
   }
 
   #playAudioUrl(url, volume = 0.8, errorMessage = 'No se pudo reproducir audio de TTS') {
@@ -393,11 +498,17 @@ export class TTSQueue {
       audio.volume = Math.max(0, Math.min(1, safeVolume));
 
       let settled = false;
+      let started = false;
       let timer = null;
+
+      const onPlaying = () => {
+        started = true;
+      };
 
       const cleanup = () => {
         clearTimeout(timer);
         this.currentAbort = null;
+        audio.removeEventListener('playing', onPlaying);
         audio.removeEventListener('ended', onEnd);
         audio.removeEventListener('error', onError);
       };
@@ -413,7 +524,9 @@ export class TTSQueue {
         if (settled) return;
         settled = true;
         cleanup();
-        reject(new Error(errorMessage));
+        const err = new Error(errorMessage);
+        err.playbackStarted = started || Number(audio.currentTime || 0) > 0;
+        reject(err);
       };
 
       this.currentAbort = () => {
@@ -427,6 +540,7 @@ export class TTSQueue {
         resolve();
       };
 
+      audio.addEventListener('playing', onPlaying, { once: true });
       audio.addEventListener('ended', onEnd, { once: true });
       audio.addEventListener('error', onError, { once: true });
 
@@ -442,13 +556,19 @@ export class TTSQueue {
         }
       }, 15_000);
 
-      audio.play().catch((err) => {
-        if (!settled) {
-          settled = true;
-          cleanup();
-          reject(err);
+      audio.play().then(
+        () => {
+          started = true;
+        },
+        (err) => {
+          if (!settled) {
+            settled = true;
+            cleanup();
+            if (err && typeof err === 'object') err.playbackStarted = started;
+            reject(err);
+          }
         }
-      });
+      );
     });
   }
   #speakLocal(item) {
@@ -459,21 +579,10 @@ export class TTSQueue {
       }
 
       let settled = false;
+      let spoke = false;
       let timer = null;
+      let startTimer = null;
       const synth = window.speechSynthesis;
-
-      const cleanup = () => {
-        clearTimeout(timer);
-        this.currentAbort = null;
-        this.currentUtterance = null;
-      };
-
-      const done = () => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve();
-      };
 
       const utterance = new SpeechSynthesisUtterance(item.text);
       const voices = synth.getVoices() || [];
@@ -495,6 +604,31 @@ export class TTSQueue {
       utterance.volume = Math.max(0, Math.min(1, safeVolume));
       this.currentUtterance = utterance;
 
+      const cancelSynth = () => {
+        try {
+          if (typeof synth.cancel === 'function') {
+            synth.cancel();
+            this.lastLocalCancelAt = Date.now();
+          }
+        } catch {}
+      };
+
+      const cleanup = () => {
+        clearTimeout(timer);
+        clearTimeout(startTimer);
+        utterance.onend = null;
+        utterance.onerror = null;
+        this.currentAbort = null;
+        this.currentUtterance = null;
+      };
+
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve();
+      };
+
       utterance.onend = done;
       utterance.onerror = (e) => {
         console.warn('[tts:local] error', e);
@@ -505,30 +639,49 @@ export class TTSQueue {
         if (settled) return;
         settled = true;
         cleanup();
-        try {
-          synth.cancel();
-        } catch {}
+        if (spoke || synth.speaking || synth.pending) {
+          cancelSynth();
+        }
         resolve();
       };
 
       timer = setTimeout(() => {
         if (!settled) {
-          try {
-            synth.cancel();
-          } catch {}
-          done();
+          settled = true;
+          cleanup();
+          cancelSynth();
+          resolve();
         }
       }, 15_000);
 
-      try {
-        if (synth.paused) {
-          try {
-            synth.resume();
-          } catch {}
+      const startSpeak = () => {
+        if (settled || this.isMuted) {
+          done();
+          return;
         }
-        synth.speak(utterance);
-      } catch (err) {
-        done();
+        try {
+          if (synth.paused) {
+            try {
+              synth.resume();
+            } catch {}
+          }
+          spoke = true;
+          synth.speak(utterance);
+        } catch {
+          done();
+        }
+      };
+
+      if (synth.speaking || synth.pending) {
+        cancelSynth();
+        startTimer = setTimeout(startSpeak, 40);
+      } else {
+        const sinceCancel = Date.now() - this.lastLocalCancelAt;
+        if (sinceCancel >= 0 && sinceCancel < 40) {
+          startTimer = setTimeout(startSpeak, 40 - sinceCancel);
+        } else {
+          startSpeak();
+        }
       }
     });
   }
